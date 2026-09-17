@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
+import LocationPermission from "@/components/LocationPermission";
 import "./globals.css";
 
 const inter = Inter({
@@ -22,7 +23,8 @@ export const metadata: Metadata = {
     "automotive services, car repair, smart repair, denting painting, tyres, car wash, chauffeur, car rental, vehicle modifications",
   openGraph: {
     title: "MMC — Motor Market Connect Club",
-    description: "Premium automotive marketplace connecting you with certified service providers.",
+    description:
+      "Premium automotive marketplace connecting you with certified service providers.",
     type: "website",
   },
 };
@@ -38,11 +40,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
-<body className="bg-black text-white flex flex-col min-h-screen" suppressHydrationWarning>        <ToastProvider>
+      <body
+        className="bg-black text-white flex flex-col min-h-screen"
+        suppressHydrationWarning
+      >
+
+         <LocationPermission />
+        <ToastProvider>
           <Navbar />
-          <main className="flex-grow pt-20">
-            {children}
-          </main>
+          <main className="flex-grow pt-20">{children}</main>
           <Footer />
         </ToastProvider>
       </body>
