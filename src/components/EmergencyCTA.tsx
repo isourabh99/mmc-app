@@ -12,7 +12,6 @@ export default function EmergencyCTA() {
             border: "1px solid rgba(250,210,147,0.2)",
           }}
         >
-          {/* Glow effect */}
           <div
             className="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-[80px] opacity-20 pointer-events-none"
             style={{ background: "radial-gradient(circle, #FAD293, #CEA46B)" }}
@@ -25,7 +24,7 @@ export default function EmergencyCTA() {
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-4">
-                {/* Pulsing red dot */}
+                
                 <div className="relative">
                   <div className="w-3 h-3 bg-red-500 rounded-full" />
                   <div className="absolute inset-0 w-3 h-3 bg-red-500 rounded-full animate-ping opacity-75" />

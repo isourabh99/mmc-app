@@ -10,23 +10,17 @@ import {
   registerCustomer,
   sendOtp,
   loginCustomer,
-} from "@/app/services/api/auth.api";
+} from "@/lib/auth.api";
 
 export default function GetStartedPage() {
   const { showToast } = useToast();
   const router = useRouter();
 
-  // --------------------------------
-  // STEP
-  // --------------------------------
 
   const [step, setStep] = useState<1 | 2>(1);
 
   const [loading, setLoading] = useState(false);
 
-  // --------------------------------
-  // REGISTRATION FORM
-  // --------------------------------
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -37,15 +31,10 @@ export default function GetStartedPage() {
     date_of_birth: "",
   });
 
-  // --------------------------------
-  // OTP
-  // --------------------------------
 
   const [otp, setOtp] = useState("");
 
-  // --------------------------------
-  // HANDLE INPUT
-  // --------------------------------
+
 
   const handleInputChange = (
     e: React.ChangeEvent<
@@ -58,10 +47,6 @@ export default function GetStartedPage() {
     });
   };
 
-  // --------------------------------
-  // REGISTRATION
-  // --------------------------------
-
   const handleRegistrationSubmit = async (
     e: React.FormEvent
   ) => {
@@ -70,7 +55,7 @@ export default function GetStartedPage() {
     setLoading(true);
 
     try {
-      // 1. Register customer
+    
       const registrationResponse =
         await registerCustomer(formData);
 
@@ -79,7 +64,7 @@ export default function GetStartedPage() {
         registrationResponse
       );
 
-      // Check registration response
+      
       if (
         registrationResponse.response_code !==
         "registration_200"
@@ -93,16 +78,13 @@ export default function GetStartedPage() {
         return;
       }
 
-      // Registration successful
+    
       showToast(
         "Registration successful!",
         "success"
       );
 
-      // --------------------------------
-      // 2. Send OTP
-      // --------------------------------
-
+  
       const otpResponse = await sendOtp(
         formData.email
       );
@@ -233,7 +215,7 @@ export default function GetStartedPage() {
         );
 
         // Redirect
-        router.push("/dashboard");
+        router.push("/");
 
       } else {
         showToast(

@@ -1,4 +1,4 @@
-import apiClient from "../http/apiClient";
+import apiClient from "@/lib/http/apiClient";
 
 export interface RegistrationData {
   first_name: string;

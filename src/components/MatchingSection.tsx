@@ -87,7 +87,7 @@ export default function MatchingSection() {
                 backdropFilter: "blur(20px)",
               }}
             >
-              {/* Provider match card mockup */}
+              
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-xs text-white/40 mb-0.5">Provider Match Found</p>

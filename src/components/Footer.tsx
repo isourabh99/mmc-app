@@ -1,5 +1,5 @@
 "use client";
-import Image from "next/image";
+import React from "react";
 
 const footerLinks = {
   Services: [
@@ -65,72 +65,83 @@ export default function Footer() {
   return (
     <footer
       id="contact"
-      className="border-t border-white/8 pt-16 pb-8 px-6 relative overflow-hidden"
+      className="border-t border-white/10 pt-16 pb-8 px-10 relative overflow-hidden text-white"
       style={{ background: "#030200" }}
     >
+      {/* Top subtle glow line */}
       <div
         className="absolute top-0 left-0 right-0 h-px"
-        style={{ background: "linear-gradient(90deg, transparent, rgba(250,210,147,0.3), transparent)" }}
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, rgba(250,210,147,0.4), transparent)",
+        }}
       />
 
-      <div className="max-w-8xl mx-auto">
-        {/* Top section */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 mb-14">
-          {/* Brand */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-3 mb-5">
-            
-              <div>
-                <span
-                  className="text-xl font-bold tracking-wider"
-                  style={{
-                    background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
-                  MMC
-                </span>
-                <p className="text-[10px] text-white/30 tracking-widest uppercase -mt-0.5">
-                  Motor Market Connect
-                </p>
+      <div className="max-w-7xl mx-auto">
+        {/* Main Grid Layout Fixed: Using 6 columns on lg screens so Brand takes 2 cols and the 4 link columns take 1 col each */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-10 lg:gap-8 mb-14">
+          
+          {/* Brand Column (Spans 2 columns on large screens) */}
+          <div className="sm:col-span-2 lg:col-span-2 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div>
+                  <span
+                    className="text-2xl font-extrabold tracking-wider"
+                    style={{
+                      background: "linear-gradient(135deg, #FAD293, #CEA46B)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                    }}
+                  >
+                    MMC
+                  </span>
+                  <p className="text-[10px] text-white/40 tracking-widest uppercase -mt-0.5">
+                    Motor Market Connect
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <p className="text-sm text-white/40 leading-relaxed mb-6 max-w-sm">
-              The UK&apos;s premium automotive marketplace connecting customers with certified service providers. Quality service, transparent pricing, every time.
-            </p>
+              <p className="text-sm text-white/50 leading-relaxed mb-6 max-w-sm">
+                The UK&apos;s premium automotive marketplace connecting customers
+                with certified service providers. Quality service, transparent
+                pricing, every time.
+              </p>
 
-            {/* Newsletter */}
-            <div className="mb-6">
-              <p className="text-xs text-white/40 mb-3 tracking-wide">Stay updated with MMC news</p>
-              <div className="flex gap-2">
-                <input
-                  id="footer-email"
-                  type="email"
-                  placeholder="Your email address"
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#FAD293]/40 transition-colors"
-                />
-                <button
-                  id="footer-subscribe-btn"
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-black shrink-0 hover:shadow-[0_0_20px_rgba(250,210,147,0.3)] transition-all"
-                  style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
-                >
-                  Subscribe
-                </button>
+              {/* Newsletter Subscription */}
+              <div className="mb-6 max-w-sm">
+                <p className="text-xs text-white/60 mb-2.5 tracking-wide font-medium">
+                  Stay updated with MMC news
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    id="footer-email"
+                    type="email"
+                    placeholder="Your email address"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#FAD293]/60 transition-all shadow-inner"
+                  />
+                  <button
+                    id="footer-subscribe-btn"
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-black shrink-0 hover:shadow-[0_0_20px_rgba(250,210,147,0.4)] transition-all cursor-pointer"
+                    style={{
+                      background: "linear-gradient(135deg, #FAD293, #CEA46B)",
+                    }}
+                  >
+                    Subscribe
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Social Links */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 mt-2">
               {socials.map((social) => (
                 <a
                   key={social.name}
                   href={social.href}
                   id={`footer-social-${social.name.toLowerCase()}`}
                   aria-label={social.name}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white/40 hover:text-[#FAD293] border border-white/8 hover:border-[#FAD293]/30 transition-all duration-300 hover:bg-white/5"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white/60 hover:text-[#FAD293] border border-white/10 hover:border-[#FAD293]/40 transition-all duration-300 hover:bg-white/5 shadow-sm"
                 >
                   {social.icon}
                 </a>
@@ -138,26 +149,25 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Links */}
+          {/* Link Categories (Each takes exactly 1 column out of 6 on lg screens) */}
           {Object.entries(footerLinks).map(([category, links]) => (
-            <div key={category}>
+            <div key={category} className="lg:col-span-1">
               <h4
-                className="text-sm font-bold mb-5 tracking-widest uppercase"
+                className="text-xs font-bold mb-4 tracking-widest uppercase"
                 style={{
                   background: "linear-gradient(135deg, #FAD293, #CEA46B)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
                 }}
               >
                 {category}
               </h4>
-              <ul className="space-y-3">
+              <ul className="space-y-2.5">
                 {links.map((link) => (
                   <li key={link}>
                     <a
                       href="#"
-                      className="text-sm text-white/40 hover:text-white/80 transition-colors duration-200"
+                      className="text-sm text-white/50 hover:text-[#FAD293] transition-colors duration-200 block py-0.5"
                     >
                       {link}
                     </a>
@@ -166,23 +176,29 @@ export default function Footer() {
               </ul>
             </div>
           ))}
+
         </div>
 
         {/* Divider */}
-        <div className="h-px w-full mb-6" style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)" }} />
+        <div
+          className="h-px w-full mb-6"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
+          }}
+        />
 
-        {/* Bottom */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-white/25">
+        {/* Bottom Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
           <p>© 2025 Motor Market Connect Club Ltd. All rights reserved.</p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <span>Made with</span>
             <span
-              className="font-bold"
+              className="font-bold text-sm"
               style={{
                 background: "linear-gradient(135deg, #FAD293, #CEA46B)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
               }}
             >
               ♥

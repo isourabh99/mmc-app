@@ -10,9 +10,6 @@ import {
 
 import { useToast } from "@/components/ToastProvider";
 
-// ======================================================
-// TYPES
-// ======================================================
 
 interface ProfileData {
   first_name: string;
@@ -40,16 +37,11 @@ interface AddressData {
   address_label: string;
 }
 
-// ======================================================
-// COMPONENT
-// ======================================================
 
 export default function ProfilePage() {
   const { showToast } = useToast();
 
-  // ======================================================
-  // STATES
-  // ======================================================
+
 
   const [loading, setLoading] = useState(true);
 
@@ -57,19 +49,15 @@ export default function ProfilePage() {
 
   const [savingAddress, setSavingAddress] = useState(false);
 
-  // Selected files
+
   const [profileImage, setProfileImage] = useState<File | null>(null);
 
   const [carImage, setCarImage] = useState<File | null>(null);
 
-  // Local previews
   const [profileImagePreview, setProfileImagePreview] = useState("");
 
   const [carImagePreview, setCarImagePreview] = useState("");
 
-  // ======================================================
-  // PROFILE STATE
-  // ======================================================
 
   const [profile, setProfile] = useState<ProfileData>({
     first_name: "",
@@ -87,9 +75,7 @@ export default function ProfilePage() {
     car_image_full_path: "",
   });
 
-  // ======================================================
-  // ADDRESS STATE
-  // ======================================================
+ 
 
   const [address, setAddress] = useState<AddressData>({
     lat: "",
@@ -101,9 +87,7 @@ export default function ProfilePage() {
     address_label: "Home",
   });
 
-  // ======================================================
-  // PROFILE IMAGE PREVIEW
-  // ======================================================
+
 
   useEffect(() => {
     if (!profileImage) {
@@ -120,9 +104,7 @@ export default function ProfilePage() {
     };
   }, [profileImage]);
 
-  // ======================================================
-  // CAR IMAGE PREVIEW
-  // ======================================================
+  
 
   useEffect(() => {
     if (!carImage) {
@@ -139,9 +121,7 @@ export default function ProfilePage() {
     };
   }, [carImage]);
 
-  // ======================================================
-  // LOAD PROFILE
-  // ======================================================
+
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -152,9 +132,7 @@ export default function ProfilePage() {
 
         console.log("Profile Response:", response);
 
-        // ==============================================
-        // API ERROR
-        // ==============================================
+    
 
         if (response?.response_code !== "default_200") {
           showToast(response?.message || "Failed to load profile", "error");
@@ -170,9 +148,7 @@ export default function ProfilePage() {
           return;
         }
 
-        // ==============================================
-        // PROFILE DATA
-        // ==============================================
+      
 
         setProfile({
           first_name: data.first_name || "",
@@ -183,12 +159,9 @@ export default function ProfilePage() {
 
           phone: data.phone || "",
 
-          // Backend full profile image URL
+        
           profile_image_full_path: data.profile_image_full_path || "",
 
-          // ============================================
-          // CAR DATA
-          // ============================================
 
           car_brand: data.car?.brand || "",
 
@@ -200,21 +173,11 @@ export default function ProfilePage() {
 
           registration_number: data.car?.registration_number || "",
 
-          // Backend full car image URL
+     
           car_image_full_path: data.car?.car_image_full_path || "",
         });
 
-        // ==============================================
-        // ADDRESS
-        // ==============================================
-        //
-        // NOTE:
-        // Your provided /customer/info response does
-        // not currently contain address information.
-        //
-        // If backend later returns address fields,
-        // this will populate them.
-        //
+        
 
         const storedUser = localStorage.getItem("user");
         const user = storedUser ? JSON.parse(storedUser) : null;
@@ -256,10 +219,7 @@ export default function ProfilePage() {
     loadProfile();
   }, [showToast]);
 
-  // ======================================================
-  // PROFILE INPUT CHANGE
-  // ======================================================
-
+  
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
@@ -269,9 +229,6 @@ export default function ProfilePage() {
     }));
   };
 
-  // ======================================================
-  // ADDRESS INPUT CHANGE
-  // ======================================================
 
   const handleAddressChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -284,16 +241,11 @@ export default function ProfilePage() {
     }));
   };
 
-  // ======================================================
-  // UPDATE PROFILE
-  // ======================================================
+
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // ==================================================
-    // MANUFACTURE YEAR VALIDATION
-    // ==================================================
 
     if (profile.manufacture_year) {
       const year = Number(profile.manufacture_year);
@@ -317,15 +269,11 @@ export default function ProfilePage() {
     try {
       const formData = new FormData();
 
-      // ==================================================
-      // METHOD
-      // ==================================================
+    
 
       formData.append("_method", "PUT");
 
-      // ==================================================
-      // PERSONAL INFORMATION
-      // ==================================================
+
 
       formData.append("first_name", profile.first_name);
 
@@ -335,9 +283,7 @@ export default function ProfilePage() {
 
       formData.append("phone", profile.phone);
 
-      // ==================================================
-      // CAR INFORMATION
-      // ==================================================
+
 
       formData.append("car_brand", profile.car_brand);
 
@@ -352,25 +298,18 @@ export default function ProfilePage() {
 
       formData.append("registration_number", profile.registration_number);
 
-      // ==================================================
-      // PROFILE IMAGE
-      // ==================================================
 
       if (profileImage) {
         formData.append("profile_image", profileImage);
       }
 
-      // ==================================================
-      // CAR IMAGE
-      // ==================================================
+
 
       if (carImage) {
         formData.append("car_image", carImage);
       }
 
-      // ==================================================
-      // DEBUG FOR NETWORK
-      // ==================================================
+ 
 
       console.log("Updating profile...");
 
@@ -378,17 +317,13 @@ export default function ProfilePage() {
         console.log(key, value);
       }
 
-      // ==================================================
-      // API CALL
-      // ==================================================
+      
 
       const response = await updateCustomerProfile(formData);
 
       console.log("Update Profile Response:", response);
 
-      // ==================================================
-      // API ERROR
-      // ==================================================
+   
 
       if (response?.response_code !== "default_update_200") {
         showToast(response?.message || "Failed to update profile", "error");
@@ -396,28 +331,21 @@ export default function ProfilePage() {
         return;
       }
 
-      // ==================================================
-      // SUCCESS
-      // ==================================================
+
 
       showToast(response?.message || "Profile updated successfully", "success");
 
-      // Remove selected files
+  
       setCarImage(null);
       setProfileImage(null);
 
-      // Profile update was successful.
-      // Do not make another GET request here because a failure
-      // in the refresh request should not turn a successful update
-      // into a red error toast.
+   
     } catch (error: any) {
       console.error("Update Profile Error:", error);
 
       console.error("Backend Response:", error?.response?.data);
 
-      // ==============================================
-      // BACKEND VALIDATION ERRORS
-      // ==============================================
+    
 
       const errors = error?.response?.data?.errors;
 
@@ -436,9 +364,6 @@ export default function ProfilePage() {
     }
   };
 
-  // ======================================================
-  // SAVE ADDRESS
-  // ======================================================
 
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,9 +375,7 @@ export default function ProfilePage() {
 
       console.log("Address Response:", response);
 
-      // ==============================================
-      // ERROR
-      // ==============================================
+ 
 
       if (response?.response_code !== "default_200") {
         showToast(response?.message || "Failed to save address", "error");
@@ -460,9 +383,7 @@ export default function ProfilePage() {
         return;
       }
 
-      // ==============================================
-      // SUCCESS
-      // ==============================================
+     
 
       showToast(response?.message || "Address saved successfully", "success");
     } catch (error: any) {
@@ -485,9 +406,7 @@ export default function ProfilePage() {
     }
   };
 
-  // ======================================================
-  // LOADING
-  // ======================================================
+
 
   if (loading) {
     return (
@@ -501,16 +420,12 @@ export default function ProfilePage() {
     );
   }
 
-  // ======================================================
-  // UI
-  // ======================================================
+
 
   return (
     <main className="min-h-screen bg-[#050505] text-white px-4 sm:px-6 py-5 sm:py-6">
       <div className="max-w-7xl mx-auto">
-        {/* ==================================================
-            HEADER
-        ================================================== */}
+        
 
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -530,15 +445,10 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ==================================================
-            MAIN GRID
-        ================================================== */}
 
         <form id="profile-form" onSubmit={handleProfileSubmit}>
           <div className="grid lg:grid-cols-2 gap-4">
-            {/* ==================================================
-              PERSONAL INFORMATION
-          ================================================== */}
+       
 
             <section className="bg-[#0c0c0c] border border-white/10 rounded-2xl overflow-hidden">
               {/* CARD HEADER */}
@@ -611,10 +521,10 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* PROFILE FIELDS */}
+             
 
                 <div className="grid grid-cols-2 gap-3">
-                  {/* FIRST NAME */}
+                  
 
                   <div>
                     <label className="field-label">First Name</label>
@@ -628,7 +538,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* LAST NAME */}
+                
 
                   <div>
                     <label className="field-label">Last Name</label>
@@ -642,7 +552,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* EMAIL */}
+                 
 
                   <div>
                     <label className="field-label">Email</label>
@@ -656,31 +566,31 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* PHONE */}
+                  
 
-<div>
-  <label className="field-label">Phone</label>
+                  <div>
+                    <label className="field-label">Phone</label>
 
-  <input
-    type="text"
-    inputMode="numeric"
-    name="phone"
-    value={profile.phone}
-    onChange={(e) => {
-      const value = e.target.value.replace(/\D/g, "");
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      name="phone"
+                      value={profile.phone}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, "");
 
-      setProfile((prev) => ({
-        ...prev,
-        phone: value,
-      }));
-    }}
-    className="profile-input"
-    placeholder="Phone number"
-  />
-</div>
+                        setProfile((prev) => ({
+                          ...prev,
+                          phone: value,
+                        }));
+                      }}
+                      className="profile-input"
+                      placeholder="Phone number"
+                    />
+                  </div>
                 </div>
 
-                {/* PROFILE PHOTO */}
+              
 
                 <div className="mt-3">
                   <label className="field-label">Profile Photo</label>
@@ -697,12 +607,10 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* ==================================================
-              VEHICLE INFORMATION
-          ================================================== */}
+            
 
             <section className="bg-[#0c0c0c] border border-white/10 rounded-2xl overflow-hidden">
-              {/* HEADER */}
+            
 
               <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between">
                 <div>
@@ -731,10 +639,10 @@ export default function ProfilePage() {
               </div>
 
               <div className="p-5">
-                {/* VEHICLE FIELDS */}
+                
 
                 <div className="grid grid-cols-2 gap-3">
-                  {/* BRAND */}
+                
 
                   <div>
                     <label className="field-label">Car Brand</label>
@@ -748,7 +656,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* MODEL */}
+                
 
                   <div>
                     <label className="field-label">Car Model</label>
@@ -762,7 +670,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* YEAR */}
+                
 
                   <div>
                     <label className="field-label">Manufacture Year</label>
@@ -779,7 +687,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* REGISTRATION */}
+                 
 
                   <div>
                     <label className="field-label">Registration Number</label>
@@ -794,7 +702,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* CAR IMAGE */}
 
                 <div className="mt-3">
                   <label className="field-label">Vehicle Image</label>
@@ -807,7 +714,7 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                {/* VEHICLE PREVIEW */}
+                
 
                 <div className="mt-3 h-24 rounded-xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
                   {carImagePreview ? (
@@ -847,9 +754,7 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* ==================================================
-              ADDRESS
-          ================================================== */}
+            
 
             <section className="lg:col-span-2 bg-[#0c0c0c] border border-white/10 rounded-2xl overflow-hidden">
               {/* HEADER */}
@@ -894,10 +799,10 @@ export default function ProfilePage() {
               </div>
 
               <div className="p-5">
-                {/* ADDRESS FIELDS */}
+                
 
                 <div className="grid md:grid-cols-4 gap-3">
-                  {/* ADDRESS */}
+                
 
                   <div className="md:col-span-2">
                     <label className="field-label">Address</label>
@@ -911,7 +816,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* LABEL */}
+              
 
                   <div>
                     <label className="field-label">Label</label>
@@ -930,7 +835,6 @@ export default function ProfilePage() {
                     </select>
                   </div>
 
-                  {/* TYPE */}
 
                   <div>
                     <label className="field-label">Type</label>
@@ -949,7 +853,7 @@ export default function ProfilePage() {
                     </select>
                   </div>
 
-                  {/* CONTACT NAME */}
+                 
 
                   <div>
                     <label className="field-label">Contact Name</label>
@@ -963,7 +867,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* CONTACT NUMBER */}
+                 
 
                   <div>
                     <label className="field-label">Contact Number</label>
@@ -977,8 +881,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* LATITUDE */}
-
+                 
                   <div>
                     <label className="field-label">Latitude</label>
 
@@ -991,7 +894,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {/* LONGITUDE */}
+                 
 
                   <div>
                     <label className="field-label">Longitude</label>
@@ -1006,7 +909,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* ADDRESS BUTTON */}
 
                 <div className="flex justify-end mt-4">
                   <button
@@ -1025,9 +927,7 @@ export default function ProfilePage() {
             </section>
           </div>
 
-          {/* ==================================================
-            BOTTOM ACTION BAR
-        ================================================== */}
+    
 
           <div className="mt-4 flex justify-end">
             <button

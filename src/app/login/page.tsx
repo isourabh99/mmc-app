@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   sendOtp,
   loginCustomer,
-} from "@/app/services/api/auth.api";
+} from "@/lib/auth.api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -113,7 +113,7 @@ export default function LoginPage() {
           String(response.content?.is_active ?? 0)
         );
 
-        router.push("/dashboard");
+        router.push("/");
       } else {
         setError(
           response.message || "Invalid OTP"
