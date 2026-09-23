@@ -132,6 +132,7 @@ export default function QuoteSection() {
                   <option value="tyres" className="bg-black">Tyres</option>
                   <option value="car-wash" className="bg-black">Car Wash</option>
                   <option value="chauffeur" className="bg-black">Chauffeur</option>
+                  <option value="alloy-refurbishment" className="bg-black">Alloy Refurbishment</option>
                   <option value="car-rental" className="bg-black">Car Rental</option>
                 </select>
               </div>
