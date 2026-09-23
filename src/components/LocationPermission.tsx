@@ -31,40 +31,45 @@ export default function LocationPermission() {
           const address = googleData.address;
 
           console.log("Google Address:", address);
-          const storedUser = localStorage.getItem("user");
-        const user = storedUser ? JSON.parse(storedUser) : null;
+          localStorage.setItem("user_address", address);
+          localStorage.setItem("user_lat", String(latitude));
+          localStorage.setItem("user_lon", String(longitude));
 
-          const response = await saveCustomerAddress({
-            lat: String(latitude),
-            lon: String(longitude),
-            address: address,
-            address_type: "service",
-            contact_person_name:  (user
-              ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-              : ""),
-            contact_person_number: user?.phone,
-            address_label: "Home",
-          });
+          const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+          if (token) {
+            const storedUser = localStorage.getItem("user");
+            const user = storedUser ? JSON.parse(storedUser) : null;
 
-          if (
-            response.status >= 200 &&
-            response.status < 300
-          ) {
-            console.log(
-              "Address saved successfully:",
-              response.status
-            );
+            const response = await saveCustomerAddress({
+              lat: String(latitude),
+              lon: String(longitude),
+              address: address,
+              address_type: "service",
+              contact_person_name: user
+                ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                : "",
+              contact_person_number: user?.phone || "",
+              address_label: "Home",
+            });
+
+            if (
+              response?.status >= 200 &&
+              response?.status < 300
+            ) {
+              console.log(
+                "Address saved successfully:",
+                response.status
+              );
+            }
           }
         } catch (error: any) {
-          console.error(
-            "Location/address error:",
-            error?.response?.status || error?.message
-          );
-
-          console.error(
-            "Response:",
-            error?.response?.data
-          );
+          // Graceful handling without spamming console
+          if (error?.response?.status !== 400) {
+            console.warn(
+              "Location/address sync:",
+              error?.response?.status || error?.message
+            );
+          }
         }
       },
       (error) => {
