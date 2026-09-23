@@ -168,14 +168,12 @@ export interface ChauffeurSearchResponse {
   errors: unknown[];
 }
 
-
 export interface ChauffeurSearchParams {
   car_type_id: number;
   date: string;
   limit?: number;
   offset?: number;
 }
-
 
 export const searchChauffeurs = async ({
   car_type_id,
@@ -196,10 +194,186 @@ export const searchChauffeurs = async ({
       formData
     );
     console.log(response);
-    
+
     return response.data.content;
   } catch (error) {
     console.error("Failed to search chauffeurs:", error);
     throw error;
   }
 };
+
+export interface ChauffeurBookingCoordinates {
+
+  latitude: number;
+  longitude: number;
+}
+
+export interface ChauffeurBookingPayload {
+  car_id: number;
+  start_date: string;
+  end_date: string;
+  pickup_time: string;
+  drop_time: string;
+  pickup_type: string;
+  pickup_location: string;
+  pickup_coordinates?: ChauffeurBookingCoordinates;
+  drop_location: string;
+  drop_coordinates?: ChauffeurBookingCoordinates;
+  payment_method: string;
+  callback?: string;
+  note?: string;
+}
+
+export interface ChauffeurBookingDetail {
+  id: number;
+  booking_id: string;
+  car_id: number;
+  user_id?: string;
+  start_date: string;
+  end_date: string;
+  pickup_type: string;
+  pickup_time: string;
+  drop_time: string;
+  total_amount: number;
+  payment_method: string;
+  payment_status: string;
+  booking_status: string;
+  is_paid: number;
+  pickup_location: string;
+  drop_location: string;
+  pickup_coordinates?: ChauffeurBookingCoordinates;
+  drop_coordinates?: ChauffeurBookingCoordinates;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+export interface ChauffeurBookingContent {
+  booking?: ChauffeurBookingDetail;
+  redirect_link?: string;
+  redirect_url?: string;
+  booking_id?: string | number;
+  [key: string]: unknown;
+}
+
+export interface ChauffeurBookingResponse {
+  response_code: string;
+  message: string;
+  content: ChauffeurBookingContent;
+  errors: unknown[];
+}
+
+export interface CustomerBookingItem {
+  id: number;
+  booking_id: string;
+  car_id: number;
+  user_id: string;
+  start_date: string;
+  end_date: string;
+  pickup_type: string;
+  pickup_time: string;
+  drop_time: string;
+  description: string | null;
+  total_amount: number;
+  payment_method: string;
+  payment_status: string;
+  booking_status: string;
+  is_paid: number;
+  transaction_id?: string | null;
+  pickup_location: string;
+  drop_location: string;
+  pickup_coordinates?: ChauffeurBookingCoordinates;
+  drop_coordinates?: ChauffeurBookingCoordinates;
+  updated_at: string;
+  created_at: string;
+  car?: Chauffeur;
+  user?: {
+    id?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface CustomerBookingsParams {
+  limit?: number;
+  offset?: number;
+  booking_status?: string;
+  service_type?: string;
+  booking_type?: string;
+}
+
+export interface CustomerBookingsResponse {
+  response_code: string;
+  message: string;
+  content: {
+    data?: CustomerBookingItem[];
+    current_page?: number;
+    total?: number;
+    [key: string]: unknown;
+  } | CustomerBookingItem[];
+  errors: unknown[];
+}
+
+export const bookChauffeur = async (
+  payload: ChauffeurBookingPayload
+): Promise<ChauffeurBookingResponse> => {
+  try {
+    const response = await apiClient.post<ChauffeurBookingResponse>(
+      "/customer/car/chauffeur/book",
+      payload
+    );
+    console.log("Booking response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to book chauffeur:", error);
+    throw error;
+  }
+};
+
+export const getCustomerBookings = async ({
+  limit = 10,
+  offset = 1,
+  booking_status = "all",
+  service_type = "all",
+  booking_type = "car",
+}: CustomerBookingsParams = {}): Promise<CustomerBookingItem[]> => {
+  try {
+    const response = await apiClient.get<CustomerBookingsResponse>(
+      "/customer/booking",
+      {
+        params: {
+          limit,
+          offset,
+          booking_status,
+          service_type,
+          booking_type,
+        },
+      }
+    );
+    console.log("Customer Bookings API Response:", response.data);
+
+    const content: any = response.data?.content;
+
+    if (content?.car_bookings?.data && Array.isArray(content.car_bookings.data)) {
+      return content.car_bookings.data;
+    }
+    if (content?.car_bookings && Array.isArray(content.car_bookings)) {
+      return content.car_bookings;
+    }
+    if (content?.data && Array.isArray(content.data)) {
+      return content.data;
+    }
+    if (Array.isArray(content)) {
+      return content;
+    }
+    return [];
+  } catch (error) {
+    console.error("Failed to fetch customer bookings:", error);
+    throw error;
+  }
+};
+

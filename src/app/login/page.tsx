@@ -8,8 +8,11 @@ import {
   sendOtp,
   loginCustomer,
 } from "@/lib/auth.api";
+import { getCustomerProfile } from "@/app/services/api/profile.api";
+import { useToast } from "@/components/ToastProvider";
 
 export default function LoginPage() {
+  const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -45,19 +48,21 @@ export default function LoginPage() {
         setOtpSent(true);
         setOtp("");
         setError("");
+        showToast(response.message || "OTP sent successfully to your email!", "success");
       } else {
         setError(
           response.message || "Failed to send OTP"
         );
+        showToast(response.message || "Failed to send OTP", "error");
       }
     } catch (error: any) {
       console.error("Send OTP error:", error);
 
-      setError(
-        error?.response?.data?.errors?.[0]?.message ||
-          error?.response?.data?.message ||
-          "Something went wrong"
-      );
+      const msg = error?.response?.data?.errors?.[0]?.message ||
+        error?.response?.data?.message ||
+        "Something went wrong";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -103,6 +108,7 @@ export default function LoginPage() {
           setError(
             "Login successful but token was not received."
           );
+          showToast("Login token missing", "error");
           return;
         }
 
@@ -113,20 +119,35 @@ export default function LoginPage() {
           String(response.content?.is_active ?? 0)
         );
 
-        router.push("/");
+        // Fetch and cache user profile immediately
+        try {
+          const profileRes = await getCustomerProfile();
+          if (profileRes?.content) {
+            localStorage.setItem("user", JSON.stringify(profileRes.content));
+          }
+        } catch (profileErr) {
+          console.warn("Could not pre-fetch profile on login:", profileErr);
+        }
+
+        // Notify Navbar and other components of auth state change
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("auth-change"));
+
+        showToast("Logged in successfully! Welcome back.", "success");
+        router.push("/account");
       } else {
-        setError(
-          response.message || "Invalid OTP"
-        );
+        const msg = response.message || "Invalid OTP";
+        setError(msg);
+        showToast(msg, "error");
       }
     } catch (error: any) {
       console.error("OTP verification error:", error);
 
-      setError(
-        error?.response?.data?.errors?.[0]?.message ||
-          error?.response?.data?.message ||
-          "Invalid OTP. Please try again."
-      );
+      const msg = error?.response?.data?.errors?.[0]?.message ||
+        error?.response?.data?.message ||
+        "Invalid OTP. Please try again.";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
