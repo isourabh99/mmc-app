@@ -183,10 +183,13 @@ export default function ServicesSection() {
         console.log("Categories API response:", response);
 
         if (response?.content?.data) {
-          // Only show active categories
-          const activeCategories = response.content.data.filter(
-            (category) => category.is_active === 1
-          );
+          // Only show active categories, excluding Emergency Vehicle Assistance (handled via dedicated Emergency CTA & header)
+          const activeCategories = response.content.data
+            .filter((category) => category.is_active === 1)
+            .filter(
+              (category) =>
+                !category.name.toLowerCase().includes("emergency")
+            );
 
           setCategories(activeCategories);
         } else {
@@ -323,13 +326,22 @@ export default function ServicesSection() {
         {!loading && !error && categories.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
 
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/services/${category.name}`}
-                id={`service-card-${category.id}`}
-                className="group relative p-6 rounded-2xl border border-white/8 bg-white/3 backdrop-blur-sm transition-all duration-400 hover:border-[#FAD293]/30 hover:bg-white/5 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(206,164,107,0.1)] cursor-pointer"
-              >
+            {categories.map((category) => {
+              const nameLower = category.name.toLowerCase();
+              const targetHref =
+                nameLower.includes("hire") || nameLower.includes("rental")
+                  ? "/car-hire"
+                  : nameLower.includes("chauffeur")
+                  ? "/services/Chauffeur"
+                  : `/services/${encodeURIComponent(category.name)}`;
+
+              return (
+                <Link
+                  key={category.id}
+                  href={targetHref}
+                  id={`service-card-${category.id}`}
+                  className="group relative p-6 rounded-2xl border border-white/8 bg-white/3 backdrop-blur-sm transition-all duration-400 hover:border-[#FAD293]/30 hover:bg-white/5 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(206,164,107,0.1)] cursor-pointer"
+                >
 
                 {/* Featured Tag */}
                 {category.is_featured === 1 && (
@@ -396,7 +408,8 @@ export default function ServicesSection() {
                   }}
                 />
               </Link>
-            ))}
+            );
+          })}
 
           </div>
         )}

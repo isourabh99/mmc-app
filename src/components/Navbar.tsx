@@ -1,11 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { UserRound, Siren } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import {
+  UserRound,
+  Siren,
+  Calendar,
+  MapPin,
+  LogOut,
+  ChevronDown,
+  Car,
+  Shield,
+  Sparkles,
+} from "lucide-react";
+import { getCustomerProfile } from "@/app/services/api/profile.api";
+import { useToast } from "@/components/ToastProvider";
 
 const navLinks = [
   { label: "Home", href: "/" },
+  { label: "Car Hire", href: "/car-hire" },
   { label: "Services", href: "/services" },
   { label: "How It Works", href: "/how-it-works" },
   { label: "About", href: "/about" },
@@ -14,28 +28,96 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { showToast } = useToast();
+
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
-  // CHECK LOGIN STATUS
+  // CHECK LOGIN STATUS & USER INFO
   // =====================================================
+
+  const checkLoginStatus = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("token");
+    const loggedIn = !!token;
+    setIsLoggedIn(loggedIn);
+
+    if (loggedIn) {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          setUser(null);
+        }
+      } else {
+        // Attempt to fetch profile if not cached yet
+        try {
+          const res = await getCustomerProfile();
+          if (res?.content) {
+            setUser(res.content);
+            localStorage.setItem("user", JSON.stringify(res.content));
+          }
+        } catch (e) {
+          console.warn("Navbar could not fetch profile:", e);
+        }
+      }
+    } else {
+      setUser(null);
+    }
+  }, []);
 
   useEffect(() => {
-    const checkLoginStatus = () => {
-      const token = localStorage.getItem("token");
-      setIsLoggedIn(!!token);
-    };
-
     checkLoginStatus();
 
     window.addEventListener("storage", checkLoginStatus);
+    window.addEventListener("auth-change", checkLoginStatus);
+    window.addEventListener("focus", checkLoginStatus);
 
     return () => {
       window.removeEventListener("storage", checkLoginStatus);
+      window.removeEventListener("auth-change", checkLoginStatus);
+      window.removeEventListener("focus", checkLoginStatus);
+    };
+  }, [checkLoginStatus, pathname]);
+
+  // Click outside to close user dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setUserDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("is_active");
+    setIsLoggedIn(false);
+    setUser(null);
+    setUserDropdownOpen(false);
+    window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new CustomEvent("auth-change"));
+    showToast("Logged out successfully.", "info");
+    router.push("/login");
+  };
 
   // =====================================================
   // SCROLL
@@ -211,33 +293,126 @@ export default function Navbar() {
               </Link>
             </>
           ) : (
-            /* PROFILE ICON */
+            /* USER PROFILE ICON & DROPDOWN */
+            <div ref={dropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                aria-label="Account Menu"
+                className={`
+                  flex items-center gap-2.5
+                  pl-2 pr-3 py-1.5
+                  rounded-full
+                  border
+                  text-[#FAD293]
+                  transition-all
+                  duration-300
+                  ${
+                    userDropdownOpen
+                      ? "border-[#FAD293] bg-[#FAD293]/15 ring-2 ring-[#FAD293]/30"
+                      : "border-white/10 bg-white/[0.04] hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10"
+                  }
+                `}
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[1.5px] shadow-sm flex items-center justify-center">
+                  <div className="w-full h-full rounded-full bg-[#111] flex items-center justify-center overflow-hidden">
+                    {user?.profile_image_full_path ? (
+                      <img
+                        src={user.profile_image_full_path}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[11px] font-bold text-[#FAD293]">
+                        {(user?.first_name?.[0] || "") + (user?.last_name?.[0] || "") || "U"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
+                    {user?.first_name || "Account"}
+                  </span>
+                  <span className="text-[9px] text-[#FAD293] leading-none uppercase font-semibold">
+                    VIP
+                  </span>
+                </div>
+                <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
+              </button>
 
-            <Link
-              href="/profile"
-              aria-label="Profile"
-              className="
-                w-10
-                h-10
-                rounded-full
-                border
-                border-white/10
-                bg-white/[0.04]
-                flex
-                items-center
-                justify-center
-                text-[#FAD293]
-                hover:border-[#FAD293]/50
-                hover:bg-[#FAD293]/10
-                transition-all
-                duration-300
-              "
-            >
-              <UserRound
-                size={19}
-                strokeWidth={1.6}
-              />
-            </Link>
+              {/* DROPDOWN MENU */}
+              {userDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl border border-[#d9a85f]/40 bg-[#16120e] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 z-50">
+                  {/* User Info Header */}
+                  <div className="px-3 py-2.5 border-b border-white/10 mb-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#e7bd78]">
+                        ✦ VIP Client
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-white truncate mt-0.5">
+                      {user?.first_name || user?.last_name
+                        ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                        : "My Account"}
+                    </p>
+                    <p className="text-[11px] text-white/50 truncate">
+                      {user?.phone || user?.email || "Signed In"}
+                    </p>
+                  </div>
+
+                  {/* Links */}
+                  <div className="space-y-0.5">
+                    <Link
+                      href="/account?tab=bookings"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                    >
+                      <Calendar size={14} className="text-[#e7bd78]" />
+                      <span>My Bookings</span>
+                    </Link>
+
+                    <Link
+                      href="/account?tab=profile"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                    >
+                      <UserRound size={14} className="text-[#e7bd78]" />
+                      <span>Personal Profile</span>
+                    </Link>
+
+                    <Link
+                      href="/account?tab=addresses"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                    >
+                      <MapPin size={14} className="text-[#e7bd78]" />
+                      <span>Saved Addresses</span>
+                    </Link>
+
+                    <Link
+                      href="/account?tab=security"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                    >
+                      <Shield size={14} className="text-[#e7bd78]" />
+                      <span>Security & Privacy</span>
+                    </Link>
+                  </div>
+
+                  {/* Logout */}
+                  <div className="pt-1.5 border-t border-white/10 mt-1">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-950/40 hover:text-red-300"
+                    >
+                      <LogOut size={14} />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -385,34 +560,42 @@ export default function Navbar() {
 
             </div>
           ) : (
-            /* PROFILE */
+            /* MOBILE PROFILE & ACCOUNT LINKS */
+            <div className="space-y-2 pt-2 border-t border-white/10">
+              <div className="px-3 py-1 text-xs text-white/50">
+                Signed in as <strong className="text-white">{user?.first_name || user?.phone || "VIP Member"}</strong>
+              </div>
 
-            <Link
-              href="/profile"
-              onClick={() => setMenuOpen(false)}
-              className="
-                flex
-                items-center
-                justify-center
-                gap-2
-                w-full
-                py-2.5
-                rounded-full
-                border
-                border-[#FAD293]/30
-                bg-[#FAD293]/10
-                text-[#FAD293]
-                text-sm
-                font-medium
-              "
-            >
-              <UserRound
-                size={17}
-                strokeWidth={1.7}
-              />
+              <Link
+                href="/account?tab=bookings"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 w-full py-2.5 px-4 rounded-xl border border-[#FAD293]/30 bg-[#FAD293]/10 text-[#FAD293] text-sm font-semibold"
+              >
+                <Calendar size={17} />
+                <span>My Bookings</span>
+              </Link>
 
-              Profile
-            </Link>
+              <Link
+                href="/account?tab=profile"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 w-full py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium hover:text-white"
+              >
+                <UserRound size={17} />
+                <span>Personal Profile</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  handleLogout();
+                }}
+                className="flex items-center gap-2.5 w-full py-2 px-4 text-xs font-semibold text-red-400 hover:text-red-300"
+              >
+                <LogOut size={15} />
+                <span>Logout</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
