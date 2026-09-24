@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronRight, FileText, Lock } from "lucide-react";
 
 export type ActiveView = "landing" | "technicians" | "request_quote" | "quotes" | "provider_profile" | "booking";
 
-interface AlloyStepHeaderProps {
+interface BodyworkStepHeaderProps {
     activeView: ActiveView;
     onNavigate: (view: ActiveView) => void;
     myQuotesCount: number;
@@ -18,7 +18,7 @@ interface AlloyStepHeaderProps {
     onBlockedNavigate?: (message: string) => void;
 }
 
-export default function AlloyStepHeader({
+export default function BodyworkStepHeader({
     activeView,
     onNavigate,
     myQuotesCount,
@@ -29,7 +29,7 @@ export default function AlloyStepHeader({
     hasSearchedTechnicians = true,
     hasActiveBooking = false,
     onBlockedNavigate,
-}: AlloyStepHeaderProps) {
+}: BodyworkStepHeaderProps) {
     const handleBack = () => {
         if (activeView === "request_quote") {
             onNavigate("technicians");
@@ -47,21 +47,20 @@ export default function AlloyStepHeader({
     const getViewTitle = () => {
         switch (activeView) {
             case "technicians":
-                return "Verified Specialists";
+                return "Certified Bodyshops & Specialists";
             case "provider_profile":
-                return "Specialist Portfolio & Bio";
+                return "Bodyshop Portfolio & Bio";
             case "request_quote":
                 return "Quotation Request Form";
             case "quotes":
-                return "My Quotes & Live Offers";
+                return "My Repair Quotes & Live Offers";
             case "booking":
-                return "Schedule & Confirm Booking";
+                return "Schedule & Confirm Repair";
             default:
-                return "Alloy Wheel Refurbishment";
+                return "Car Bodywork & Paint Repair";
         }
     };
 
-    // Navigation guards: user cannot jump ahead to a step unless its prerequisite is fulfilled
     const handleStepClick = (target: ActiveView) => {
         if (target === "landing") {
             onNavigate("landing");
@@ -70,7 +69,7 @@ export default function AlloyStepHeader({
 
         if (target === "technicians") {
             if (!hasSearchedTechnicians) {
-                onBlockedNavigate?.("Please complete Step 1 (enter vehicle details & postcode) to view available technicians.");
+                onBlockedNavigate?.("Please complete Step 1 (enter vehicle details & postcode) to view available repair specialists.");
                 return;
             }
             onNavigate("technicians");
@@ -79,7 +78,7 @@ export default function AlloyStepHeader({
 
         if (target === "quotes") {
             if (myQuotesCount === 0) {
-                onBlockedNavigate?.("Please select technicians and request a quote first before viewing quotes.");
+                onBlockedNavigate?.("Please select bodyshops and request a quote first before viewing quotes.");
                 return;
             }
             onNavigate("quotes");
@@ -88,7 +87,7 @@ export default function AlloyStepHeader({
 
         if (target === "booking") {
             if (!hasActiveBooking) {
-                onBlockedNavigate?.("Direct booking is not available. Please view your live quotes and click 'Book Offer' on a technician's bid to schedule.");
+                onBlockedNavigate?.("Direct booking is not available. Please view your live quotes and click 'Book Offer' on a bodyshop's bid to schedule.");
                 return;
             }
             onNavigate("booking");
@@ -117,7 +116,7 @@ export default function AlloyStepHeader({
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] uppercase tracking-wider text-[#E8AF66] font-extrabold block">
-                                Alloy Wheel Service
+                                Bodywork &amp; Paint
                             </span>
                             {vehicleReg && (
                                 <span className="bg-zinc-800/90 text-zinc-300 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-700 uppercase">
@@ -142,35 +141,37 @@ export default function AlloyStepHeader({
                     <button
                         type="button"
                         onClick={() => handleStepClick("landing")}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${activeView === "landing"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                            activeView === "landing"
                                 ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20"
                                 : "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
-                            }`}
+                        }`}
                     >
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${activeView === "landing" ? "bg-black/30 text-zinc-950" : "bg-zinc-800 text-zinc-300"}`}>
                             1
                         </span>
-                        <span>Details</span>
+                        <span>Damage Details</span>
                     </button>
 
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
 
-                    {/* Step 2: Technicians */}
+                    {/* Step 2: Specialists */}
                     <button
                         type="button"
                         onClick={() => handleStepClick("technicians")}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${activeView === "technicians" || activeView === "provider_profile" || activeView === "request_quote"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+                            activeView === "technicians" || activeView === "provider_profile" || activeView === "request_quote"
                                 ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20 cursor-pointer"
                                 : canAccessStep2
                                     ? "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 cursor-pointer"
                                     : "text-zinc-600 opacity-40 cursor-not-allowed border border-transparent"
-                            }`}
+                        }`}
                         title={!canAccessStep2 ? "Enter registration and postcode in Step 1 to unlock" : undefined}
                     >
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${activeView === "technicians" || activeView === "provider_profile" || activeView === "request_quote" ? "bg-black/30 text-zinc-950" : "bg-zinc-800 text-zinc-400"}`}>
                             2
                         </span>
-                        <span>Technicians</span>
+                        <span>Bodyshops</span>
                         {!canAccessStep2 && <Lock className="w-2.5 h-2.5 text-zinc-500" />}
                     </button>
 
@@ -180,13 +181,14 @@ export default function AlloyStepHeader({
                     <button
                         type="button"
                         onClick={() => handleStepClick("quotes")}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${activeView === "quotes"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+                            activeView === "quotes"
                                 ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20 cursor-pointer"
                                 : canAccessStep3
                                     ? "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 cursor-pointer"
                                     : "text-zinc-600 opacity-40 cursor-not-allowed border border-transparent"
-                            }`}
-                        title={!canAccessStep3 ? "Send quotation to technicians first to unlock" : undefined}
+                        }`}
+                        title={!canAccessStep3 ? "Send quotation to bodyshops first to unlock" : undefined}
                     >
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${activeView === "quotes" ? "bg-black/30 text-zinc-950" : "bg-zinc-800 text-zinc-400"}`}>
                             3
@@ -207,16 +209,17 @@ export default function AlloyStepHeader({
 
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
 
-                    {/* Step 4: Booking (Only accessible via accepting a bid offer) */}
+                    {/* Step 4: Booking */}
                     <button
                         type="button"
                         onClick={() => handleStepClick("booking")}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${activeView === "booking"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+                            activeView === "booking"
                                 ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20 cursor-pointer"
                                 : canAccessStep4
                                     ? "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 cursor-pointer"
                                     : "text-zinc-600 opacity-40 cursor-not-allowed border border-transparent"
-                            }`}
+                        }`}
                         title={!canAccessStep4 ? "Accept an offer in Quotes & Bids to book" : undefined}
                     >
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${activeView === "booking" ? "bg-black/30 text-zinc-950" : "bg-zinc-800 text-zinc-400"}`}>
@@ -232,10 +235,11 @@ export default function AlloyStepHeader({
                     <button
                         type="button"
                         onClick={() => handleStepClick("quotes")}
-                        className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${canAccessStep3
+                        className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                            canAccessStep3
                                 ? "bg-zinc-900 border-zinc-700/80 hover:border-[#E8AF66] text-zinc-200 hover:text-white cursor-pointer"
                                 : "bg-zinc-900/50 border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50"
-                            }`}
+                        }`}
                     >
                         <FileText className="w-3.5 h-3.5 text-[#E8AF66]" />
                         <span>My Quotes</span>

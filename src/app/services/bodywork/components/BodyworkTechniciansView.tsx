@@ -17,11 +17,10 @@ import {
     RefreshCw,
     Search,
     BookOpen,
-    Filter,
 } from "lucide-react";
-import type { ProviderItem } from "@/lib/service/alloy.api";
+import type { ProviderItem } from "@/lib/service/bodywork.api";
 
-interface TechniciansPageViewProps {
+interface BodyworkTechniciansViewProps {
     providers: ProviderItem[];
     searchingProviders: boolean;
     selectedProviderIdsForQuote: string[];
@@ -39,7 +38,7 @@ interface TechniciansPageViewProps {
     onOpenMap?: () => void;
 }
 
-export default function TechniciansPageView({
+export default function BodyworkTechniciansView({
     providers,
     searchingProviders,
     selectedProviderIdsForQuote,
@@ -55,7 +54,7 @@ export default function TechniciansPageView({
     postcode,
     selectedServices,
     onOpenMap,
-}: TechniciansPageViewProps) {
+}: BodyworkTechniciansViewProps) {
     const [filterQuery, setFilterQuery] = useState("");
 
     const filteredProviders = providers.filter((p) => {
@@ -70,7 +69,7 @@ export default function TechniciansPageView({
 
     return (
         <div className="max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-12 animate-fade-in space-y-6 pb-28">
-           
+            {/* Top Discovery Hero Card */}
             <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1.5 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -95,8 +94,8 @@ export default function TechniciansPageView({
                     </h2>
                     <p className="text-xs sm:text-sm text-zinc-400">
                         {providers.length > 0
-                            ? `Found ${providers.length} verified specialist${providers.length > 1 ? "s" : ""} ready to service your alloy wheels. Select technicians to send request for quote.`
-                            : "Searching mobile alloy wheel specialists in your selected area..."}
+                            ? `Found ${providers.length} verified specialist${providers.length > 1 ? "s" : ""} ready to service your bodywork. Select technicians to send request for quote.`
+                            : "Searching certified bodywork & paint repair specialists in your selected area..."}
                     </p>
                 </div>
 
@@ -121,7 +120,7 @@ export default function TechniciansPageView({
                 </div>
             </div>
 
-           
+            {/* State 1: Searching Spinner */}
             {searchingProviders && (
                 <div className="rounded-3xl bg-[#141518] border border-zinc-800/90 p-16 text-center flex flex-col items-center justify-center my-6 shadow-2xl">
                     <div className="w-14 h-14 border-4 border-[#E8AF66] border-t-transparent rounded-full animate-spin mb-4" />
@@ -129,12 +128,12 @@ export default function TechniciansPageView({
                         Searching Nearby Technicians...
                     </h3>
                     <p className="text-xs sm:text-sm text-zinc-400 max-w-md">
-                        Connecting to live network and finding top rated mobile alloy wheel specialists in your area...
+                        Connecting to live network and finding top rated bodywork specialists in your area...
                     </p>
                 </div>
             )}
 
-       
+            {/* State 2: Empty Results */}
             {!searchingProviders && providers.length === 0 && (
                 <div className="rounded-3xl bg-[#141518] border border-zinc-800/90 p-12 sm:p-16 text-center flex flex-col items-center justify-center my-6 shadow-2xl space-y-4">
                     <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-2">
@@ -145,8 +144,8 @@ export default function TechniciansPageView({
                             No Technicians Found Nearby
                         </h3>
                         <p className="text-xs sm:text-sm text-zinc-400">
-                            No active mobile specialists were found for the selected services in this specific area.
-                            Try choosing additional service types or adjusting your postcode.
+                            No active bodyshops or mobile SMART repair units were found for the selected services in this specific area.
+                            Try adjusting your postcode or selecting additional service types.
                         </p>
                     </div>
                     <div className="pt-2 flex items-center gap-3 flex-wrap justify-center">
@@ -168,7 +167,7 @@ export default function TechniciansPageView({
                 </div>
             )}
 
-            {/* State 3: Technicians List */}
+            {/* State 3: Technicians List Grid */}
             {!searchingProviders && providers.length > 0 && (
                 <div className="space-y-6">
                     {/* Multi-Provider Selection Toolbar */}
@@ -193,7 +192,7 @@ export default function TechniciansPageView({
                                 <span>
                                     {selectedProviderIdsForQuote.length === providers.length
                                         ? "Deselect All"
-                                        : "Select All Providers"}
+                                        : "Select All"}
                                 </span>
                             </button>
 
@@ -215,7 +214,7 @@ export default function TechniciansPageView({
                         </div>
                     </div>
 
-                    {/* Providers Grid */}
+                    {/* Providers Grid (Matching Image 2 and Image 3) */}
                     <div
                         className={`grid grid-cols-1 ${
                             filteredProviders.length === 1
@@ -362,15 +361,12 @@ export default function TechniciansPageView({
                                             </button>
                                         </div>
 
-                                        {/* Address & Contact Info */}
+                                        {/* Address & Contact Info Box */}
                                         <div className="bg-[#191A1E] rounded-2xl p-3.5 border border-zinc-800/80 mb-4 space-y-2 text-xs">
                                             <div className="flex items-start gap-2 text-zinc-200">
                                                 <MapPin className="w-4 h-4 text-[#E8AF66] shrink-0 mt-0.5" />
                                                 <span className="font-medium leading-relaxed">
                                                     {provider.company_address || "Location on Request"}
-                                                    {provider.postcode
-                                                        ? ` (${provider.postcode.toUpperCase()})`
-                                                        : ""}
                                                 </span>
                                             </div>
 
@@ -396,7 +392,7 @@ export default function TechniciansPageView({
                                             </div>
                                         </div>
 
-                                        {/* Selected Services Breakdown */}
+                                        {/* Services Included Breakdown */}
                                         {provider.selected_services && provider.selected_services.length > 0 && (
                                             <div className="mb-4">
                                                 <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center justify-between px-0.5">
@@ -443,7 +439,7 @@ export default function TechniciansPageView({
                                         )}
                                     </div>
 
-                                    {/* Price & Action Button Footer */}
+                                    {/* Action Button Footer */}
                                     <div className="flex items-center justify-between gap-3 mt-4 pt-3.5 border-t border-zinc-800/80 bg-[#121316] -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 rounded-b-3xl">
                                         <button
                                             type="button"
@@ -459,7 +455,7 @@ export default function TechniciansPageView({
                         })}
                     </div>
 
-                    {/* Bottom Sticky Action Bar for Multi-Quote Selection */}
+                    {/* Bottom Sticky Action Bar for Multi-Quote Selection (Matching Image 2 and Image 3) */}
                     <div className="fixed bottom-0 left-0 right-0 z-30 p-4 bg-[#141518]/95 backdrop-blur-md border-t border-zinc-800 shadow-2xl">
                         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
                             <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">

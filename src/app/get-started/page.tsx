@@ -59,10 +59,7 @@ export default function GetStartedPage() {
       const registrationResponse =
         await registerCustomer(formData);
 
-      console.log(
-        "Registration Response:",
-        registrationResponse
-      );
+
 
       
       if (
@@ -241,9 +238,6 @@ export default function GetStartedPage() {
     }
   };
 
-  // --------------------------------
-  // UI
-  // --------------------------------
 
   return (
     <div className="max-w-8xl mx-auto w-full min-h-[85vh] flex py-12 px-6">

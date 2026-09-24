@@ -332,8 +332,14 @@ export default function ServicesSection() {
                 nameLower.includes("hire") || nameLower.includes("rental")
                   ? "/car-hire"
                   : nameLower.includes("chauffeur")
-                  ? "/services/Chauffeur"
-                  : `/services/${encodeURIComponent(category.name)}`;
+                    ? "/services/Chauffeur"
+                    : nameLower.includes("alloy")
+                      ? "/services/alloy-wheel"
+                      : nameLower.includes("modifi")
+                        ? "/services/modification"
+                        : nameLower.includes("body")
+                          ? "/services/bodywork"
+                          : `/services/${encodeURIComponent(category.name)}`;
 
               return (
                 <Link
@@ -343,73 +349,73 @@ export default function ServicesSection() {
                   className="group relative p-6 rounded-2xl border border-white/8 bg-white/3 backdrop-blur-sm transition-all duration-400 hover:border-[#FAD293]/30 hover:bg-white/5 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(206,164,107,0.1)] cursor-pointer"
                 >
 
-                {/* Featured Tag */}
-                {category.is_featured === 1 && (
-                  <span
-                    className="absolute top-4 right-4 text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-full text-black"
+                  {/* Featured Tag */}
+                  {category.is_featured === 1 && (
+                    <span
+                      className="absolute top-4 right-4 text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-full text-black"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #FAD293, #CEA46B)",
+                      }}
+                    >
+                      Featured
+                    </span>
+                  )}
+
+                  {/* Icon */}
+                  <div
+                    className="w-14 h-14 rounded-xl flex items-center justify-center mb-5 transition-all duration-300 group-hover:shadow-[0_0_24px_rgba(250,210,147,0.2)]"
                     style={{
                       background:
-                        "linear-gradient(135deg, #FAD293, #CEA46B)",
+                        "linear-gradient(135deg, rgba(250,210,147,0.1), rgba(206,164,107,0.05))",
+                      border:
+                        "1px solid rgba(250,210,147,0.2)",
+                      color: "#FAD293",
                     }}
                   >
-                    Featured
-                  </span>
-                )}
+                    {getCategoryIcon(category.name)}
+                  </div>
 
-                {/* Icon */}
-                <div
-                  className="w-14 h-14 rounded-xl flex items-center justify-center mb-5 transition-all duration-300 group-hover:shadow-[0_0_24px_rgba(250,210,147,0.2)]"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, rgba(250,210,147,0.1), rgba(206,164,107,0.05))",
-                    border:
-                      "1px solid rgba(250,210,147,0.2)",
-                    color: "#FAD293",
-                  }}
-                >
-                  {getCategoryIcon(category.name)}
-                </div>
+                  {/* Content */}
+                  <h3 className="text-lg font-semibold mb-2 group-hover:text-[#FAD293] transition-colors duration-300">
+                    {category.name}
+                  </h3>
 
-                {/* Content */}
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-[#FAD293] transition-colors duration-300">
-                  {category.name}
-                </h3>
+                  <p className="text-sm text-white/45 leading-relaxed">
+                    {category.description ||
+                      `Explore ${category.name} services and find the right provider for your vehicle.`}
+                  </p>
 
-                <p className="text-sm text-white/45 leading-relaxed">
-                  {category.description ||
-                    `Explore ${category.name} services and find the right provider for your vehicle.`}
-                </p>
+                  {/* Arrow */}
+                  <div className="flex items-center gap-1 mt-4 text-xs font-medium text-[#FAD293] opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-0 group-hover:translate-x-1">
+                    Explore
 
-                {/* Arrow */}
-                <div className="flex items-center gap-1 mt-4 text-xs font-medium text-[#FAD293] opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-0 group-hover:translate-x-1">
-                  Explore
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </div>
 
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </div>
-
-                {/* Bottom border accent */}
-                <div
-                  className="absolute bottom-0 left-6 right-6 h-px opacity-0 group-hover:opacity-100 transition-all duration-300"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, transparent, #FAD293, transparent)",
-                  }}
-                />
-              </Link>
-            );
-          })}
+                  {/* Bottom border accent */}
+                  <div
+                    className="absolute bottom-0 left-6 right-6 h-px opacity-0 group-hover:opacity-100 transition-all duration-300"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, #FAD293, transparent)",
+                    }}
+                  />
+                </Link>
+              );
+            })}
 
           </div>
         )}
