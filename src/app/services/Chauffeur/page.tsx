@@ -244,8 +244,8 @@ export default function ChauffeurServicePage() {
   }, [chauffeurs, sortBy]);
 
   return (
-    <div className="min-h-screen bg-[#090706] text-white px-4 py-6 sm:px-6 lg:px-8 font-sans selection:bg-[#e7bd78] selection:text-black">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen bg-[#090706] text-white py-6 font-sans selection:bg-[#e7bd78] selection:text-black">
+      <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-6 lg:px-8">
         {/* =========================================================================
             1. HERO SECTION
         ========================================================================== */}

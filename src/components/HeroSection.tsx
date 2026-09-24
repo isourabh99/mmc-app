@@ -209,11 +209,6 @@ export default function HeroSection() {
   const handleSearch = () => {
     // Static/raw-data behavior only.
     // No backend/API call.
-    console.log({
-      service: searchQuery,
-      location,
-      category: selectedCategory,
-    });
   };
 
   return (
@@ -301,7 +296,7 @@ export default function HeroSection() {
           CONTENT
       ========================================================= */}
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1440px] items-center px-5 sm:px-8 lg:px-12 xl:px-16">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] items-center px-4 sm:px-6 lg:px-8">
         <div className="w-full max-w-[700px] pt-20 pb-28 sm:pt-24 lg:pt-1">
           {/* Eyebrow */}
           <div className="mb-5 flex items-center gap-3">

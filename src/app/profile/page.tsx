@@ -130,7 +130,6 @@ export default function ProfilePage() {
 
         const response = await getCustomerProfile();
 
-        console.log("Profile Response:", response);
 
     
 
@@ -311,17 +310,14 @@ export default function ProfilePage() {
 
  
 
-      console.log("Updating profile...");
 
       for (const [key, value] of formData.entries()) {
-        console.log(key, value);
       }
 
       
 
       const response = await updateCustomerProfile(formData);
 
-      console.log("Update Profile Response:", response);
 
    
 
@@ -373,7 +369,6 @@ export default function ProfilePage() {
     try {
       const response = await saveCustomerAddress(address);
 
-      console.log("Address Response:", response);
 
  
 

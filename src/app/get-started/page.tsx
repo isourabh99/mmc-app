@@ -86,10 +86,6 @@ export default function GetStartedPage() {
         formData.email
       );
 
-      console.log(
-        "OTP Response:",
-        otpResponse
-      );
 
       if (
         otpResponse.response_code !==
@@ -115,9 +111,6 @@ export default function GetStartedPage() {
 
     } catch (error: any) {
       console.error("Registration Error:", error);
-  console.log("STATUS:", error?.response?.status);
-  console.log("RESPONSE DATA:", error?.response?.data);
-  console.log("SENT DATA:", formData);
 
   showToast(
   error?.response?.data?.errors?.[0]?.message ||
@@ -169,10 +162,6 @@ export default function GetStartedPage() {
           otp: otpNumber,
         });
 
-      console.log(
-        "Login Response:",
-        loginResponse
-      );
 
      
 

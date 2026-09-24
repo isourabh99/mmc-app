@@ -180,7 +180,6 @@ export default function ServicesSection() {
 
         const response = await getCategories(10, 1);
 
-        console.log("Categories API response:", response);
 
         if (response?.content?.data) {
           // Only show active categories, excluding Emergency Vehicle Assistance (handled via dedicated Emergency CTA & header)
@@ -209,7 +208,7 @@ export default function ServicesSection() {
   return (
     <section
       id="services"
-      className="py-10 px-6 bg-black relative overflow-hidden"
+      className="py-14 sm:py-20 bg-black relative overflow-hidden"
     >
       {/* Background accent */}
       <div
@@ -220,7 +219,7 @@ export default function ServicesSection() {
         }}
       />
 
-      <div className="max-w-8xl mx-auto relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
         {/* Header */}
         <div className="text-center mb-16">
@@ -328,18 +327,27 @@ export default function ServicesSection() {
 
             {categories.map((category) => {
               const nameLower = category.name.toLowerCase();
-              const targetHref =
-                nameLower.includes("hire") || nameLower.includes("rental")
-                  ? "/car-hire"
-                  : nameLower.includes("chauffeur")
-                    ? "/services/Chauffeur"
-                    : nameLower.includes("alloy")
-                      ? "/services/alloy-wheel"
-                      : nameLower.includes("modifi")
-                        ? "/services/modification"
-                        : nameLower.includes("body")
-                          ? "/services/bodywork"
-                          : `/services/${encodeURIComponent(category.name)}`;
+              let targetHref = `/services/${encodeURIComponent(category.name)}`;
+
+              if (
+                nameLower.includes("valet") ||
+                nameLower.includes("detailing") ||
+                nameLower.includes("wash")
+              ) {
+                targetHref = "/services/valet-wash";
+              } else if (nameLower.includes("tyre") || nameLower.includes("tire")) {
+                targetHref = "/tyre-fittings";
+              } else if (nameLower.includes("chauffeur")) {
+                targetHref = "/services/Chauffeur";
+              } else if (nameLower.includes("hire") || nameLower.includes("rental")) {
+                targetHref = "/car-hire";
+              } else if (
+                nameLower.includes("emergency") ||
+                nameLower.includes("recovery") ||
+                nameLower.includes("breakdown")
+              ) {
+                targetHref = "/emergency-assistance";
+              }
 
               return (
                 <Link

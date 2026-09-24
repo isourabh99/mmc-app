@@ -2,8 +2,8 @@
 
 export default function ProviderCTA() {
   return (
-    <section id="become-provider" className="py-24 px-6 relative overflow-hidden">
-      <div className="max-w-8xl mx-auto">
+    <section id="become-provider" className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto">
         <div
           className="relative rounded-3xl overflow-hidden"
           style={{
@@ -30,7 +30,7 @@ export default function ProviderCTA() {
             style={{ background: "linear-gradient(180deg, #FAD293, transparent)" }}
           />
 
-          <div className="relative z-10 p-10 md:p-16 flex flex-col lg:flex-row items-center gap-12">
+          <div className="relative z-10 p-6 sm:p-10 md:p-16 flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
             {/* Left content */}
             <div className="flex-1 text-center lg:text-left">
               <div className="flex items-center justify-center lg:justify-start gap-3 mb-5">

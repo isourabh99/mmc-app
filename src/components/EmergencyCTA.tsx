@@ -2,10 +2,10 @@
 
 export default function EmergencyCTA() {
   return (
-    <section id="emergency" className="py-16 px-6 relative overflow-hidden">
-      <div className="max-w-8xl mx-auto">
+    <section id="emergency" className="py-14 sm:py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto">
         <div
-          className="relative rounded-3xl p-10 md:p-14 overflow-hidden"
+          className="relative rounded-3xl p-6 sm:p-10 md:p-14 overflow-hidden"
           style={{
             background:
               "linear-gradient(135deg, rgba(250,210,147,0.08), rgba(206,164,107,0.04))",
