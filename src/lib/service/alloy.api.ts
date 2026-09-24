@@ -852,6 +852,15 @@ export const sendBookingRequest = async (
     }
   }
 
+  // Backend /customer/booking/request/send validator requires 'service_location' => 'required|in:customer'
+  const apiServiceLocation = params.service_location === "workshop" ? "customer" : (params.service_location || "customer");
+  let effectiveNotes = params.notes || "";
+  if (params.service_location === "workshop" && !effectiveNotes.includes("Workshop")) {
+    effectiveNotes = effectiveNotes
+      ? `[Service Mode: Workshop Bay Drop-Off]\n\n${effectiveNotes}`
+      : "[Service Mode: Workshop Bay Drop-Off]";
+  }
+
   if (params.car_image) {
     const formData = new FormData();
     formData.append("post_id", params.post_id);
@@ -859,14 +868,14 @@ export const sendBookingRequest = async (
     formData.append("payment_method", effectivePaymentMethod);
     formData.append("zone_id", zoneId);
     formData.append("service_address_id", addressId);
-    formData.append("service_location", params.service_location);
+    formData.append("service_location", apiServiceLocation);
     formData.append("service_schedule", params.service_schedule);
     formData.append("booking_type", params.booking_type);
     if (params.selected_slot_id) {
       formData.append("selected_slot_id", params.selected_slot_id);
     }
-    if (params.notes) {
-      formData.append("notes", params.notes);
+    if (effectiveNotes) {
+      formData.append("notes", effectiveNotes);
     }
     if (isOnline || params.payment_platform) {
       formData.append("payment_platform", params.payment_platform || "web");
@@ -895,10 +904,10 @@ export const sendBookingRequest = async (
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
       service_address_id: addressId,
-      service_location: params.service_location,
+      service_location: apiServiceLocation,
       service_schedule: params.service_schedule,
       booking_type: params.booking_type,
-      notes: params.notes || "",
+      notes: effectiveNotes,
     };
 
     if (params.selected_slot_id) {

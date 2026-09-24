@@ -7,11 +7,9 @@ import {
     Send,
     Wrench,
     Calendar,
-    Clock3,
     Car,
     FileText,
     Upload,
-    ImageIcon,
     X,
     CheckCircle2,
     Users,
@@ -20,11 +18,11 @@ import {
     ChevronDown,
     ShieldCheck,
 } from "lucide-react";
-import type { ProviderItem, AlloyServiceItem } from "@/lib/service/alloy.api";
+import type { ProviderItem, BodyworkServiceItem } from "@/lib/service/bodywork.api";
 
-interface QuotationFormPageViewProps {
+interface BodyworkQuoteFormViewProps {
     selectedProviders: ProviderItem[];
-    allServices: AlloyServiceItem[];
+    allServices: BodyworkServiceItem[];
     initialRegNo?: string;
     initialDamageDesc?: string;
     initialCarImage?: File | null;
@@ -43,7 +41,7 @@ interface QuotationFormPageViewProps {
     }) => Promise<void>;
 }
 
-export default function QuotationFormPageView({
+export default function BodyworkQuoteFormView({
     selectedProviders,
     allServices,
     initialRegNo = "",
@@ -53,14 +51,12 @@ export default function QuotationFormPageView({
     submitting,
     onBack,
     onSubmit,
-}: QuotationFormPageViewProps) {
+}: BodyworkQuoteFormViewProps) {
     const [carReg, setCarReg] = useState(initialRegNo || "BD51 SMR");
-    const [carModel, setCarModel] = useState("Hyundai Creta 2022");
+    const [carModel, setCarModel] = useState("Vehicle");
     const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(() => {
         return allServices.length > 0 ? [allServices[0].id] : [];
     });
-    const [showServicesDropdown, setShowServicesDropdown] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Default to tomorrow's date
     const [bookingDate, setBookingDate] = useState(() => {
@@ -68,7 +64,7 @@ export default function QuotationFormPageView({
         d.setDate(d.getDate() + 1);
         return d.toISOString().split("T")[0];
     });
-    const [bookingTime, setBookingTime] = useState("11:00:00");
+    const [bookingTime, setBookingTime] = useState("10:00:00");
     const [damageDesc, setDamageDesc] = useState(initialDamageDesc || "");
     const [serviceDesc, setServiceDesc] = useState("");
     const [carImage, setCarImage] = useState<File | null>(initialCarImage);
@@ -81,17 +77,6 @@ export default function QuotationFormPageView({
             setSelectedServiceIds([allServices[0].id]);
         }
     }, [allServices, selectedServiceIds.length]);
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (e: globalThis.MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setShowServicesDropdown(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -126,14 +111,19 @@ export default function QuotationFormPageView({
         }
 
         if (selectedServiceIds.length === 0) {
-            setErrorMsg("Please select at least one alloy wheel service.");
+            setErrorMsg("Please select at least one bodywork repair service.");
             return;
         }
 
         if (selectedProviders.length === 0) {
-            setErrorMsg("No technicians selected. Please select at least one technician.");
+            setErrorMsg("No specialists selected. Please select at least one bodyshop.");
             return;
         }
+
+        const selectedServiceNames = selectedServiceIds
+            .map((id) => allServices.find((s) => s.id === id)?.name)
+            .filter(Boolean)
+            .join(", ");
 
         try {
             await onSubmit({
@@ -143,11 +133,11 @@ export default function QuotationFormPageView({
                 bookingDate,
                 bookingTime,
                 damageDesc: damageDesc.trim(),
-                serviceDesc: serviceDesc.trim(),
+                serviceDesc: serviceDesc.trim() || `Bodywork request for: ${selectedServiceNames || "Vehicle Repair"}`,
                 carImage,
             });
         } catch (err: any) {
-            setErrorMsg(err?.message || "Failed to submit quotation. Please try again.");
+            setErrorMsg(err?.message || "Failed to submit quotation request. Please try again.");
         }
     };
 
@@ -161,12 +151,12 @@ export default function QuotationFormPageView({
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:text-white hover:border-[#E8AF66] text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
                 >
                     <ArrowLeft className="w-4 h-4 text-[#E8AF66]" />
-                    <span>Back to Technicians</span>
+                    <span>Back to Specialists</span>
                 </button>
 
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-extrabold text-[#E8AF66] bg-[#E8AF66]/10 px-3 py-1 rounded-full border border-[#E8AF66]/20 uppercase tracking-wider">
-                        {selectedProviders.length} Technician{selectedProviders.length > 1 ? "s" : ""} Selected
+                        {selectedProviders.length} Specialist{selectedProviders.length > 1 ? "s" : ""} Selected
                     </span>
                 </div>
             </div>
@@ -183,10 +173,10 @@ export default function QuotationFormPageView({
                     Request Quotation from Specialists
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-400 max-w-2xl">
-                    Fill in your vehicle details and damage description below. Your request will be sent directly to the selected verified specialists who will respond with competitive, real-time bids.
+                    Fill in your vehicle details and damage description below. Your request will be sent directly to the selected verified bodyshops who will respond with competitive, real-time bids.
                 </p>
 
-                {/* Selected Technicians Chips */}
+                {/* Selected Specialists Chips */}
                 <div className="pt-3 border-t border-zinc-800/80 mt-4">
                     <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-[#E8AF66]" />
@@ -267,13 +257,13 @@ export default function QuotationFormPageView({
                     </div>
                 </div>
 
-                {/* Section 2: Alloy Wheel Services */}
+                {/* Section 2: Bodywork Repair Services */}
                 <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
                     <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                         <div className="flex items-center gap-2">
                             <Wrench className="w-4 h-4 text-[#E8AF66]" />
                             <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">
-                                2. Select Alloy Services
+                                2. Select Bodywork Services
                             </h3>
                         </div>
                         <span className="text-xs text-zinc-400">
@@ -283,7 +273,7 @@ export default function QuotationFormPageView({
 
                     <div className="space-y-3">
                         <p className="text-xs text-zinc-400">
-                            Select the treatments and repair types you need quotes for:
+                            Select the bodywork treatments and paint services you need quotes for:
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -293,10 +283,11 @@ export default function QuotationFormPageView({
                                     <div
                                         key={svc.id}
                                         onClick={() => toggleService(svc.id)}
-                                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${isSelected
+                                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                            isSelected
                                                 ? "bg-[#1E1C18] border-[#E8AF66] text-white shadow-md shadow-[#E8AF66]/5"
                                                 : "bg-[#191A1E] border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                                            }`}
+                                        }`}
                                     >
                                         <div className="min-w-0">
                                             <div className="font-bold text-xs sm:text-sm truncate">
@@ -310,10 +301,11 @@ export default function QuotationFormPageView({
                                         </div>
 
                                         <div
-                                            className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${isSelected
+                                            className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${
+                                                isSelected
                                                     ? "bg-[#E8AF66] border-[#E8AF66] text-black"
                                                     : "border-zinc-700 bg-black/40"
-                                                }`}
+                                            }`}
                                         >
                                             {isSelected && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />}
                                         </div>
@@ -393,7 +385,7 @@ export default function QuotationFormPageView({
                                 value={damageDesc}
                                 onChange={(e) => setDamageDesc(e.target.value)}
                                 rows={3}
-                                placeholder="Describe the wheel damage (e.g. curb rash on front-left wheel, deep gouge on outer rim, diamond cut face flaking)..."
+                                placeholder="Describe the vehicle damage (e.g. scratch along passenger door, dent on front bumper, paint peel on bonnet)..."
                                 className="w-full bg-[#191A1E] border border-zinc-800 focus:border-[#E8AF66] rounded-2xl p-4 text-white text-sm placeholder:text-zinc-600 focus:outline-none transition-colors resize-none"
                             />
                         </div>
@@ -401,14 +393,14 @@ export default function QuotationFormPageView({
                         {/* Damage Photo Upload */}
                         <div>
                             <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">
-                                Wheel Damage Photo (Optional, helps accurate bids)
+                                Vehicle Damage Photo (Optional, helps accurate bids)
                             </label>
 
                             {imagePreview ? (
                                 <div className="relative w-full max-w-sm h-48 rounded-2xl overflow-hidden border border-zinc-800 bg-black">
                                     <Image
                                         src={imagePreview}
-                                        alt="Wheel Damage Preview"
+                                        alt="Damage Preview"
                                         fill
                                         className="object-cover"
                                     />
@@ -424,7 +416,7 @@ export default function QuotationFormPageView({
                                 <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-zinc-800 hover:border-[#E8AF66]/60 rounded-2xl cursor-pointer bg-[#191A1E]/50 hover:bg-[#191A1E] transition-all group">
                                     <Upload className="w-8 h-8 text-zinc-500 group-hover:text-[#E8AF66] transition-colors mb-2" />
                                     <span className="text-xs font-bold text-zinc-300 group-hover:text-white">
-                                        Upload Wheel Damage Image
+                                        Upload Vehicle Damage Image
                                     </span>
                                     <span className="text-[10px] text-zinc-500 mt-1">
                                         PNG, JPG, or WEBP up to 10MB
@@ -456,7 +448,7 @@ export default function QuotationFormPageView({
                         {submitting ? (
                             <>
                                 <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                                <span>Sending RFQ to {selectedProviders.length} Specialists...</span>
+                                <span>Sending RFQ to {selectedProviders.length} Bodyshops...</span>
                             </>
                         ) : (
                             <>

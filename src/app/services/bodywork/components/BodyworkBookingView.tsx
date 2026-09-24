@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
 import {
     Calendar,
@@ -29,9 +29,9 @@ import type {
     BookingSlotItem,
     BookingQuestionItem,
     CustomerQuotationPostItem,
-} from "@/lib/service/alloy.api";
+} from "@/lib/service/bodywork.api";
 
-interface BookingPageViewProps {
+interface BodyworkBookingViewProps {
     provider: ProviderItem;
     bidOffer: PostBidItem | null;
     postItem: CustomerQuotationPostItem | null;
@@ -54,8 +54,8 @@ interface BookingPageViewProps {
     onAnswerChange: (questionId: string, answer: any) => void;
     bookingNotes: string;
     onNotesChange: (notes: string) => void;
-    bookingPaymentMethod: "cash_after_service" | "stripe";
-    onPaymentMethodChange: (method: "cash_after_service" | "stripe") => void;
+    bookingPaymentMethod: any;
+    onPaymentMethodChange: (method: any) => void;
     bookingCarImage: File | null;
     bookingCarImagePreview: string | null;
     onCarImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -69,7 +69,7 @@ interface BookingPageViewProps {
     onBackToHome: () => void;
 }
 
-export default function BookingPageView({
+export default function BodyworkBookingView({
     provider,
     bidOffer,
     postItem,
@@ -105,7 +105,7 @@ export default function BookingPageView({
     onSubmitBooking,
     onBackToQuotes,
     onBackToHome,
-}: BookingPageViewProps) {
+}: BodyworkBookingViewProps) {
     const priceFormatted = bidOffer?.offered_price
         ? typeof bidOffer.offered_price === "number"
             ? `£${bidOffer.offered_price.toFixed(2)}`
@@ -140,10 +140,10 @@ export default function BookingPageView({
                             Booking Confirmed
                         </span>
                         <h2 className="text-2xl sm:text-3xl font-black text-white">
-                            Your Appointment is Reserved!
+                            Your Repair Appointment is Reserved!
                         </h2>
                         <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto">
-                            The specialist has received your booking details and will arrive at your scheduled time.
+                            The bodyshop has received your repair booking details and will be prepared for your scheduled appointment.
                         </p>
                     </div>
 
@@ -154,7 +154,7 @@ export default function BookingPageView({
                             <span className="font-mono font-bold text-base text-[#E8AF66]">#{refId}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                            <span className="text-zinc-400">Specialist:</span>
+                            <span className="text-zinc-400">Bodyshop Specialist:</span>
                             <span className="font-bold text-white capitalize">{provider.company_name}</span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -163,7 +163,7 @@ export default function BookingPageView({
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-zinc-400">Service Mode:</span>
-                            <span className="font-bold text-white capitalize">{serviceLocation === "customer" ? "Mobile To Your Location" : "Workshop Visit"}</span>
+                            <span className="font-bold text-white capitalize">{serviceLocation === "customer" ? "Mobile SMART Unit" : "Bodyshop Workshop Drop-Off"}</span>
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                             <span className="text-zinc-400">Agreed Price:</span>
@@ -222,36 +222,36 @@ export default function BookingPageView({
             <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-black border border-zinc-800 flex items-center justify-center shrink-0 p-1.5 shadow-inner">
-                        {provider.logo_full_path ? (
+                        {provider.logo_full_path || (provider as any)?.logo ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
-                                src={provider.logo_full_path}
+                                src={provider.logo_full_path || (provider as any)?.logo}
                                 alt={provider.company_name}
-                                className="w-full h-full object-contain"
+                                className="w-full h-full object-contain rounded-2xl"
                             />
                         ) : (
                             <span className="text-lg font-bold text-[#E8AF66]">
-                                {provider.company_name?.slice(0, 2).toUpperCase()}
+                                {provider.company_name?.slice(0, 2).toUpperCase() || "BW"}
                             </span>
                         )}
                     </div>
 
                     <div>
                         <div className="text-[11px] font-bold text-[#E8AF66] uppercase tracking-wider">
-                            Booking Specialist
+                            Booking Bodyshop
                         </div>
                         <h3 className="text-lg font-extrabold text-white capitalize leading-tight">
                             {provider.company_name}
                         </h3>
                         <div className="text-xs text-zinc-400 mt-0.5">
-                            {provider.contact_person_name || "Certified Technician"} • {provider.company_phone}
+                            {provider.contact_person_name || "Head Repair Technician"} • {provider.company_phone}
                         </div>
                     </div>
                 </div>
 
                 <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800 text-xs sm:text-right space-y-0.5 shrink-0">
                     <div className="text-emerald-400 uppercase font-bold text-[10px]">Verified Offer</div>
-                    <div className="text-zinc-200 text-xs font-semibold">{bidOffer ? "Quote Bid Accepted" : "Certified Specialist"}</div>
+                    <div className="text-zinc-200 text-xs font-semibold">{bidOffer ? "Repair Bid Accepted" : "Accredited Bodyshop"}</div>
                 </div>
             </div>
 
@@ -315,10 +315,11 @@ export default function BookingPageView({
                                                     onSelectSlotId(slot.id);
                                                     if (slot.start_time) onTimeChange(slot.start_time);
                                                 }}
-                                                className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${isSelected
+                                                className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
+                                                    isSelected
                                                         ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 border-transparent shadow-md"
                                                         : "bg-[#18181B] border-zinc-800 text-zinc-300 hover:border-zinc-700"
-                                                    }`}
+                                                }`}
                                             >
                                                 <div className="truncate">{slot.title || slot.start_time}</div>
                                             </button>
@@ -341,20 +342,22 @@ export default function BookingPageView({
                             <button
                                 type="button"
                                 onClick={() => onBookingTypeChange("normal")}
-                                className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${bookingType === "normal"
+                                className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${
+                                    bookingType === "normal"
                                         ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
                                         : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
-                                    }`}
+                                }`}
                             >
                                 Standard / Flexible
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onBookingTypeChange("emergency")}
-                                className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${bookingType === "emergency"
+                                className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${
+                                    bookingType === "emergency"
                                         ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
                                         : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
-                                    }`}
+                                }`}
                             >
                                 Emergency Priority
                             </button>
@@ -370,24 +373,26 @@ export default function BookingPageView({
                             <button
                                 type="button"
                                 onClick={() => onServiceLocationChange("customer")}
-                                className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${serviceLocation === "customer"
+                                className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${
+                                    serviceLocation === "customer"
                                         ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
                                         : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
-                                    }`}
+                                }`}
                             >
                                 <Smartphone className="w-4 h-4" />
-                                <span>Mobile Van Visit</span>
+                                <span>Mobile Van / SMART</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onServiceLocationChange("workshop")}
-                                className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${serviceLocation === "workshop"
+                                className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${
+                                    serviceLocation === "workshop"
                                         ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
                                         : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
-                                    }`}
+                                }`}
                             >
                                 <Building2 className="w-4 h-4" />
-                                <span>Workshop Drop-Off</span>
+                                <span>Bodyshop Drop-Off</span>
                             </button>
                         </div>
                     </div>
@@ -416,20 +421,22 @@ export default function BookingPageView({
                                                 <button
                                                     type="button"
                                                     onClick={() => onAnswerChange(q.id, "Yes")}
-                                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${questionAnswers[q.id] === "Yes"
+                                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                        questionAnswers[q.id] === "Yes"
                                                             ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
                                                             : "bg-zinc-900 border border-zinc-700 text-zinc-300"
-                                                        }`}
+                                                    }`}
                                                 >
                                                     Yes
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => onAnswerChange(q.id, "No")}
-                                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${questionAnswers[q.id] === "No"
+                                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                        questionAnswers[q.id] === "No"
                                                             ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
                                                             : "bg-zinc-900 border border-zinc-700 text-zinc-300"
-                                                        }`}
+                                                    }`}
                                                 >
                                                     No
                                                 </button>
@@ -454,12 +461,12 @@ export default function BookingPageView({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
                     <div>
                         <label className="text-xs font-bold text-white uppercase tracking-wider mb-2 block">
-                            5. Instructions for Specialist (Optional)
+                            5. Instructions for Bodyshop (Optional)
                         </label>
                         <textarea
                             value={bookingNotes}
                             onChange={(e) => onNotesChange(e.target.value)}
-                            placeholder="e.g. Call before arrival, parking access, wheel locking nut location..."
+                            placeholder="e.g. Paint code if known, access notes, specific panel focus..."
                             rows={3}
                             className="w-full bg-[#18181B] border border-zinc-700/80 rounded-2xl p-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66]"
                         />
@@ -467,7 +474,7 @@ export default function BookingPageView({
 
                     <div>
                         <label className="text-xs font-bold text-white uppercase tracking-wider mb-2 block">
-                            Wheel Photo (Optional)
+                            Damage Photo (Optional)
                         </label>
                         {bookingCarImagePreview ? (
                             <div className="relative rounded-2xl overflow-hidden border border-zinc-700 h-24 aspect-video flex items-center justify-center bg-black">
@@ -483,7 +490,7 @@ export default function BookingPageView({
                         ) : (
                             <label className="border-2 border-dashed border-zinc-700 hover:border-[#E8AF66] rounded-2xl h-24 flex flex-col items-center justify-center text-center p-3 cursor-pointer transition-colors bg-[#18181B]">
                                 <Camera className="w-5 h-5 text-[#E8AF66] mb-1" />
-                                <span className="text-xs text-zinc-300 font-medium">Attach photo</span>
+                                <span className="text-xs text-zinc-300 font-medium">Attach damage photo</span>
                                 <input type="file" accept="image/*" onChange={onCarImageChange} className="hidden" />
                             </label>
                         )}
@@ -500,31 +507,34 @@ export default function BookingPageView({
                         {/* Option A: Cash After Service */}
                         <div
                             onClick={() => onPaymentMethodChange("cash_after_service")}
-                            className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${bookingPaymentMethod === "cash_after_service"
+                            className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                bookingPaymentMethod === "cash_after_service"
                                     ? "bg-[#1C1A16] border-[#D5A054] shadow-md shadow-[#D5A054]/15 ring-1 ring-[#D5A054]"
                                     : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                                }`}
+                            }`}
                         >
                             <div className="flex items-center gap-3">
                                 <div
-                                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${bookingPaymentMethod === "cash_after_service"
+                                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                                        bookingPaymentMethod === "cash_after_service"
                                             ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
                                             : "bg-zinc-900 border border-zinc-800 text-zinc-400"
-                                        }`}
+                                    }`}
                                 >
                                     <Banknote className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <div className="text-xs sm:text-sm font-bold text-white">Cash After Service</div>
+                                    <div className="text-xs sm:text-sm font-bold text-white">Cash After Repair</div>
                                     <div className="text-[11px] text-zinc-400">Pay the technician once job is complete.</div>
                                 </div>
                             </div>
 
                             <div
-                                className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${bookingPaymentMethod === "cash_after_service"
+                                className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                                    bookingPaymentMethod === "cash_after_service"
                                         ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
                                         : "border-zinc-700"
-                                    }`}
+                                }`}
                             >
                                 {bookingPaymentMethod === "cash_after_service" && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
@@ -533,17 +543,19 @@ export default function BookingPageView({
                         {/* Option B: Online Payment Stripe */}
                         <div
                             onClick={() => onPaymentMethodChange("stripe")}
-                            className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${bookingPaymentMethod === "stripe"
+                            className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                bookingPaymentMethod === "stripe"
                                     ? "bg-[#1C1A16] border-[#D5A054] shadow-md shadow-[#D5A054]/15 ring-1 ring-[#D5A054]"
                                     : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                                }`}
+                            }`}
                         >
                             <div className="flex items-center gap-3">
                                 <div
-                                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${bookingPaymentMethod === "stripe"
+                                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                                        bookingPaymentMethod === "stripe"
                                             ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
                                             : "bg-zinc-900 border border-zinc-800 text-zinc-400"
-                                        }`}
+                                    }`}
                                 >
                                     <CreditCard className="w-5 h-5" />
                                 </div>
@@ -554,10 +566,11 @@ export default function BookingPageView({
                             </div>
 
                             <div
-                                className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${bookingPaymentMethod === "stripe"
+                                className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                                    bookingPaymentMethod === "stripe"
                                         ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
                                         : "border-zinc-700"
-                                    }`}
+                                }`}
                             >
                                 {bookingPaymentMethod === "stripe" && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
@@ -579,7 +592,7 @@ export default function BookingPageView({
                                 <span>
                                     {bookingPaymentMethod === "stripe"
                                         ? "Redirecting to Stripe Gateway..."
-                                        : "Submitting Booking Request..."}
+                                        : "Submitting Repair Booking Request..."}
                                 </span>
                             </>
                         ) : (
@@ -598,4 +611,3 @@ export default function BookingPageView({
         </div>
     );
 }
-
