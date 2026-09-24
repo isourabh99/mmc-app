@@ -884,6 +884,10 @@ export const sendBookingRequest = async (
         params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
       );
     }
+    formData.append("is_terms_accepted", "1");
+    formData.append("is_provider_terms_accepted", "1");
+    formData.append("terms_and_conditions", "1");
+    formData.append("terms_accepted", "1");
     formData.append("car_image", params.car_image);
 
     const response = await apiClient.post<SendBookingRequestResponse>(
@@ -907,6 +911,10 @@ export const sendBookingRequest = async (
       service_location: apiServiceLocation,
       service_schedule: params.service_schedule,
       booking_type: params.booking_type,
+      is_terms_accepted: 1,
+      is_provider_terms_accepted: 1,
+      terms_and_conditions: 1,
+      terms_accepted: 1,
       notes: effectiveNotes,
     };
 

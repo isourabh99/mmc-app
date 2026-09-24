@@ -19,30 +19,41 @@ export default function LocationPermission() {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
 
-
         try {
-          const googleData = await getAddressFromCoordinates(
-            latitude,
-            longitude
-          );
-
+          const googleData = await getAddressFromCoordinates(latitude, longitude);
           const address = googleData.address;
 
           const storedUser = localStorage.getItem("user");
-        const user = storedUser ? JSON.parse(storedUser) : null;
-
+          const user = storedUser ? JSON.parse(storedUser) : null;
           const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-          if (token) {
-            const storedUser = localStorage.getItem("user");
-            const user = storedUser ? JSON.parse(storedUser) : null;
 
-          if (
-            response.status >= 200 &&
-            response.status < 300
-          ) {
+          localStorage.setItem("user_lat", String(latitude));
+          localStorage.setItem("user_lon", String(longitude));
+          localStorage.setItem("user_address", address);
+
+          if (token && user) {
+            const response = await saveCustomerAddress({
+              lat: String(latitude),
+              lon: String(longitude),
+              address,
+              address_type: "service",
+              contact_person_name: user?.first_name || user?.name || "Customer",
+              contact_person_number: user?.phone || "",
+              address_label: "Home",
+            });
+
+            const savedId =
+              response?.content?.id ||
+              response?.id ||
+              response?.content?.data?.id ||
+              response?.data?.id ||
+              response?.data?.content?.id;
+
+            if (savedId) {
+              localStorage.setItem("service_address_id", String(savedId));
+            }
           }
         } catch (error: any) {
-          // Graceful handling without spamming console
           if (error?.response?.status !== 400) {
             console.warn(
               "Location/address sync:",
@@ -52,10 +63,7 @@ export default function LocationPermission() {
         }
       },
       (error) => {
-        console.error(
-          "Location permission/error:",
-          error
-        );
+        console.error("Location permission/error:", error);
       },
       {
         enableHighAccuracy: false,
