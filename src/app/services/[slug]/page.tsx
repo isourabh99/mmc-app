@@ -34,6 +34,8 @@ export default function ServiceCategorySlugPage() {
       router.replace("/services/modification");
     } else if (lower.includes("alloy")) {
       router.replace("/services/alloy-wheel");
+    } else if (lower.includes("mechanic") || lower.includes("mechanical")) {
+      router.replace("/services/mechanical");
     } else if (lower.includes("body")) {
       router.replace("/services/bodywork");
     }
