@@ -30,6 +30,12 @@ export default function ServiceCategorySlugPage() {
       lower.includes("breakdown")
     ) {
       router.replace("/emergency-assistance");
+    } else if (lower.includes("modifi")) {
+      router.replace("/services/modification");
+    } else if (lower.includes("alloy")) {
+      router.replace("/services/alloy-wheel");
+    } else if (lower.includes("body")) {
+      router.replace("/services/bodywork");
     }
   }, [slug, router]);
 

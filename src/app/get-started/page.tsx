@@ -60,6 +60,7 @@ export default function GetStartedPage() {
         await registerCustomer(formData);
 
 
+
       
       if (
         registrationResponse.response_code !==
@@ -226,9 +227,6 @@ export default function GetStartedPage() {
     }
   };
 
-  // --------------------------------
-  // UI
-  // --------------------------------
 
   return (
     <div className="max-w-8xl mx-auto w-full min-h-[85vh] flex py-12 px-6">
