@@ -1,6 +1,6 @@
 export default function ContactPage() {
   return (
-    <div className="py-24 px-6 max-w-8xl mx-auto">
+    <div className="py-24 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-16">
         <h1 className="text-5xl font-bold mb-6">Get in Touch</h1>
         <p className="text-white/60 max-w-2xl mx-auto text-lg">

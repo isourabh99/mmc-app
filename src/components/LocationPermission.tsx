@@ -19,8 +19,6 @@ export default function LocationPermission() {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
 
-        console.log("Latitude:", latitude);
-        console.log("Longitude:", longitude);
 
         try {
           const googleData = await getAddressFromCoordinates(
@@ -30,7 +28,6 @@ export default function LocationPermission() {
 
           const address = googleData.address;
 
-          console.log("Google Address:", address);
           const storedUser = localStorage.getItem("user");
         const user = storedUser ? JSON.parse(storedUser) : null;
 
@@ -50,10 +47,6 @@ export default function LocationPermission() {
             response.status >= 200 &&
             response.status < 300
           ) {
-            console.log(
-              "Address saved successfully:",
-              response.status
-            );
           }
         } catch (error: any) {
           console.error(

@@ -43,7 +43,7 @@ export default function MatchingSection() {
   return (
     <section
       id="matching"
-      className="py-24 px-6 relative overflow-hidden"
+      className="py-16 sm:py-24 relative overflow-hidden"
       style={{
         background:
           "linear-gradient(135deg, #000000 0%, #080500 50%, #000000 100%)",
@@ -58,7 +58,7 @@ export default function MatchingSection() {
         }}
       />
 
-      <div className="max-w-8xl mx-auto relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left: Visual card stack */}
           <div className="relative h-[500px] hidden lg:block">

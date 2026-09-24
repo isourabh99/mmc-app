@@ -65,7 +65,7 @@ export default function Footer() {
   return (
     <footer
       id="contact"
-      className="border-t border-white/10 pt-16 pb-8 px-10 relative overflow-hidden text-white"
+      className="border-t border-white/10 pt-16 pb-8 relative overflow-hidden text-white"
       style={{ background: "#030200" }}
     >
       {/* Top subtle glow line */}
@@ -77,7 +77,7 @@ export default function Footer() {
         }}
       />
 
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Main Grid Layout Fixed: Using 6 columns on lg screens so Brand takes 2 cols and the 4 link columns take 1 col each */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-10 lg:gap-8 mb-14">
           

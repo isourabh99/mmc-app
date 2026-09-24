@@ -12,10 +12,24 @@ export default function ServiceCategorySlugPage() {
 
   useEffect(() => {
     const lower = slug.toLowerCase();
-    if (lower.includes("hire") || lower.includes("rental")) {
+    if (
+      lower.includes("valet") ||
+      lower.includes("detailing") ||
+      lower.includes("wash")
+    ) {
+      router.replace("/services/valet-wash");
+    } else if (lower.includes("tyre") || lower.includes("tire")) {
+      router.replace("/tyre-fittings");
+    } else if (lower.includes("hire") || lower.includes("rental")) {
       router.replace("/car-hire");
     } else if (lower.includes("chauffeur")) {
       router.replace("/services/Chauffeur");
+    } else if (
+      lower.includes("emergency") ||
+      lower.includes("recovery") ||
+      lower.includes("breakdown")
+    ) {
+      router.replace("/emergency-assistance");
     }
   }, [slug, router]);
 

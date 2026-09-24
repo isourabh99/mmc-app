@@ -203,7 +203,7 @@ export default function CarHirePage() {
         }}
       />
 
-      <div className="max-w-[1700px] mx-auto px-2.5 sm:px-6 lg:px-8 relative z-10 space-y-4 pt-3 sm:pt-5">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-4 pt-3 sm:pt-5">
         {/* 1. Top Bar: Category Tabs & Search Input + Mobile Filter Toggle */}
         <CarHireTopBar
           categories={categories}

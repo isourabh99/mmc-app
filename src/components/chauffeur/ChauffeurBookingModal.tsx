@@ -193,10 +193,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         note: bookingNote,
       };
 
-      console.log("Submitting Chauffeur Booking Payload:", payload);
 
       const res = await bookChauffeur(payload);
-      console.log("Booking Response from server:", res);
 
       const redirectLink = res.content?.redirect_link || res.content?.redirect_url;
       const bookingObj = res.content?.booking;

@@ -19,7 +19,6 @@ import { useToast } from "@/components/ToastProvider";
 
 const navLinks = [
   { label: "Home", href: "/" },
-  { label: "Car Hire", href: "/car-hire" },
   { label: "Services", href: "/services" },
   { label: "How It Works", href: "/how-it-works" },
   { label: "About", href: "/about" },
@@ -137,13 +136,13 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed px-2 top-0 left-0 right-0 z-50 transition-all duration-500 py-3 lg:px-10 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 py-3 ${
         scrolled
-          ? "bg-black/90 backdrop-blur-xl"
+          ? "bg-black/90 backdrop-blur-xl shadow-lg shadow-black/50"
           : "bg-black/90 backdrop-blur-md"
       }`}
     >
-      <div className="mx-auto px-6 flex items-center justify-between">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
 
         {/* =================================================
             LOGO

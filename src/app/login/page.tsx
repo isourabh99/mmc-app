@@ -42,7 +42,6 @@ export default function LoginPage() {
 
       const response = await sendOtp(email.trim());
 
-      console.log("OTP Response:", response);
 
       if (response.response_code === "default_200") {
         setOtpSent(true);
@@ -97,7 +96,6 @@ export default function LoginPage() {
         otp: Number(otp),
       });
 
-      console.log("Login Response:", response);
 
       if (
         response.response_code === "auth_login_200"

@@ -33,13 +33,13 @@ export default function FAQSection() {
   const [open, setOpen] = useState<string | null>("faq-1");
 
   return (
-    <section id="faqs" className="py-24 px-6 bg-black relative overflow-hidden">
+    <section id="faqs" className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-black relative overflow-hidden">
       <div
         className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full blur-[120px] opacity-8 pointer-events-none"
         style={{ background: "radial-gradient(circle, #FAD293, #CEA46B)" }}
       />
 
-      <div className="max-w-8xl mx-auto relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto relative z-10">
         <div className="text-center mb-14">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />

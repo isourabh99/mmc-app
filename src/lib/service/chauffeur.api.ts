@@ -21,7 +21,6 @@ export const getCarTypes = async (): Promise<CarType[]> => {
     const response = await apiClient.get<CarTypesResponse>(
       "/customer/car/types"
     );
-    console.log(response);
     
     return response.data.content;
   } catch (error) {
@@ -193,7 +192,6 @@ export const searchChauffeurs = async ({
       "/customer/car/chauffeur/search",
       formData
     );
-    console.log(response);
 
     return response.data.content;
   } catch (error) {
@@ -326,7 +324,6 @@ export const bookChauffeur = async (
       "/customer/car/chauffeur/book",
       payload
     );
-    console.log("Booking response:", response.data);
     return response.data;
   } catch (error) {
     console.error("Failed to book chauffeur:", error);
@@ -354,7 +351,6 @@ export const getCustomerBookings = async ({
         },
       }
     );
-    console.log("Customer Bookings API Response:", response.data);
 
     const content: any = response.data?.content;
 

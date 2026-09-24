@@ -40,7 +40,6 @@ export const saveCustomerAddress = async (
     address_label: string;
   }
 ) => {
-  console.log(data);
   const response = await apiClient.post(
     "/customer/address",
     data
