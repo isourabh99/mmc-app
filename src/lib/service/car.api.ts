@@ -274,9 +274,13 @@ export const bookCar = async (
   payload: CarBookingPayload
 ): Promise<CarBookingResponse> => {
   try {
+    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
     const response = await apiClient.post<CarBookingResponse>(
       "/customer/car/book",
-      payload
+      {
+        ...payload,
+        ...(fcmToken ? { fcm_token: fcmToken } : {}),
+      }
     );
     return response.data;
   } catch (error) {

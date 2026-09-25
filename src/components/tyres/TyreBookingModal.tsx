@@ -173,6 +173,20 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
       setIsSuccess(true);
       setSubmitting(false);
       showToast("Tyre Fitting Booking Placed successfully!", "success");
+
+      // Trigger native notification pop-up on user device
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("MMC Tyre Fitting Confirmed! 🛞", {
+            body: `Booking Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}!`,
+            icon: "/mmc-logo.png",
+            badge: "/mmc-logo.png",
+          });
+        } catch (notifErr) {
+          console.warn("Tyre notification error:", notifErr);
+        }
+      }
+
       if (onSuccess) onSuccess();
     }, 600);
   };

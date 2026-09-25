@@ -53,6 +53,7 @@ import {
     Camera,
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
     getAlloyServices,
     type AlloyServiceItem,
@@ -865,6 +866,11 @@ export default function AlloyWheelPage() {
 
                 const refId = res.content?.readable_id || res.content?.booking_id || "";
                 showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
+
+                triggerDevicePushNotification(
+                    "MMC Booking Confirmed! 🎉",
+                    `Your appointment #${refId || "Reserved"} with ${bookingProviderModal?.company_name || "your specialist"} is confirmed!`
+                );
             } else if (res.errors) {
                 let errMsg = "Failed to confirm booking";
                 if (Array.isArray(res.errors)) {
@@ -881,6 +887,18 @@ export default function AlloyWheelPage() {
                 setShowPaymentSheet(false);
                 setBookingConfirmed(true);
                 showToast(res.message || "Booking request processed!", "success");
+
+                if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    try {
+                        new Notification("MMC Booking Confirmed! 🎉", {
+                            body: `Your appointment with ${selectedProvider?.company_name || "your specialist"} is confirmed!`,
+                            icon: "/mmc-logo.png",
+                            badge: "/mmc-logo.png",
+                        });
+                    } catch (e) {
+                        // ignore
+                    }
+                }
             }
         } catch (err: any) {
             const apiMsg = err?.response?.data?.errors || err?.response?.data?.message || err?.message || "Booking request failed";

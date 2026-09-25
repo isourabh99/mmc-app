@@ -1,7 +1,7 @@
 import apiClient from "@/lib/http/apiClient";
 
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
-export const FALLBACK_MECHANICAL_CATEGORY_ID = "dbafef35-cfa4-4757-90f4-ddbf568d5d83";
+export const FALLBACK_MECHANICAL_CATEGORY_ID = "b0a78f28-5281-4284-a50d-781d4592b1c4";
 
 export interface MechanicalCategoryItem {
   id: string;
@@ -188,25 +188,40 @@ export const searchMechanicalProviders = async (params: {
   ];
 };
 
+export const getOrCreateGuestId = (): string => {
+  if (typeof window === "undefined") return "550e8400-e29b-41d4-a716-446655440000";
+  let gid = localStorage.getItem("guest_id");
+  if (!gid) {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      gid = crypto.randomUUID();
+    } else {
+      gid = "550e8400-e29b-41d4-a716-446655440000";
+    }
+    localStorage.setItem("guest_id", gid);
+  }
+  return gid;
+};
+
 export const addMechanicalToCart = async (payload: {
   provider_id: string;
   service_id: string;
   category_id: string;
   quantity?: number;
+  is_terms_accepted?: number;
+  guest_id?: string;
 }): Promise<any> => {
   const zoneId = DEFAULT_ZONE_ID;
+  const guestId = payload.guest_id || getOrCreateGuestId();
 
   const response = await apiClient.post(
     "/customer/cart/add",
     {
+      guest_id: guestId,
       provider_id: payload.provider_id,
       service_id: payload.service_id,
       category_id: payload.category_id,
       quantity: payload.quantity ?? 1,
-      is_terms_accepted: 1,
-      terms_and_conditions: 1,
-      is_provider_terms_accepted: 1,
-      terms_accepted: 1,
+      is_terms_accepted: payload.is_terms_accepted ?? 1,
     },
     {
       headers: {
@@ -313,6 +328,14 @@ export const sendMechanicalBookingRequest = async (payload: {
   formData.append("terms_and_conditions", "1");
   formData.append("terms_accepted", "1");
   formData.append("zone_id", zoneId);
+  const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
+  if (fcmToken) {
+    formData.append("fcm_token", fcmToken);
+  }
+  const guestId = typeof window !== "undefined" ? localStorage.getItem("guest_id") : null;
+  if (guestId) {
+    formData.append("guest_id", guestId);
+  }
 
   const response = await apiClient.post("/customer/booking/request/send", formData, {
     headers: {

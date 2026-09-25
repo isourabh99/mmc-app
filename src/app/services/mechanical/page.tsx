@@ -41,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
   addMechanicalToCart,
   getMechanicalCategories,
@@ -370,7 +371,13 @@ export default function MechanicalPage() {
       setView("payment");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
-      setBookingError(err?.message || "Failed to add service to cart. Please try again.");
+      console.error("Cart add error response:", err?.response?.data);
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.errors?.[0]?.message ||
+        err?.message ||
+        "Failed to add service to cart. Please try again.";
+      setBookingError(backendMsg);
     } finally {
       setLoadingCart(false);
     }
@@ -417,6 +424,12 @@ export default function MechanicalPage() {
       }
       setView("success");
       showToast("Booking request sent successfully!", "success");
+
+      triggerDevicePushNotification(
+        "MMC Booking Confirmed! 🎉",
+        `Booking #${bId || "Confirmed"} has been placed successfully with ${selectedProvider?.company_name || selectedProvider?.name || "your specialist"}.`
+      );
+
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
       setBookingError(err?.message || "Failed to confirm booking. Please try again.");
