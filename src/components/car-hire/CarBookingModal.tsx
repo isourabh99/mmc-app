@@ -165,6 +165,20 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
         setIsSuccess(true);
         setBookingDetails(res.content);
         showToast("Booking Placed successfully!", "success");
+
+        // Trigger native notification pop-up on user device
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          try {
+            new Notification("MMC Reservation Confirmed! 🚗", {
+              body: `Your hire request for ${car.brand} (Ref: ${res?.content?.booking_id || res?.content?.id || "Confirmed"}) has been placed!`,
+              icon: "/mmc-logo.png",
+              badge: "/mmc-logo.png",
+            });
+          } catch (notifErr) {
+            console.warn("Local booking notification error:", notifErr);
+          }
+        }
+
         if (onSuccess) onSuccess();
       } else {
         showToast(

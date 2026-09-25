@@ -364,6 +364,19 @@ export default function VehicleWashValetPage() {
       setConfirmedBookingRef(ref || "MMC-VAL-BOOKING");
       setIsBookingSuccess(true);
       showToast("Valet Booking Confirmed Successfully!", "success");
+
+      // Trigger native notification pop-up on user device
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("MMC Valet Wash Confirmed! 🧼", {
+            body: `Booking Ref #${ref || "Confirmed"} for ${currentServiceName} has been confirmed!`,
+            icon: "/mmc-logo.png",
+            badge: "/mmc-logo.png",
+          });
+        } catch (notifErr) {
+          console.warn("Valet notification error:", notifErr);
+        }
+      }
     } catch (err: any) {
       console.error("Booking error:", err);
       showToast(err?.response?.data?.message || err?.message || "Failed to confirm booking. Please try again.", "error");

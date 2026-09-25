@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   sendOtp,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth.api";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
+import { getFCMToken } from "@/lib/firebase";
 
 export default function LoginPage() {
   const { showToast } = useToast();
@@ -22,6 +23,11 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
 
   const router = useRouter();
+
+  // Pre-fetch FCM token as soon as Login Page loads
+  useEffect(() => {
+    getFCMToken().catch(() => {});
+  }, []);
 
   // =========================================
   // SEND OTP
