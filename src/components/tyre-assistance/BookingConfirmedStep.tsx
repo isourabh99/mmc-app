@@ -70,8 +70,14 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
 
         <p className="text-xs sm:text-sm text-white/60 max-w-md mx-auto">
           Your request has been dispatched. Reference number:{" "}
-          <span className="text-[#FAD293] font-mono font-bold">
-            {booking.referenceNumber}
+          <span className="text-[#FAD293] font-mono font-bold text-sm sm:text-base">
+            {(typeof window !== "undefined" &&
+              booking.referenceNumber.startsWith("MMC-TYR-") &&
+              localStorage.getItem("last_tyre_booking_id"))
+              ? `#${localStorage.getItem("last_tyre_booking_id")}`
+              : booking.referenceNumber.startsWith("#")
+              ? booking.referenceNumber
+              : `#${booking.referenceNumber}`}
           </span>
         </p>
       </div>

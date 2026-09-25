@@ -259,9 +259,14 @@ export default function TyreAssistancePage() {
     }
 
     if (!currentBooking) return;
-    const updated = await confirmQuoteAndAssignTechnician(currentBooking.id);
-    setCurrentBooking(updated);
-    setCurrentStep("technician_assigning");
+    try {
+      const updated = await confirmQuoteAndAssignTechnician(currentBooking.id);
+      setCurrentBooking(updated);
+      setCurrentStep("technician_assigning");
+    } catch (err: any) {
+      console.error("Booking error:", err);
+      showToast("Booking request failed. Please try again.", "error");
+    }
   };
 
 
@@ -274,7 +279,10 @@ export default function TyreAssistancePage() {
       setCurrentStep("booking_confirmed");
 
       // Trigger Push Notification & In-App Notification Toast
-      const refNum = assigned.referenceNumber || assigned.id;
+      const rawRef = assigned.referenceNumber || assigned.id;
+      const refNum = (typeof window !== "undefined" && rawRef.startsWith("MMC-TYR-") && localStorage.getItem("last_tyre_booking_id"))
+        ? localStorage.getItem("last_tyre_booking_id")
+        : rawRef.replace(/^#/, "");
       const isEmergency = assigned.category === "emergency";
       const notifTitle = isEmergency
         ? "MMC Emergency Tyre Dispatched! 🚨"
@@ -384,22 +392,20 @@ export default function TyreAssistancePage() {
               return (
                 <div
                   key={step.key}
-                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${
-                    isCurrent
+                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${isCurrent
                       ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
                       : isDone
-                      ? "bg-white/5 border border-white/10 text-white"
-                      : "text-white/30 border border-transparent"
-                  }`}
+                        ? "bg-white/5 border border-white/10 text-white"
+                        : "text-white/30 border border-transparent"
+                    }`}
                 >
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isCurrent
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent
                         ? "bg-[#FAD293] text-black"
                         : isDone
-                        ? "bg-white/20 text-white"
-                        : "bg-white/5 text-white/40"
-                    }`}
+                          ? "bg-white/20 text-white"
+                          : "bg-white/5 text-white/40"
+                      }`}
                   >
                     {isDone ? "✓" : step.stepNumber}
                   </div>

@@ -77,7 +77,13 @@ export const TyreBookingDetailsModal: React.FC<TyreBookingDetailsModalProps> = (
                 Booking Reference
               </span>
               <span className="text-xs font-mono font-bold text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-md border border-[#FAD293]/20">
-                {booking.referenceNumber}
+                {(typeof window !== "undefined" &&
+                  booking.referenceNumber.startsWith("MMC-TYR-") &&
+                  localStorage.getItem("last_tyre_booking_id"))
+                  ? `#${localStorage.getItem("last_tyre_booking_id")}`
+                  : booking.referenceNumber.startsWith("#")
+                  ? booking.referenceNumber
+                  : `#${booking.referenceNumber}`}
               </span>
               <button
                 type="button"
