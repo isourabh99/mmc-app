@@ -332,9 +332,7 @@ export default function Navbar() {
                   <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
                     {user?.first_name || "Account"}
                   </span>
-                  <span className="text-[9px] text-[#FAD293] leading-none uppercase font-semibold">
-                    VIP
-                  </span>
+                 
                 </div>
                 <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
               </button>
@@ -345,9 +343,7 @@ export default function Navbar() {
                   {/* User Info Header */}
                   <div className="px-3 py-2.5 border-b border-white/10 mb-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#e7bd78]">
-                        ✦ VIP Client
-                      </span>
+                      
                     </div>
                     <p className="text-xs font-bold text-white truncate mt-0.5">
                       {user?.first_name || user?.last_name
