@@ -81,6 +81,7 @@ export interface CarItem {
   provider_id: string;
   category_id: string;
   car_type_id: number;
+  features?: string[] | string | null;
   brand: string;
   model: string | null;
   manufacture_year: string | number | null;
@@ -106,9 +107,22 @@ export interface CarItem {
   description: string | null;
   images: string[];
   image_full_paths: string[];
+  driving_license_full_path?: string | null;
+  vehicle_registration_full_path?: string | null;
+  insurance_documents_full_path?: string | null;
+  mot_certificate_full_path?: string | null;
   status: number;
   created_at: string;
   updated_at: string;
+  mileage_limit?: string | null;
+  extra_mileage_charge?: string | null;
+  fuel_policy?: string | null;
+  delivery_fee?: string | null;
+  min_driver_age?: number | null;
+  min_booking_hours?: number | null;
+  luggage_capacity?: number | null;
+  amenities?: string[] | string | null;
+  chauffeur_tier?: string | null;
   type?: CarType;
   category?: Category;
   provider?: CarProvider;
@@ -274,13 +288,16 @@ export const bookCar = async (
   payload: CarBookingPayload
 ): Promise<CarBookingResponse> => {
   try {
-    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
+    const sanitizedPayload = {
+      ...payload,
+      payment_method:
+        payload.payment_method === "cash_on_delivery" || !payload.payment_method
+          ? "cash_after_service"
+          : payload.payment_method,
+    };
     const response = await apiClient.post<CarBookingResponse>(
       "/customer/car/book",
-      {
-        ...payload,
-        ...(fcmToken ? { fcm_token: fcmToken } : {}),
-      }
+      sanitizedPayload
     );
     return response.data;
   } catch (error) {
@@ -305,7 +322,29 @@ export const getCarPrimaryImage = (car: CarItem): string => {
     const valid = car.image_full_paths.find((p) => p && typeof p === "string" && !p.endsWith("/"));
     if (valid) return valid;
   }
+  if (car.images && car.images.length > 0) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://192.168.29.83:8000";
+    return car.images[0].startsWith("http") ? car.images[0] : `${apiBase}/storage/app/public/car/${car.images[0]}`;
+  }
   return "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+};
+
+export const getCarGalleryImages = (car: CarItem): string[] => {
+  const fallback = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+  
+  if (car.image_full_paths && Array.isArray(car.image_full_paths) && car.image_full_paths.length > 0) {
+    const valid = car.image_full_paths.filter((p) => p && typeof p === "string" && !p.endsWith("/"));
+    if (valid.length > 0) return valid;
+  }
+
+  if (car.images && Array.isArray(car.images) && car.images.length > 0) {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://192.168.29.83:8000";
+    return car.images.map((img) =>
+      img.startsWith("http") ? img : `${apiBase}/storage/app/public/car/${img}`
+    );
+  }
+
+  return [fallback];
 };
 
 export const parseTermsAndConditions = (rawTerms: string | null | undefined): string[] => {

@@ -723,6 +723,7 @@ export interface SendModificationBookingRequestParams {
   provider_id: string;
   post_id: string;
   service_address_id?: string;
+  service_address?: string;
   booking_schedule?: string;
   service_schedule?: string;
   date?: string;
@@ -736,21 +737,43 @@ export interface SendModificationBookingRequestParams {
   car_image?: File | null;
   payment_platform?: string;
   callback?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  postcode?: string;
 }
 
 export const sendModificationBookingRequest = async (
   params: SendModificationBookingRequestParams
 ): Promise<any> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId"))) ||
+    DEFAULT_ZONE_ID;
+
+  const guestId =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("guest_id") ||
+        localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid"))) ||
+    zoneId;
+
   const addressId = params.service_address_id || "6";
+  const fullAddress = params.service_address || "Customer Location, UK";
   const isOnline = params.payment_method === "stripe" || params.payment_method === "online";
   const effectivePaymentMethod = isOnline ? "stripe" : params.payment_method;
   const effectiveDate = params.date || new Date().toISOString().split("T")[0];
 
   // Demandium backend /customer/booking/request/send validator requires 'service_location' => 'required|in:customer'
-  // When 'workshop' is sent, Laravel rejects with: "The selected service location is invalid."
-  // Therefore, for API payload we pass "customer", and if the user requested workshop, note it in the request.
   const apiServiceLocation = "customer";
+
+  let cleanPostcode = (params.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "12345";
 
   const schedule =
     params.service_schedule ||
@@ -772,6 +795,7 @@ export const sendModificationBookingRequest = async (
     formData.append("provider_id", params.provider_id);
     formData.append("post_id", params.post_id);
     formData.append("service_address_id", addressId);
+    formData.append("service_address", fullAddress);
     formData.append("date", effectiveDate);
     formData.append("service_schedule", schedule);
     formData.append("booking_schedule", schedule);
@@ -780,6 +804,10 @@ export const sendModificationBookingRequest = async (
     formData.append("emergency_type", bookingType);
     formData.append("payment_method", effectivePaymentMethod);
     formData.append("zone_id", zoneId);
+    formData.append("guest_id", guestId);
+    formData.append("postcode", cleanPostcode);
+    formData.append("latitude", String(params.latitude || "22.66215"));
+    formData.append("longitude", String(params.longitude || "75.9035"));
 
     if (params.selected_slot_id) {
       formData.append("selected_slot_id", params.selected_slot_id);
@@ -798,8 +826,8 @@ export const sendModificationBookingRequest = async (
 
     const response = await apiClient.post("/customer/booking/request/send", formData, {
       headers: {
-        "Content-Type": "multipart/form-data",
         zoneid: zoneId,
+        ZoneId: zoneId,
       },
     });
 
@@ -810,6 +838,7 @@ export const sendModificationBookingRequest = async (
       post_id: params.post_id,
       date: effectiveDate,
       service_address_id: addressId,
+      service_address: fullAddress,
       service_schedule: schedule,
       booking_schedule: schedule,
       service_location: apiServiceLocation,
@@ -817,6 +846,10 @@ export const sendModificationBookingRequest = async (
       emergency_type: bookingType,
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
+      guest_id: guestId,
+      postcode: cleanPostcode,
+      latitude: String(params.latitude || "22.66215"),
+      longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
     };
 
@@ -833,6 +866,7 @@ export const sendModificationBookingRequest = async (
       headers: {
         "Content-Type": "application/json",
         zoneid: zoneId,
+        ZoneId: zoneId,
       },
     });
 

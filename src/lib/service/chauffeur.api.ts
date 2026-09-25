@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient"; 
+import apiClient from "@/lib/http/apiClient";
 
 export interface CarType {
   id: number;
@@ -21,7 +21,7 @@ export const getCarTypes = async (): Promise<CarType[]> => {
     const response = await apiClient.get<CarTypesResponse>(
       "/customer/car/types"
     );
-    
+
     return response.data.content;
   } catch (error) {
     console.error("Failed to fetch car types:", error);
@@ -108,18 +108,18 @@ export interface Chauffeur {
   car_type_id: number;
   features: string | null;
   brand: string;
-  manufacture_year: number | null;
+  manufacture_year: number | string | null;
   model: string;
-  year: number | null;
+  year: number | string | null;
   fuel_type: string | null;
   transmission_type: string | null;
   registration_number: string;
   transmission: string | null;
   air_conditioning: number;
   service_type: string | null;
-  available_hours_start: string;
-  available_hours_end: string;
-  preferred_areas: string;
+  available_hours_start: string | null;
+  available_hours_end: string | null;
+  preferred_areas: string | null;
   seating_capacity: number | null;
   daily_rate: string;
   hourly_rate: string;
@@ -131,14 +131,27 @@ export interface Chauffeur {
   pricing_type: string;
   description: string | null;
   images: string[];
-  driving_license: string;
-  vehicle_registration: string;
-  insurance_documents: string;
-  mot_certificate: string;
+  driving_license?: string;
+  vehicle_registration?: string;
+  insurance_documents?: string;
+  mot_certificate?: string;
+  driving_license_full_path?: string | null;
+  vehicle_registration_full_path?: string | null;
+  insurance_documents_full_path?: string | null;
+  mot_certificate_full_path?: string | null;
   status: number;
   coordinates: Coordinates | null;
   created_at: string;
   updated_at: string;
+  mileage_limit?: string | null;
+  extra_mileage_charge?: string | null;
+  fuel_policy?: string | null;
+  delivery_fee?: string | null;
+  min_driver_age?: number | null;
+  min_booking_hours?: number | null;
+  luggage_capacity?: number | null;
+  amenities?: string[] | string | null;
+  chauffeur_tier?: string | null;
   image_full_paths: string[];
   type: CarType;
   category: Category;
@@ -320,9 +333,13 @@ export const bookChauffeur = async (
   payload: ChauffeurBookingPayload
 ): Promise<ChauffeurBookingResponse> => {
   try {
+    const sanitizedPayload: ChauffeurBookingPayload = {
+      ...payload,
+      payment_method: "cash_after_service",
+    };
     const response = await apiClient.post<ChauffeurBookingResponse>(
       "/customer/car/chauffeur/book",
-      payload
+      sanitizedPayload
     );
     return response.data;
   } catch (error) {
@@ -372,4 +389,36 @@ export const getCustomerBookings = async ({
     throw error;
   }
 };
-
+
+export const getChauffeurGalleryImages = (chauffeur: Chauffeur): string[] => {
+  const fallback =
+    "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80";
+
+  if (
+    chauffeur.image_full_paths &&
+    Array.isArray(chauffeur.image_full_paths) &&
+    chauffeur.image_full_paths.length > 0
+  ) {
+    const valid = chauffeur.image_full_paths.filter(
+      (p) => p && typeof p === "string" && !p.endsWith("/")
+    );
+    if (valid.length > 0) return valid;
+  }
+
+  if (
+    chauffeur.images &&
+    Array.isArray(chauffeur.images) &&
+    chauffeur.images.length > 0
+  ) {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ||
+      "http://192.168.29.83:8000";
+    return chauffeur.images.map((img) =>
+      img.startsWith("http") ? img : `${apiBase}/storage/app/public/car/${img}`
+    );
+  }
+
+  return [fallback];
+};
+
+

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Car,
   AlertCircle,
@@ -19,11 +20,11 @@ import { CarCard } from "@/components/car-hire/CarCard";
 import { CarHireTopBar } from "@/components/car-hire/CarHireTopBar";
 import { CarHireSidebar } from "@/components/car-hire/CarHireSidebar";
 import { CarHireMobileDrawer } from "@/components/car-hire/CarHireMobileDrawer";
-import { CarBookingModal } from "@/components/car-hire/CarBookingModal";
 
 const DEFAULT_CAR_HIRE_CATEGORY_ID = "35f3a758-c66b-444e-83fb-9325a345e2db";
 
 export default function CarHirePage() {
+  const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(
     DEFAULT_CAR_HIRE_CATEGORY_ID
@@ -41,9 +42,6 @@ export default function CarHirePage() {
   const [error, setError] = useState("");
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  const [selectedCarForBooking, setSelectedCarForBooking] =
-    useState<CarItem | null>(null);
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
   // 1. Fetch Categories & Car Types on Mount
   useEffect(() => {
@@ -189,8 +187,7 @@ export default function CarHirePage() {
   }, [cars, searchQuery, selectedCarTypeId, transmissionFilter, sortBy]);
 
   const handleBookNow = (car: CarItem) => {
-    setSelectedCarForBooking(car);
-    setIsBookingModalOpen(true);
+    router.push(`/car-hire/${car.id}/book`);
   };
 
   return (
@@ -322,16 +319,6 @@ export default function CarHirePage() {
         hasActiveFilters={hasActiveFilters}
         activeFilterCount={activeFilterCount}
         totalCount={filteredAndSortedCars.length}
-      />
-
-      {/* Booking Modal */}
-      <CarBookingModal
-        car={selectedCarForBooking}
-        isOpen={isBookingModalOpen}
-        onClose={() => {
-          setIsBookingModalOpen(false);
-          setSelectedCarForBooking(null);
-        }}
       />
     </div>
   );

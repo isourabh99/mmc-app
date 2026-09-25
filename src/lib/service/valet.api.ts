@@ -149,10 +149,12 @@ export interface AddValetToCartPayload {
 }
 
 export interface SendValetBookingPayload {
-  payment_method: string;
+  payment_method?: string;
   zone_id?: string;
+  guest_id?: string;
   service_schedule: string;
-  service_address_id?: string;
+  service_address_id?: string | number;
+  service_address?: string;
   service_location?: string;
   selected_slot_id?: string;
   car_registration_number: string;
@@ -160,6 +162,9 @@ export interface SendValetBookingPayload {
   car_color?: string;
   special_conditions?: string;
   notes?: string;
+  postcode?: string;
+  latitude?: number | string;
+  longitude?: number | string;
 }
 
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
@@ -445,6 +450,8 @@ export const addValetToCart = async (
   }
 };
 
+
+
 /**
  * Send Valet Booking Request
  * POST /customer/booking/request/send
@@ -454,8 +461,22 @@ export const sendValetBookingRequest = async (
 ): Promise<any> => {
   const activeZone = getActiveZoneId(payload.zone_id);
 
-  const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
-  const guestId = (typeof window !== "undefined" && localStorage.getItem("guest_id")) || "550e8400-e29b-41d4-a716-446655440000";
+  const guestId =
+    payload.guest_id ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("guest_id") ||
+        localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid"))) ||
+    activeZone;
+
+  let cleanPostcode = (payload.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "12345";
+
+  const fullAddress = payload.service_address || "Customer Location, UK";
 
   try {
     const res = await apiClient.post(
@@ -464,14 +485,20 @@ export const sendValetBookingRequest = async (
         guest_id: guestId,
         payment_method: payload.payment_method || "cash_after_service",
         zone_id: activeZone,
+        guest_id: guestId,
         service_schedule: payload.service_schedule,
-        service_address_id: payload.service_address_id || "2",
-        service_location: payload.service_location || "customer",
+        service_address_id: String(payload.service_address_id || "6"),
+        service_address: fullAddress,
+        service_location: "customer",
+        booking_type: "normal",
         selected_slot_id:
           payload.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
         car_registration_number: payload.car_registration_number,
         car_model: payload.car_model || "Standard Vehicle",
         car_color: payload.car_color || "Silver",
+        postcode: cleanPostcode,
+        latitude: String(payload.latitude || "22.66215"),
+        longitude: String(payload.longitude || "75.9035"),
         special_conditions:
           payload.special_conditions || "Doorstep vehicle valet service",
         notes: payload.notes || "Booked from MMC Customer Portal",
@@ -480,7 +507,7 @@ export const sendValetBookingRequest = async (
       {
         headers: {
           zoneid: activeZone,
-          zoneId: activeZone,
+          ZoneId: activeZone,
           "Content-Type": "application/json",
           Accept: "application/json",
         },

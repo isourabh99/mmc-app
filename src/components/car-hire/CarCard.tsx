@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Fuel,
@@ -20,6 +21,7 @@ import {
   formatCurrency,
   getCarPrimaryImage,
 } from "@/lib/service/car.api";
+import { isAuthenticated } from "@/lib/auth.api";
 
 interface CarCardProps {
   car: CarItem;
@@ -27,6 +29,8 @@ interface CarCardProps {
 }
 
 export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
+  const router = useRouter();
+
   const primaryImage = getCarPrimaryImage(car);
   const hourlyRateNum = parseFloat(car.hourly_rate || "0");
   const dailyRateNum = parseFloat(car.daily_rate || "0");
@@ -163,7 +167,7 @@ export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
           <div className="flex items-center gap-1 truncate">
             <MapPin size={11} className="text-[#FAD293] shrink-0" />
             <span className="truncate">
-              {car.postcode || car.address || "London"}
+              {car.postcode || car.address || "-"}
             </span>
           </div>
         </div>
@@ -179,32 +183,31 @@ export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
             <ArrowRight size={11} className="text-[#FAD293]" />
           </Link>
 
-          {onBookNow ? (
-            <button
-              type="button"
-              id={`book-now-${car.id}`}
-              onClick={() => onBookNow(car)}
-              className="flex items-center justify-center py-1.5 sm:py-2 px-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold text-black transition shadow-md hover:brightness-110 active:scale-98 text-center"
-              style={{
-                background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-              }}
-            >
-              Book Hire
-            </button>
-          ) : (
-            <Link
-              href={`/car-hire/${car.id}/book`}
-              id={`book-now-${car.id}`}
-              className="flex items-center justify-center py-1.5 sm:py-2 px-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold text-black transition shadow-md hover:brightness-110 active:scale-98 text-center"
-              style={{
-                background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-              }}
-            >
-              Book Hire
-            </Link>
-          )}
+          <button
+            type="button"
+            id={`book-now-${car.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              if (!isAuthenticated()) {
+                router.push("/login");
+                return;
+              }
+              if (onBookNow) {
+                onBookNow(car);
+              } else {
+                router.push(`/car-hire/${car.id}/book`);
+              }
+            }}
+            className="flex items-center justify-center py-1.5 sm:py-2 px-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold text-black transition shadow-md hover:brightness-110 active:scale-98 text-center"
+            style={{
+              background: "linear-gradient(135deg, #FAD293, #CEA46B)",
+            }}
+          >
+            Book Hire
+          </button>
         </div>
       </div>
     </div>
   );
 };
+

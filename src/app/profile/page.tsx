@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
 
 import {
   getCustomerProfile,
@@ -39,6 +41,7 @@ interface AddressData {
 
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { showToast } = useToast();
 
 
@@ -57,6 +60,7 @@ export default function ProfilePage() {
   const [profileImagePreview, setProfileImagePreview] = useState("");
 
   const [carImagePreview, setCarImagePreview] = useState("");
+
 
 
   const [profile, setProfile] = useState<ProfileData>({
@@ -125,6 +129,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const loadProfile = async () => {
+      if (!isAuthenticated()) {
+        router.push("/login");
+        return;
+      }
       try {
         setLoading(true);
 

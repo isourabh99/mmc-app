@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useMemo, MouseEvent, TouchEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
 import {
     Sparkles,
     Shield,
@@ -78,6 +80,7 @@ import BodyworkQuotesView from "./components/BodyworkQuotesView";
 import BodyworkBookingView from "./components/BodyworkBookingView";
 
 export default function BodyworkPage() {
+    const router = useRouter();
     const { showToast } = useToast();
 
     // ---------------------------------------------------------------------------
@@ -514,6 +517,11 @@ export default function BodyworkPage() {
     };
 
     const handleBookBidOffer = (bid: PostBidItem) => {
+        if (!isAuthenticated()) {
+            showToast("Please login to proceed with booking", "info");
+            router.push("/login");
+            return;
+        }
         const priceNum =
             typeof bid.offered_price === "number"
                 ? bid.offered_price
@@ -562,6 +570,12 @@ export default function BodyworkPage() {
     };
 
     const handleExecuteBooking = async () => {
+        if (!isAuthenticated()) {
+            showToast("Please login to complete your booking", "info");
+            router.push("/login");
+            return;
+        }
+
         if (!bookingProviderModal) return;
 
         const effectivePostId = bookingPostId.trim();
@@ -729,6 +743,12 @@ export default function BodyworkPage() {
     // Multi-Provider Batch Quote Submission Handler
     // ---------------------------------------------------------------------------
     const handleSendMultiQuoteRequest = async () => {
+        if (!isAuthenticated()) {
+            showToast("Please login to submit a quote request.", "info");
+            router.push("/login");
+            return;
+        }
+
         if (selectedProviderIdsForQuote.length === 0) {
             showToast("Please select at least one specialist from the list", "error");
             return;

@@ -656,6 +656,10 @@ export interface SendBookingRequestParams {
   payment_method: "cash_after_service" | "stripe" | string;
   zone_id?: string;
   service_address_id?: string;
+  service_address?: string;
+  postcode?: string;
+  latitude?: number | string;
+  longitude?: number | string;
   service_location: "customer" | "workshop" | string;
   service_schedule: string; // Format: "YYYY-MM-DD HH:mm:ss"
   booking_type: "normal" | "emergency" | string;
@@ -814,6 +818,8 @@ export const getProviderQuestions = async (
   }
 };
 
+
+
 /**
  * Confirm Booking / Send Booking Request
  * POST /customer/booking/request/send
@@ -821,7 +827,19 @@ export const getProviderQuestions = async (
 export const sendBookingRequest = async (
   params: SendBookingRequestParams
 ): Promise<SendBookingRequestResponse> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId"))) ||
+    DEFAULT_ZONE_ID;
+
+  const guestId =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("guest_id") ||
+        localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid"))) ||
+    zoneId;
 
   const addressId =
     params.service_address_id ||
@@ -830,6 +848,7 @@ export const sendBookingRequest = async (
         localStorage.getItem("address_id"))) ||
     "6";
 
+  const fullAddress = params.service_address || "Customer Location, UK";
   const isOnline = params.payment_method === "stripe" || params.payment_method === "online";
   const effectivePaymentMethod = isOnline ? "stripe" : params.payment_method;
 
@@ -853,7 +872,15 @@ export const sendBookingRequest = async (
   }
 
   // Backend /customer/booking/request/send validator requires 'service_location' => 'required|in:customer'
-  const apiServiceLocation = params.service_location === "workshop" ? "customer" : (params.service_location || "customer");
+  const apiServiceLocation = "customer";
+
+  let cleanPostcode = (params.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "12345";
+
   let effectiveNotes = params.notes || "";
   if (params.service_location === "workshop" && !effectiveNotes.includes("Workshop")) {
     effectiveNotes = effectiveNotes
@@ -867,10 +894,16 @@ export const sendBookingRequest = async (
     formData.append("provider_id", params.provider_id);
     formData.append("payment_method", effectivePaymentMethod);
     formData.append("zone_id", zoneId);
+    formData.append("guest_id", guestId);
     formData.append("service_address_id", addressId);
+    formData.append("service_address", fullAddress);
     formData.append("service_location", apiServiceLocation);
     formData.append("service_schedule", params.service_schedule);
     formData.append("booking_type", params.booking_type);
+    formData.append("postcode", cleanPostcode);
+    formData.append("latitude", String(params.latitude || "22.66215"));
+    formData.append("longitude", String(params.longitude || "75.9035"));
+
     if (params.selected_slot_id) {
       formData.append("selected_slot_id", params.selected_slot_id);
     }
@@ -899,7 +932,7 @@ export const sendBookingRequest = async (
       {
         headers: {
           zoneid: zoneId,
-          "Content-Type": "multipart/form-data",
+          ZoneId: zoneId,
         },
       }
     );
@@ -911,14 +944,15 @@ export const sendBookingRequest = async (
       provider_id: params.provider_id,
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
+      guest_id: guestId,
       service_address_id: addressId,
+      service_address: fullAddress,
       service_location: apiServiceLocation,
       service_schedule: params.service_schedule,
       booking_type: params.booking_type,
-      is_terms_accepted: 1,
-      is_provider_terms_accepted: 1,
-      terms_and_conditions: 1,
-      terms_accepted: 1,
+      postcode: cleanPostcode,
+      latitude: String(params.latitude || "22.66215"),
+      longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
       ...(fcmToken ? { fcm_token: fcmToken } : {}),
     };
@@ -938,6 +972,7 @@ export const sendBookingRequest = async (
       {
         headers: {
           zoneid: zoneId,
+          ZoneId: zoneId,
           "Content-Type": "application/json",
         },
       }

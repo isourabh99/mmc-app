@@ -5,80 +5,117 @@ export interface RegistrationData {
   last_name: string;
   email: string;
   phone: string;
-  gender: string;
-  date_of_birth: string;
+  gender?: string;
+  password?: string;
+  confirm_password?: string;
+  profile_image?: File | null;
+  date_of_birth?: string;
 }
 
-export interface loginData {
+export interface VerifyOtpData {
   email: string;
-  otp: number | string;
-  fcm_token?: string;
+  otp: string | number;
 }
 
-export const registerCustomer = async (data: RegistrationData) => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("fcm_token") || "" : "";
-  const response = await apiClient.post(
-    "/customer/auth/registration",
-    {
-      ...data,
-      fcm_token: token,
-      password: "password",
-      confirm_password: "password",
-    }
-  );
-
-  return response.data;
+// Check if current client session has a valid token
+export const isAuthenticated = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return Boolean(localStorage.getItem("token"));
 };
 
-export const loginCustomer = async (data: loginData) => {
-  const token =
-    data.fcm_token ||
-    (typeof window !== "undefined" ? localStorage.getItem("fcm_token") || "" : "");
+// Backwards-compatible alias for existing imports
+export type loginData = VerifyOtpData;
 
-  const response = await apiClient.post(
-    "/customer/auth/otp-login",
-    {
-      ...data,
-      fcm_token: token,
+/**
+ * Customer Registration API
+ * POST /customer/auth/registration (multipart/form-data)
+ */
+export const registerCustomer = async (data: RegistrationData | FormData) => {
+  let payload: FormData;
+
+  if (data instanceof FormData) {
+    payload = data;
+  } else {
+    payload = new FormData();
+    payload.append("first_name", data.first_name || "");
+    payload.append("last_name", data.last_name || "");
+    payload.append("email", data.email || "");
+    payload.append("phone", data.phone || "");
+    payload.append("password", data.password || "password123");
+    payload.append("confirm_password", data.confirm_password || data.password || "password123");
+    if (data.gender) {
+      payload.append("gender", data.gender);
     }
-  );
+    if (data.profile_image instanceof File) {
+      payload.append("profile_image", data.profile_image);
+    }
+    if (data.date_of_birth) {
+      payload.append("date_of_birth", data.date_of_birth);
+    }
+  }
+
+  const response = await apiClient.post("/customer/auth/registration", payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
   return response.data;
-};
-
-export const sendOtp = async (email: string) => {
-
-    const response = await apiClient.post(
-        "/customer/auth/otp-login",
-        {
-            email
-        }
-    );
-
-    return response.data;
 };
 
 /**
- * Sync the active device FCM token to Laravel backend for current logged-in customer.
+ * Registration Verify OTP API
+ * POST /customer/auth/verify-otp
  */
-export const updateFCMTokenToBackend = async (fcmToken?: string) => {
-  if (typeof window === "undefined") return;
-  const authToken = localStorage.getItem("token");
-  const deviceToken = fcmToken || localStorage.getItem("fcm_token");
-  if (!authToken || !deviceToken) return;
-
-  try {
-    await apiClient.post("/customer/fcm-token", { fcm_token: deviceToken });
-  } catch (err1) {
-    try {
-      await apiClient.post("/customer/update-fcm-token", { fcm_token: deviceToken });
-    } catch (err2) {
-      try {
-        const fd = new FormData();
-        fd.append("fcm_token", deviceToken);
-        await apiClient.post("/customer/update/profile", fd);
-      } catch (err3) {
-        // Graceful fallback
-      }
-    }
-  }
+export const verifyOtp = async (data: VerifyOtpData) => {
+  const response = await apiClient.post("/customer/auth/verify-otp", {
+    email: data.email,
+    otp: String(data.otp),
+  });
+  return response.data;
 };
+
+/**
+ * Registration Resend OTP API
+ * POST /customer/auth/resend-otp
+ */
+export const resendOtp = async (email: string) => {
+  const response = await apiClient.post("/customer/auth/resend-otp", {
+    email,
+  });
+  return response.data;
+};
+
+/**
+ * Send Login OTP API
+ * POST /customer/auth/otp-login
+ * Body: { "email": "..." }
+ */
+export const sendLoginOtp = async (email: string) => {
+  const response = await apiClient.post("/customer/auth/otp-login", {
+    email: email.trim(),
+  });
+  return response.data;
+};
+
+/**
+ * Verify Login OTP API
+ * POST /customer/auth/otp-login
+ * Body: { "email": "...", "otp": 3344 }
+ */
+export const verifyLoginOtp = async (data: { email: string; otp: string | number }) => {
+  const otpValue =
+    typeof data.otp === "string" && !isNaN(Number(data.otp))
+      ? Number(data.otp)
+      : data.otp;
+
+  const response = await apiClient.post("/customer/auth/otp-login", {
+    email: data.email.trim(),
+    otp: otpValue,
+  });
+  return response.data;
+};
+
+// Aliases for seamless backwards compatibility
+export const loginCustomer = verifyLoginOtp;
+export const sendOtp = sendLoginOtp;

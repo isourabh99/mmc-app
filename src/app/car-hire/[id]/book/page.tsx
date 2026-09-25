@@ -74,6 +74,15 @@ export default function CarHireBookingPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [bookingDetails, setBookingDetails] = useState<any>(null);
 
+  // Check login authentication immediately
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) {
+      showToast("Please login to proceed with your booking.", "error");
+      router.push("/login");
+    }
+  }, [router, showToast]);
+
   // 1. Fetch Vehicle Details
   useEffect(() => {
     if (!carId) return;
@@ -116,6 +125,7 @@ export default function CarHireBookingPage() {
     fetchCar();
   }, [carId]);
 
+
   // Pricing calculation
   const dailyRate = parseFloat(car?.daily_rate || "0");
   const hourlyRate = parseFloat(car?.hourly_rate || "0");
@@ -145,6 +155,13 @@ export default function CarHireBookingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) {
+      showToast("Please login to complete your booking.", "error");
+      router.push("/login");
+      return;
+    }
+
     if (!agreeTerms) {
       showToast(
         "Please agree to the vehicle hire terms & conditions to proceed.",
@@ -170,8 +187,7 @@ export default function CarHireBookingPage() {
         pickup_type: pickupType, // "delivery" | "self"
         delivery_address: deliveryAddress.trim(),
         delivery_latitude: deliveryCoords.latitude,
-        delivery_longitude: deliveryCoords.longitude,
-        payment_method: paymentMethod, // "cash_after_service"
+        payment_method: "cash_after_service",
         description: description.trim() || undefined,
       };
 
@@ -286,114 +302,27 @@ export default function CarHireBookingPage() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-3 sm:px-6 relative z-10">
-        {/* Success View */}
-        {isSuccess ? (
-          <div className="max-w-2xl mx-auto my-8 p-6 sm:p-10 rounded-3xl border border-emerald-500/30 bg-[#0d0d0d] text-center space-y-6 shadow-2xl">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto animate-bounce">
-              <CheckCircle2 size={32} />
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30">
-                Reservation Confirmed
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Booking Placed Successfully!
-              </h2>
-              <p className="text-xs sm:text-sm text-white/60 max-w-lg mx-auto">
-                Your hire request for{" "}
-                <strong className="text-white">{car.brand}</strong> has been
-                registered. The provider will verify vehicle preparation and
-                delivery.
+        {/* Main Booking Form Page Layout */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Top Title Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Link
+                  href={`/car-hire/${car.id}`}
+                  className="inline-flex items-center gap-1 text-xs text-[#FAD293] hover:underline"
+                >
+                  <ArrowLeft size={13} />
+                  <span>Back to Vehicle Details</span>
+                </Link>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
+                Vehicle Reservation
+              </h1>
+              <p className="text-xs text-white/50">
+                Fill in your itinerary and preferred collection destination.
               </p>
             </div>
-
-            {/* Booking Summary Card */}
-            {bookingDetails && (
-              <div className="p-5 rounded-2xl bg-white/5 border border-white/10 text-left space-y-2.5 text-xs max-w-md mx-auto">
-                {bookingDetails.booking_id && (
-                  <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                    <span className="text-white/50">Booking Reference:</span>
-                    <span className="font-mono font-bold text-[#FAD293] truncate max-w-[220px]">
-                      {bookingDetails.booking_id}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-white/50">Hire Dates:</span>
-                  <span className="text-white font-medium">
-                    {startDate} to {endDate} ({diffDays} {diffDays === 1 ? "day" : "days"})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Schedule:</span>
-                  <span className="text-white font-medium">
-                    {formatTimeTo12Hour(pickupTime)} - {formatTimeTo12Hour(dropTime)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Collection Mode:</span>
-                  <span className="text-white font-medium capitalize">
-                    {pickupType === "delivery" ? "Doorstep Delivery" : "Self Collection"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Delivery Address:</span>
-                  <span className="text-white font-medium truncate max-w-[200px]">
-                    {deliveryAddress}
-                  </span>
-                </div>
-                {bookingDetails.total_amount && (
-                  <div className="flex justify-between pt-2 border-t border-white/10 font-bold text-sm">
-                    <span className="text-white/70">Estimated Total:</span>
-                    <span className="text-[#FAD293]">
-                      {formatCurrency(bookingDetails.total_amount)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <Link
-                href="/car-hire"
-                className="px-6 py-3 rounded-xl font-bold text-black text-xs sm:text-sm shadow-lg"
-                style={{
-                  background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                }}
-              >
-                Browse More Vehicles
-              </Link>
-              <Link
-                href="/account?tab=bookings"
-                className="px-6 py-3 rounded-xl font-semibold text-white/90 bg-white/5 border border-white/15 text-xs sm:text-sm hover:bg-white/10 transition"
-              >
-                View My Bookings
-              </Link>
-            </div>
-          </div>
-        ) : (
-          /* Main Booking Form Page Layout */
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Top Title Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Link
-                    href={`/car-hire/${car.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-[#FAD293] hover:underline"
-                  >
-                    <ArrowLeft size={13} />
-                    <span>Back to Vehicle Details</span>
-                  </Link>
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-                  Vehicle Reservation
-                </h1>
-                <p className="text-xs text-white/50">
-                  Fill in your itinerary and preferred collection destination.
-                </p>
-              </div>
 
               {/* Status Badge */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-medium self-start sm:self-auto">
@@ -613,21 +542,15 @@ export default function CarHireBookingPage() {
                       <CreditCard size={13} className="text-[#FAD293]" />
                       <span>Payment Method</span>
                     </label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
-                    >
-                      <option value="cash_after_service" className="bg-neutral-900">
-                        Cash After Service / Pay Upon Vehicle Collection
-                      </option>
-                      <option value="stripe" className="bg-neutral-900">
-                        Credit / Debit Card (Online Stripe)
-                      </option>
-                      <option value="offline" className="bg-neutral-900">
-                        Offline Bank Transfer / Invoice
-                      </option>
-                    </select>
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-white">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                        <span className="font-semibold text-white">Cash After Service / Pay Upon Vehicle Arrival</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-full border border-[#FAD293]/20">
+                        Default
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -760,8 +683,101 @@ export default function CarHireBookingPage() {
               </div>
             </div>
           </form>
+        </div>
+
+        {/* =========================================================
+            BOOKING CONFIRMATION SUCCESS MODAL
+        ========================================================== */}
+        {isSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-lg rounded-3xl border border-[#FAD293]/40 bg-[#14100c] p-6 sm:p-8 text-white shadow-2xl text-center space-y-6">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
+                <CheckCircle2 size={32} strokeWidth={2.5} />
+              </div>
+
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  Reservation Confirmed
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Booking Placed Successfully!
+                </h2>
+                <p className="text-xs sm:text-sm text-white/65">
+                  Your hire request for <strong className="text-white">{car.brand}</strong> has been registered. The provider will verify vehicle preparation and delivery.
+                </p>
+              </div>
+
+              {/* Booking Summary Card */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left space-y-2.5 text-xs">
+                {bookingDetails?.booking_id && (
+                  <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                    <span className="text-white/50">Booking Reference:</span>
+                    <span className="font-mono font-bold text-[#FAD293] truncate max-w-[200px]">
+                      {bookingDetails.booking_id}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Vehicle:</span>
+                  <span className="font-semibold text-white truncate max-w-[200px]">
+                    {car.brand}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Hire Dates:</span>
+                  <span className="text-white/90">
+                    {startDate} to {endDate} ({diffDays} {diffDays === 1 ? "day" : "days"})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Schedule:</span>
+                  <span className="text-white/90">
+                    {formatTimeTo12Hour(pickupTime)} - {formatTimeTo12Hour(dropTime)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Collection Mode:</span>
+                  <span className="text-white/90 capitalize">
+                    {pickupType === "delivery" ? "Doorstep Delivery" : "Self Collection"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Delivery Address:</span>
+                  <span className="text-white/90 truncate max-w-[200px]">
+                    {deliveryAddress}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-white/10 font-bold text-sm">
+                  <span className="text-white/70">Estimated Total:</span>
+                  <span className="text-[#FAD293]">
+                    {formatCurrency(bookingDetails?.total_amount || estimatedTotal)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <Link
+                  href="/account?tab=bookings"
+                  className="py-3 px-4 rounded-xl font-bold text-black text-xs transition hover:brightness-110 flex items-center justify-center gap-1.5"
+                  style={{
+                    background: "linear-gradient(135deg, #FAD293, #CEA46B)",
+                  }}
+                >
+                  <Calendar size={14} />
+                  <span>View My Bookings</span>
+                </Link>
+                <Link
+                  href="/car-hire"
+                  className="py-3 px-4 rounded-xl font-semibold text-white/80 bg-white/10 hover:bg-white/15 border border-white/15 text-xs transition flex items-center justify-center gap-1.5"
+                >
+                  <Car size={14} />
+                  <span>Browse More Cars</span>
+                </Link>
+              </div>
+            </div>
+          </div>
         )}
       </div>
-    </div>
   );
 }

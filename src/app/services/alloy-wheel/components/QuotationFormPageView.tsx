@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
     ArrowLeft,
     Send,
@@ -21,6 +22,7 @@ import {
     ShieldCheck,
 } from "lucide-react";
 import type { ProviderItem, AlloyServiceItem } from "@/lib/service/alloy.api";
+import { isAuthenticated } from "@/lib/auth.api";
 
 interface QuotationFormPageViewProps {
     selectedProviders: ProviderItem[];
@@ -54,6 +56,8 @@ export default function QuotationFormPageView({
     onBack,
     onSubmit,
 }: QuotationFormPageViewProps) {
+    const router = useRouter();
+
     const [carReg, setCarReg] = useState(initialRegNo || "BD51 SMR");
     const [carModel, setCarModel] = useState("Hyundai Creta 2022");
     const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(() => {
@@ -119,6 +123,12 @@ export default function QuotationFormPageView({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMsg(null);
+
+        if (!isAuthenticated()) {
+            setErrorMsg("Please login to submit a quotation request.");
+            router.push("/login");
+            return;
+        }
 
         if (!carReg.trim()) {
             setErrorMsg("Please enter your vehicle registration number.");

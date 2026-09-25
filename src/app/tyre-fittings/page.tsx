@@ -45,6 +45,8 @@ import { ProviderQuoteStep } from "@/components/tyre-assistance/ProviderQuoteSte
 import { TechnicianAssigningStep } from "@/components/tyre-assistance/TechnicianAssigningStep";
 import { BookingConfirmedStep } from "@/components/tyre-assistance/BookingConfirmedStep";
 import { TyreBookingDetailsModal } from "@/components/tyre-assistance/TyreBookingDetailsModal";
+import { isAuthenticated } from "@/lib/auth.api";
+import { useToast } from "@/components/ToastProvider";
 
 type WorkflowStep =
   | "category"
@@ -65,6 +67,7 @@ const STEP_LABELS: { key: WorkflowStep; label: string; stepNumber: number }[] = 
 
 export default function TyreAssistancePage() {
   const router = useRouter();
+  const { showToast } = useToast();
 
   // Workflow State
   const [currentStep, setCurrentStep] = useState<WorkflowStep>("category");
@@ -213,6 +216,12 @@ export default function TyreAssistancePage() {
     notes: string;
     acceptedPrivacy: boolean;
   }) => {
+    if (!isAuthenticated()) {
+      showToast("Please login to submit tyre assistance request.", "info");
+      router.push("/login");
+      return;
+    }
+
     const booking = await createAssistanceRequest({
       category: selectedCategory,
       assistanceType: selectedAssistanceType,
@@ -243,11 +252,18 @@ export default function TyreAssistancePage() {
 
   // 4. Step 4: Confirm Quote & Start Technician Assignment
   const handleConfirmQuote = async () => {
+    if (!isAuthenticated()) {
+      showToast("Please login to confirm booking.", "info");
+      router.push("/login");
+      return;
+    }
+
     if (!currentBooking) return;
     const updated = await confirmQuoteAndAssignTechnician(currentBooking.id);
     setCurrentBooking(updated);
     setCurrentStep("technician_assigning");
   };
+
 
   // 5. Step 5: Technician Auto-Assignment Complete Callback
   const handleTechnicianAssigned = useCallback(async () => {
