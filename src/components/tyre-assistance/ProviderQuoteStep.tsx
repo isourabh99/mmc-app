@@ -333,16 +333,14 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
               {chatMessages.map((m, i) => (
                 <div
                   key={i}
-                  className={`flex flex-col ${
-                    m.sender === "user" ? "items-end" : "items-start"
-                  }`}
+                  className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"
+                    }`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed ${
-                      m.sender === "user"
+                    className={`max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed ${m.sender === "user"
                         ? "bg-[#FAD293] text-black font-medium rounded-br-none"
                         : "bg-black/60 text-white/90 border border-white/10 rounded-bl-none"
-                    }`}
+                      }`}
                   >
                     {m.text}
                   </div>

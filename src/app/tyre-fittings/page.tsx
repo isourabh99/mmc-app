@@ -314,22 +314,20 @@ export default function TyreAssistancePage() {
               return (
                 <div
                   key={step.key}
-                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${
-                    isCurrent
-                      ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
-                      : isDone
+                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${isCurrent
+                    ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
+                    : isDone
                       ? "bg-white/5 border border-white/10 text-white"
                       : "text-white/30 border border-transparent"
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isCurrent
-                        ? "bg-[#FAD293] text-black"
-                        : isDone
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent
+                      ? "bg-[#FAD293] text-black"
+                      : isDone
                         ? "bg-white/20 text-white"
                         : "bg-white/5 text-white/40"
-                    }`}
+                      }`}
                   >
                     {isDone ? "✓" : step.stepNumber}
                   </div>

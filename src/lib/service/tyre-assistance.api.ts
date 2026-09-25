@@ -570,9 +570,8 @@ export async function createAssistanceRequest(
   const id = `MMC-TYR-${randomNum}`;
   const now = new Date().toISOString();
 
-  const formattedDateTime = `${params.scheduledDate || "Today"}, ${
-    params.scheduledTimeSlot || "Immediate Dispatch"
-  }`;
+  const formattedDateTime = `${params.scheduledDate || "Today"}, ${params.scheduledTimeSlot || "Immediate Dispatch"
+    }`;
 
   const combinedNotes = [
     params.situation ? `Situation: ${params.situation}` : null,
