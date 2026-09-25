@@ -5,9 +5,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Car, Loader2, Sparkles } from "lucide-react";
 import {
-  getCustomerBookings,
-  type CustomerBookingItem,
-} from "@/lib/service/chauffeur.api";
+  fetchAllCustomerBookings,
+  UnifiedBookingItem,
+} from "@/lib/service/bookings.api";
 import {
   getCustomerProfile,
   updateCustomerProfile,
@@ -34,8 +34,8 @@ function AccountContent() {
   const [user, setUser] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // Bookings State
-  const [bookings, setBookings] = useState<CustomerBookingItem[]>([]);
+  // Unified Bookings State (All Services Across App)
+  const [bookings, setBookings] = useState<UnifiedBookingItem[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState("");
 
@@ -74,17 +74,16 @@ function AccountContent() {
     }
   }, []);
 
-  // Load Bookings
+  // Load All Universal Bookings
   const fetchBookings = useCallback(async () => {
     try {
       setBookingsLoading(true);
       setBookingsError("");
-      const data = await getCustomerBookings({
-        limit: 20,
+      const data = await fetchAllCustomerBookings({
+        limit: 50,
         offset: 1,
         booking_status: "all",
         service_type: "all",
-        booking_type: "car",
       });
       setBookings(data);
     } catch (err: any) {
@@ -143,16 +142,6 @@ function AccountContent() {
                 Manage your reservations, chauffeur itineraries, and vehicle information
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            <Link
-              href="/services/Chauffeur"
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] px-4 py-2.5 text-xs font-bold text-[#140e0a] shadow-md shadow-[#d09a50]/20 transition hover:brightness-105"
-            >
-              <Car size={15} />
-              <span>Book Chauffeur</span>
-            </Link>
           </div>
         </div>
 

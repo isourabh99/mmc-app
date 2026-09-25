@@ -674,10 +674,10 @@ export const bookEmergencyProvider = async (
     params.emergency_service_ids && params.emergency_service_ids.length > 0
       ? params.emergency_service_ids
       : params.emergency_service_id
-      ? [params.emergency_service_id]
-      : params.provider.selected_services && params.provider.selected_services.length > 0
-      ? [params.provider.selected_services[0].service_id]
-      : ["0095e5b8-0131-4158-8138-69eacde3a38b"];
+        ? [params.emergency_service_id]
+        : params.provider.selected_services && params.provider.selected_services.length > 0
+          ? [params.provider.selected_services[0].service_id]
+          : ["0095e5b8-0131-4158-8138-69eacde3a38b"];
 
   for (const svcId of serviceIdsToAdd) {
     try {
