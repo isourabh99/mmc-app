@@ -33,6 +33,9 @@ import {
   CustomerAddress,
   BackendTyreItem,
   ProviderQuestion,
+  TYRE_EMERGENCY_SERVICE_ID,
+  TYRE_REPLACEMENT_SERVICE_ID,
+  TYRE_EMERGENCY_VARIATIONS,
 } from "@/lib/service/tyre-assistance.api";
 import { TyreAssistanceHeader } from "./TyreAssistanceHeader";
 
@@ -49,6 +52,8 @@ interface ScheduleLocationStepProps {
     longitude: number;
     vehicleMakeModel: string;
     vehicleRegistration: string;
+    variantKey?: string;
+    serviceId?: string;
     tyreSize: string;
     tyreQuantity: number;
     selectedTyreId?: string;
@@ -75,6 +80,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
   const [dynamicQuestions, setDynamicQuestions] = useState<ProviderQuestion[]>([]);
   const [isLoadingBackendData, setIsLoadingBackendData] = useState<boolean>(true);
 
+  // Emergency Variation Selection ("puncture" (£50) or "burst-tyre" (£100))
+  const [selectedEmergencyVariantKey, setSelectedEmergencyVariantKey] =
+    useState<string>("puncture");
+
   // Schedule
   const [scheduledDate, setScheduledDate] = useState<string>("Today");
   const [scheduledTimeSlot, setScheduledTimeSlot] = useState<string>(
@@ -82,10 +91,8 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
   );
 
   // Location
-  const [locationAddress, setLocationAddress] = useState<string>(
-    "Flat 4B, Baker Street, London"
-  );
-  const [locationPostcode, setLocationPostcode] = useState<string>("NW1 6XE");
+  const [locationAddress, setLocationAddress] = useState<string>("");
+  const [locationPostcode, setLocationPostcode] = useState<string>("");
   const [latitude, setLatitude] = useState<number>(51.5074);
   const [longitude, setLongitude] = useState<number>(-0.1278);
   const [detectedZoneId, setDetectedZoneId] = useState<string>("");
@@ -93,10 +100,9 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
 
   // Vehicle & Tyre Specs
-  const [vehicleMakeModel, setVehicleMakeModel] = useState<string>("BMW 5 Series");
-  const [vehicleRegistration, setVehicleRegistration] =
-    useState<string>("UK22-ABC-1234");
-  const [tyreSize, setTyreSize] = useState<string>("205/56 R16");
+  const [vehicleMakeModel, setVehicleMakeModel] = useState<string>("");
+  const [vehicleRegistration, setVehicleRegistration] = useState<string>("");
+  const [tyreSize, setTyreSize] = useState<string>("");
   const [tyreQuantity, setTyreQuantity] = useState<number>(1);
   const [situation, setSituation] = useState<string>("Puncture");
   const [selectedTyreId, setSelectedTyreId] = useState<string>("");
@@ -123,9 +129,6 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
         if (mounted && tyres.length > 0) {
           setDynamicTyres(tyres);
           setSelectedTyreId(tyres[0].id);
-          if (tyres[0].size) {
-            setTyreSize(tyres[0].size);
-          }
         }
 
         // 3. Dynamic Questions from Backend
@@ -206,6 +209,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
       setErrorMsg("Please accept the Privacy Policy to proceed.");
       return;
     }
+    if (!vehicleRegistration.trim()) {
+      setErrorMsg("Please enter your vehicle registration number.");
+      return;
+    }
     if (!locationAddress.trim()) {
       setErrorMsg("Please provide your breakdown or fitting address.");
       return;
@@ -214,7 +221,11 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
     setErrorMsg(null);
     setIsSubmitting(true);
 
-    const chosenTyre = dynamicTyres.find((t) => t.id === selectedTyreId);
+    const isEmergency = category === "emergency";
+    const chosenTyre = !isEmergency ? dynamicTyres.find((t) => t.id === selectedTyreId) : undefined;
+    const chosenEmergencyVar = isEmergency
+      ? TYRE_EMERGENCY_VARIATIONS.find((v) => v.variant_key === selectedEmergencyVariantKey)
+      : undefined;
 
     try {
       await onSubmit({
@@ -227,11 +238,15 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
         longitude,
         vehicleMakeModel,
         vehicleRegistration: vehicleRegistration.toUpperCase(),
+        variantKey: isEmergency ? selectedEmergencyVariantKey : undefined,
+        serviceId: isEmergency ? TYRE_EMERGENCY_SERVICE_ID : TYRE_REPLACEMENT_SERVICE_ID,
         tyreSize,
-        tyreQuantity,
-        selectedTyreId,
-        selectedTyrePrice: chosenTyre?.price,
-        situation,
+        tyreQuantity: isEmergency ? 1 : tyreQuantity,
+        selectedTyreId: !isEmergency ? selectedTyreId : undefined,
+        selectedTyrePrice: isEmergency ? chosenEmergencyVar?.price : chosenTyre?.price,
+        situation: isEmergency
+          ? chosenEmergencyVar?.variant || "Puncture"
+          : situation,
         notes,
         acceptedPrivacy,
       });
@@ -339,9 +354,9 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
               </span>
             </div>
 
-            {/* Quick Date Buttons */}
+            {/* Quick Date Buttons & Custom Date Picker */}
             <div className="grid grid-cols-3 gap-2">
-              {["Today", "Tomorrow", "Pick Date"].map((d) => (
+              {["Today", "Tomorrow"].map((d) => (
                 <button
                   key={d}
                   type="button"
@@ -355,6 +370,25 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                   {d}
                 </button>
               ))}
+              <div className="relative">
+                <input
+                  type="date"
+                  min={new Date().toISOString().split("T")[0]}
+                  value={
+                    scheduledDate !== "Today" && scheduledDate !== "Tomorrow"
+                      ? scheduledDate
+                      : ""
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) setScheduledDate(e.target.value);
+                  }}
+                  className={`w-full py-1.5 px-2 text-[11px] font-medium rounded-xl border text-center transition cursor-pointer ${
+                    scheduledDate !== "Today" && scheduledDate !== "Tomorrow"
+                      ? "bg-[#FAD293] border-[#FAD293] text-black font-bold shadow-sm"
+                      : "bg-black/40 border-white/10 text-white/70 hover:border-white/20 hover:text-white"
+                  }`}
+                />
+              </div>
             </div>
 
             {/* Time Slot Selector */}
@@ -440,21 +474,19 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
           </div>
         </div>
 
-        {/* 3. Vehicle & Dynamic Tyre Information */}
+        {/* 3. Vehicle & Service Details */}
         <div className="p-4 sm:p-5 rounded-3xl bg-[#141210] border border-white/10 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-white/80 uppercase tracking-wider flex items-center gap-1.5">
               <Car size={14} className="text-[#FAD293]" />
-              Vehicle Details & Dynamic Backend Tyres
+              Vehicle Details
             </span>
-            {dynamicTyres.length > 0 && (
-              <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                {dynamicTyres.length} Backend Tyres Loaded
-              </span>
-            )}
+            <span className="text-[10px] text-white/40">
+              UK Registration & Model
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-white/60 block mb-1">
                 Registration Number
@@ -480,94 +512,195 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                 className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
               />
             </div>
-
-            {/* Dynamic Situation Question */}
-            <div>
-              <label className="text-[11px] text-white/60 block mb-1">
-                Current Situation
-              </label>
-              <select
-                value={situation}
-                onChange={(e) => setSituation(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FAD293] transition"
-              >
-                <option value="Puncture" className="bg-[#181410] text-white">
-                  Puncture
-                </option>
-                <option value="Burst Tyre" className="bg-[#181410] text-white">
-                  Burst Tyre
-                </option>
-                <option value="New Tyre" className="bg-[#181410] text-white">
-                  New Tyre Fitting
-                </option>
-              </select>
-            </div>
           </div>
 
-          {/* Dynamic Tyre Catalog Selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/5">
-            <div>
-              <label className="text-[11px] text-white/60 block mb-1">
-                Select Tyre from Backend Catalog
-              </label>
-              <select
-                value={selectedTyreId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedTyreId(id);
-                  const found = dynamicTyres.find((t) => t.id === id);
-                  if (found?.size) setTyreSize(found.size);
-                }}
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FAD293] transition"
-              >
-                {dynamicTyres.length > 0 ? (
-                  dynamicTyres.map((t) => (
-                    <option key={t.id} value={t.id} className="bg-[#181410] text-white">
-                      {t.brand} {t.model} - Size: {t.size} (Stock: {t.stock})
-                    </option>
-                  ))
-                ) : (
-                  <option value="" className="bg-[#181410] text-white">
-                    Standard 195/65 R15 Bridgestone
-                  </option>
-                )}
-              </select>
-            </div>
+          {/* Conditional: Emergency Variation vs Replacement Live Tyres */}
+          {category === "emergency" ? (
+            <div className="pt-3 border-t border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="text-red-400" />
+                    Tyre Emergency Service (Roadside Rescue)
+                  </h4>
+                  <p className="text-[11px] text-white/50">
+                    Select your emergency scenario. Dispatched immediately to your location.
+                  </p>
+                </div>
+                <span className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-0.5 rounded-full font-mono">
+                  ID: 1e5455a9...
+                </span>
+              </div>
 
-            <div>
-              <label className="text-[11px] text-white/60 block mb-1">
-                Exact Tyre Dimensions
-              </label>
-              <input
-                type="text"
-                value={tyreSize}
-                onChange={(e) => setTyreSize(e.target.value)}
-                placeholder="e.g. 205/55 R16 or 195/65 R15"
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
-              />
-            </div>
-          </div>
+              {/* Two Emergency Variations Cards: Puncture (£50) & Burst Tyre (£100) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {TYRE_EMERGENCY_VARIATIONS.map((v) => {
+                  const isSelected = selectedEmergencyVariantKey === v.variant_key;
+                  const isBurst = v.variant_key === "burst-tyre";
+                  return (
+                    <button
+                      key={v.variant_key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmergencyVariantKey(v.variant_key);
+                        setSituation(v.variant);
+                      }}
+                      className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden min-h-[110px] ${
+                        isSelected
+                          ? "bg-[#1f1412] border-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.2)] ring-1 ring-red-500/50"
+                          : "bg-black/40 border-white/10 text-white/70 hover:border-white/20 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between w-full">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                            isSelected
+                              ? "bg-red-500/20 text-red-400"
+                              : "bg-white/5 text-white/40"
+                          }`}
+                        >
+                          {isBurst ? <AlertTriangle size={18} /> : <Disc size={18} />}
+                        </div>
+                        <span
+                          className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${
+                            isSelected
+                              ? "bg-red-500 text-white shadow-sm"
+                              : "bg-white/10 text-white/80"
+                          }`}
+                        >
+                          £{v.price.toFixed(2)}
+                        </span>
+                      </div>
 
-          {/* Number of Tyres */}
-          <div className="flex items-center justify-between pt-2 border-t border-white/5">
-            <span className="text-xs text-white/70">Number of Tyres:</span>
-            <div className="flex items-center bg-black/60 border border-white/10 rounded-xl overflow-hidden">
-              {[1, 2, 4].map((qty) => (
-                <button
-                  key={qty}
-                  type="button"
-                  onClick={() => setTyreQuantity(qty)}
-                  className={`px-4 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                    tyreQuantity === qty
-                      ? "bg-[#FAD293] text-black"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  {qty} {qty === 1 ? "Tyre" : "Tyres"}
-                </button>
-              ))}
+                      <div className="pt-2 space-y-0.5">
+                        <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                          <span>{v.variant}</span>
+                          {isSelected && (
+                            <CheckCircle2 size={14} className="text-red-400 fill-red-400/20" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-white/50 leading-snug">
+                          {v.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Optional Tyre Size for emergency info */}
+              <div className="pt-2">
+                <label className="text-[11px] text-white/60 block mb-1">
+                  Tyre Size on Vehicle <span className="text-white/30">(Optional / if known)</span>
+                </label>
+                <input
+                  type="text"
+                  value={tyreSize}
+                  onChange={(e) => setTyreSize(e.target.value)}
+                  placeholder="e.g. 205/55 R16"
+                  className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="pt-3 border-t border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Disc size={13} className="text-[#FAD293]" />
+                    Tyre Replacement Service (Live Catalog)
+                  </h4>
+                  <p className="text-[11px] text-white/50">
+                    Select tyre from verified inventory. Fitting and wheel balancing included.
+                  </p>
+                </div>
+                <span className="text-[10px] text-[#FAD293] bg-[#FAD293]/10 border border-[#FAD293]/20 px-2.5 py-0.5 rounded-full font-mono">
+                  ID: 9913c6e3...
+                </span>
+              </div>
+
+              {/* Live Tyres Selection Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {dynamicTyres.map((t) => {
+                  const isSelected = selectedTyreId === t.id;
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        setSelectedTyreId(t.id);
+                        if (t.size) setTyreSize(t.size);
+                      }}
+                      className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative ${
+                        isSelected
+                          ? "bg-[#181410] border-[#FAD293] text-white shadow-[0_0_20px_rgba(250,210,147,0.15)] ring-1 ring-[#FAD293]/40"
+                          : "bg-black/40 border-white/10 text-white/70 hover:border-white/20 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between w-full">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-md">
+                            {t.brand}
+                          </span>
+                          <h5 className="text-xs font-bold text-white pt-1">{t.model}</h5>
+                        </div>
+                        <span className="text-xs font-extrabold text-[#FAD293] bg-black/60 px-2 py-0.5 rounded-lg border border-white/5">
+                          £{t.price.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 text-[11px] text-white/60 space-y-0.5">
+                        <div>
+                          Size: <span className="font-semibold text-white">{t.size}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-white/40 pt-1 border-t border-white/5">
+                          <span>Stock: {t.stock} in stock</span>
+                          <span className="text-emerald-400 font-medium">Certified New</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Exact Tyre Dimensions & Quantity */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="text-[11px] text-white/60 block mb-1">
+                    Tyre Dimension Specification
+                  </label>
+                  <input
+                    type="text"
+                    value={tyreSize}
+                    onChange={(e) => setTyreSize(e.target.value)}
+                    placeholder="e.g. 205/55 R16"
+                    className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-white/60 block mb-1">
+                    Number of Tyres to Fit
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 4].map((qty) => (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => setTyreQuantity(qty)}
+                        className={`py-2 px-2 text-xs font-semibold rounded-xl transition cursor-pointer border text-center ${
+                          tyreQuantity === qty
+                            ? "bg-[#FAD293] text-black border-[#FAD293] shadow-sm font-bold"
+                            : "bg-black/40 border-white/10 text-white/60 hover:text-white hover:border-white/20"
+                        }`}
+                      >
+                        {qty} {qty === 1 ? "Tyre" : "Tyres"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 4. Notes & Privacy */}

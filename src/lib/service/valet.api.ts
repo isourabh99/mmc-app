@@ -427,6 +427,7 @@ export const addValetToCart = async (
     const res = await apiClient.post(
       "/customer/cart/add",
       {
+        guest_id: (typeof window !== "undefined" && localStorage.getItem("guest_id")) || "550e8400-e29b-41d4-a716-446655440000",
         service_id: payload.service_id,
         provider_id: payload.provider_id,
         variant_key: payload.variant_key || "basic-wash",
@@ -481,6 +482,7 @@ export const sendValetBookingRequest = async (
     const res = await apiClient.post(
       "/customer/booking/request/send",
       {
+        guest_id: guestId,
         payment_method: payload.payment_method || "cash_after_service",
         zone_id: activeZone,
         guest_id: guestId,
@@ -500,6 +502,7 @@ export const sendValetBookingRequest = async (
         special_conditions:
           payload.special_conditions || "Doorstep vehicle valet service",
         notes: payload.notes || "Booked from MMC Customer Portal",
+        ...(fcmToken ? { fcm_token: fcmToken } : {}),
       },
       {
         headers: {

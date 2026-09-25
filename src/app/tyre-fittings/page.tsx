@@ -34,7 +34,10 @@ import {
   setActiveBookingId,
   cancelBooking,
   getZoneIdFromCoordinates,
+  TYRE_EMERGENCY_SERVICE_ID,
+  TYRE_REPLACEMENT_SERVICE_ID,
 } from "@/lib/service/tyre-assistance.api";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import { TyreCategoryStep } from "@/components/tyre-assistance/TyreCategoryStep";
 import { AssistanceTypeStep } from "@/components/tyre-assistance/AssistanceTypeStep";
 import { ScheduleLocationStep } from "@/components/tyre-assistance/ScheduleLocationStep";
@@ -80,8 +83,29 @@ export default function TyreAssistancePage() {
   const [currentBooking, setCurrentBooking] =
     useState<TyreAssistanceBooking | null>(null);
 
+  // In-app Floating Notification Popup
+  const [bookingNotificationPopup, setBookingNotificationPopup] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+  });
+
   // Booking Details Modal
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState<boolean>(false);
+
+  // Auto-dismiss in-app notification popup
+  useEffect(() => {
+    if (bookingNotificationPopup.isOpen) {
+      const timer = setTimeout(() => {
+        setBookingNotificationPopup((prev) => ({ ...prev, isOpen: false }));
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [bookingNotificationPopup.isOpen]);
 
   // 1. Initial Zone GPS Detection & Booking Restore
   useEffect(() => {
@@ -105,19 +129,27 @@ export default function TyreAssistancePage() {
       );
     }
 
-    // Restore active booking from localStorage if available
+    // Restore active booking from localStorage if in-progress
     const existing = getActiveBooking();
     if (existing) {
-      setCurrentBooking(existing);
-      setSelectedCategory(existing.category);
-      setSelectedAssistanceType(existing.assistanceType);
+      if (existing.status === "confirmed" || existing.status === "cancelled") {
+        // Order completed, start clean and fresh
+        setActiveBookingId(null);
+        setCurrentBooking(null);
+        setCurrentStep("category");
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("mmc_active_tyre_booking_id");
+        }
+      } else {
+        setCurrentBooking(existing);
+        setSelectedCategory(existing.category);
+        setSelectedAssistanceType(existing.assistanceType);
 
-      if (existing.status === "confirmed") {
-        setCurrentStep("booking_confirmed");
-      } else if (existing.status === "assigning_technician") {
-        setCurrentStep("technician_assigning");
-      } else if (existing.status === "quote_ready") {
-        setCurrentStep("provider_quote");
+        if (existing.status === "assigning_technician") {
+          setCurrentStep("technician_assigning");
+        } else if (existing.status === "quote_ready") {
+          setCurrentStep("provider_quote");
+        }
       }
     }
   }, []);
@@ -125,12 +157,25 @@ export default function TyreAssistancePage() {
   // Compute live quote preview for right sidebar
   const liveQuotePreview = React.useMemo(() => {
     if (currentBooking) return currentBooking.quote;
+    if (selectedCategory === "emergency") {
+      const callOut = selectedAssistanceType === "recovery_truck" ? 45 : 10;
+      const fareAmount = 50 + callOut;
+      return {
+        tyreDescription: "Tyre Emergency Service (Roadside Rescue)",
+        tyrePrice: 50,
+        labourPrice: 0,
+        callOutFee: callOut,
+        discount: 0,
+        vatAmount: Math.round(fareAmount * 0.2),
+        fareAmount,
+      };
+    }
     return calculateQuote(
       selectedCategory,
       selectedAssistanceType,
       "mobile_repair",
-      "195/65 R15",
-      "Bridgestone",
+      "205/55 R16",
+      "Michelin Primacy",
       1
     );
   }, [currentBooking, selectedCategory, selectedAssistanceType]);
@@ -161,6 +206,8 @@ export default function TyreAssistancePage() {
     longitude: number;
     vehicleMakeModel: string;
     vehicleRegistration: string;
+    variantKey?: string;
+    serviceId?: string;
     tyreSize: string;
     tyreQuantity: number;
     selectedTyreId?: string;
@@ -187,6 +234,8 @@ export default function TyreAssistancePage() {
       longitude: details.longitude,
       vehicleMakeModel: details.vehicleMakeModel,
       vehicleRegistration: details.vehicleRegistration,
+      variantKey: details.variantKey,
+      serviceId: details.serviceId,
       tyreSize: details.tyreSize,
       tyreQuantity: details.tyreQuantity,
       selectedTyreId: details.selectedTyreId,
@@ -223,6 +272,22 @@ export default function TyreAssistancePage() {
       const assigned = await assignTechnicianToBooking(currentBooking.id);
       setCurrentBooking(assigned);
       setCurrentStep("booking_confirmed");
+
+      // Trigger Push Notification & In-App Notification Toast
+      const refNum = assigned.referenceNumber || assigned.id;
+      const isEmergency = assigned.category === "emergency";
+      const notifTitle = isEmergency
+        ? "MMC Emergency Tyre Dispatched! 🚨"
+        : "MMC Tyre Booking Confirmed! 🛞";
+      const notifBody = `Booking #${refNum} (${isEmergency ? "Emergency Service" : "Tyre Replacement"}) is confirmed! Technician assigned.`;
+
+      triggerDevicePushNotification(notifTitle, notifBody);
+
+      setBookingNotificationPopup({
+        isOpen: true,
+        title: notifTitle,
+        message: notifBody,
+      });
     } catch (err) {
       console.error("Assignment error:", err);
       setCurrentStep("booking_confirmed");
@@ -240,7 +305,12 @@ export default function TyreAssistancePage() {
   const handleStartFresh = () => {
     setActiveBookingId(null);
     setCurrentBooking(null);
+    setSelectedCategory("emergency");
+    setSelectedAssistanceType("mobile_tyre");
     setCurrentStep("category");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mmc_active_tyre_booking_id");
+    }
   };
 
   return (
@@ -523,6 +593,34 @@ export default function TyreAssistancePage() {
           onClose={() => setIsDetailsModalOpen(false)}
           onCancelBooking={handleCancelBooking}
         />
+      )}
+
+      {/* Floating Push & In-App Notification Toast */}
+      {bookingNotificationPopup.isOpen && (
+        <div className="fixed top-6 right-6 z-50 max-w-sm w-full p-4 rounded-2xl bg-[#181410] border border-[#FAD293]/70 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/20 border border-[#FAD293]/40 flex items-center justify-center text-[#FAD293] flex-shrink-0">
+              <CheckCircle2 size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-white tracking-wide">
+                {bookingNotificationPopup.title}
+              </h4>
+              <p className="text-[11px] text-white/70 leading-relaxed mt-0.5">
+                {bookingNotificationPopup.message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setBookingNotificationPopup((prev) => ({ ...prev, isOpen: false }))
+              }
+              className="text-white/40 hover:text-white transition p-1 text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );

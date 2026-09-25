@@ -32,6 +32,7 @@ export const metadata: Metadata = {
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ToastProvider } from "@/components/ToastProvider";
+import FirebaseNotificationListener from "@/components/FirebaseNotificationListener";
 
 export default function RootLayout({
   children,
@@ -47,6 +48,7 @@ export default function RootLayout({
 
          <LocationPermission />
         <ToastProvider>
+          <FirebaseNotificationListener />
           <Navbar />
           <main className="flex-grow pt-20">{children}</main>
           <Footer />

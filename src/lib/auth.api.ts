@@ -118,4 +118,4 @@ export const verifyLoginOtp = async (data: { email: string; otp: string | number
 
 // Aliases for seamless backwards compatibility
 export const loginCustomer = verifyLoginOtp;
-export const sendOtp = sendLoginOtp;
+export const sendOtp = sendLoginOtp;

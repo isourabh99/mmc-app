@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth.api";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
+import { getFCMToken } from "@/lib/firebase";
 
 export default function LoginPage() {
   const { showToast } = useToast();

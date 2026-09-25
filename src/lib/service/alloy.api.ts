@@ -917,7 +917,14 @@ export const sendBookingRequest = async (
         params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
       );
     }
-    formData.append("car_image", params.car_image);
+    formData.append("is_terms_accepted", "1");
+    formData.append("is_provider_terms_accepted", "1");
+    formData.append("terms_and_conditions", "1");
+    formData.append("terms_accepted", "1");
+    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
+    if (fcmToken) {
+      formData.append("fcm_token", fcmToken);
+    }
 
     const response = await apiClient.post<SendBookingRequestResponse>(
       "/customer/booking/request/send",
@@ -931,6 +938,7 @@ export const sendBookingRequest = async (
     );
     return response.data;
   } else {
+    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
     const payload: Record<string, any> = {
       post_id: params.post_id,
       provider_id: params.provider_id,
@@ -946,6 +954,7 @@ export const sendBookingRequest = async (
       latitude: String(params.latitude || "22.66215"),
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
+      ...(fcmToken ? { fcm_token: fcmToken } : {}),
     };
 
     if (params.selected_slot_id) {
