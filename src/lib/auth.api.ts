@@ -118,4 +118,24 @@ export const verifyLoginOtp = async (data: { email: string; otp: string | number
 
 // Aliases for seamless backwards compatibility
 export const loginCustomer = verifyLoginOtp;
-export const sendOtp = sendLoginOtp;
+export const sendOtp = sendLoginOtp;
+
+/**
+ * Sync FCM device push token with backend customer session
+ * POST /customer/update-fcm-token
+ */
+export const updateFCMTokenToBackend = async (fcmToken: string) => {
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("fcm_token", fcmToken);
+    }
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) return null;
+    const response = await apiClient.post("/customer/update-fcm-token", {
+      fcm_token: fcmToken,
+    });
+    return response.data;
+  } catch (err) {
+    return null;
+  }
+};

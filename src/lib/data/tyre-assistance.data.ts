@@ -142,7 +142,7 @@ export const MAINTENANCE_TIPS: MaintenanceTip[] = [
 // Default Providers matching UI Screen 4 ("Test Company Ltd")
 export const DEFAULT_PROVIDERS: TyreProvider[] = [
   {
-    id: "prov-test-company",
+    id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
     name: "Test Company Ltd",
     companyName: "Test Company Ltd",
     rating: 0,

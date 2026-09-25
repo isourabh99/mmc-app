@@ -21,8 +21,8 @@ export interface BodyworkServicesResponse {
   };
 }
 
-// Fallback category ID if API call is in-flight or offline
-export const DEFAULT_BODYWORK_CATEGORY_ID = "e1fb2dae-c233-4b45-852b-8253373e06d7";
+// Bodywork Repairs category ID from backend
+export const DEFAULT_BODYWORK_CATEGORY_ID = "dbafef35-cfa4-4757-90f4-ddbf568d5d83";
 export const BOOKING_QUESTIONS_CATEGORY_ID = "675fb918-9d0c-4ee5-9a0a-904b42651033";
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
@@ -32,13 +32,13 @@ let cachedBodyworkCategoryId: string | null = null;
  * Dynamically resolves the Bodywork Category ID from /customer/category.
  */
 export const getBodyworkCategoryId = async (): Promise<string> => {
-  if (cachedBodyworkCategoryId) {
+  if (cachedBodyworkCategoryId && cachedBodyworkCategoryId === DEFAULT_BODYWORK_CATEGORY_ID) {
     return cachedBodyworkCategoryId;
   }
 
   if (typeof window !== "undefined") {
     const stored = localStorage.getItem("bodywork_category_id");
-    if (stored) {
+    if (stored && stored === DEFAULT_BODYWORK_CATEGORY_ID) {
       cachedBodyworkCategoryId = stored;
       return stored;
     }
@@ -56,7 +56,7 @@ export const getBodyworkCategoryId = async (): Promise<string> => {
     const categories = res.data?.content?.data || [];
     const bodyCat = categories.find((c) => {
       const n = c.name.toLowerCase();
-      return n.includes("bodywork") || n.includes("body work") || n.includes("dent") || n.includes("paint") || n.includes("repair");
+      return (n.includes("bodywork") || n.includes("body work")) && !n.includes("alloy");
     });
 
     if (bodyCat?.id) {
@@ -67,9 +67,13 @@ export const getBodyworkCategoryId = async (): Promise<string> => {
       return bodyCat.id;
     }
   } catch (err) {
-    console.warn("Could not fetch bodywork category dynamically, using fallback:", err);
+    // Graceful fallback
   }
 
+  cachedBodyworkCategoryId = DEFAULT_BODYWORK_CATEGORY_ID;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("bodywork_category_id", DEFAULT_BODYWORK_CATEGORY_ID);
+  }
   return DEFAULT_BODYWORK_CATEGORY_ID;
 };
 
@@ -849,7 +853,14 @@ export const sendBookingRequest = async (
       formData.append("payment_platform", params.payment_platform || "web");
       formData.append("callback", params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response");
     }
-    formData.append("car_image", params.car_image);
+    formData.append("is_terms_accepted", "1");
+    formData.append("is_provider_terms_accepted", "1");
+    formData.append("terms_and_conditions", "1");
+    formData.append("terms_accepted", "1");
+    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
+    if (fcmToken) {
+      formData.append("fcm_token", fcmToken);
+    }
 
     const response = await apiClient.post<SendBookingRequestResponse>(
       "/customer/booking/request/send",
@@ -863,6 +874,7 @@ export const sendBookingRequest = async (
     );
     return response.data;
   } else {
+    const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
     const payload: Record<string, any> = {
       post_id: params.post_id,
       provider_id: params.provider_id,
@@ -878,6 +890,7 @@ export const sendBookingRequest = async (
       latitude: String(params.latitude || "22.66215"),
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
+      ...(fcmToken ? { fcm_token: fcmToken } : {}),
     };
 
     if (params.selected_slot_id) payload.selected_slot_id = params.selected_slot_id;

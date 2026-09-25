@@ -48,7 +48,6 @@ export default function LocationPermission() {
             });
           }
         } catch (error: any) {
-          // Graceful handling without spamming console
           if (error?.response?.status !== 400) {
             console.warn(
               "Location/address sync:",

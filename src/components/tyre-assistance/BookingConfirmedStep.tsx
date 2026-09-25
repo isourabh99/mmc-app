@@ -70,8 +70,14 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
 
         <p className="text-xs sm:text-sm text-white/60 max-w-md mx-auto">
           Your request has been dispatched. Reference number:{" "}
-          <span className="text-[#FAD293] font-mono font-bold">
-            {booking.referenceNumber}
+          <span className="text-[#FAD293] font-mono font-bold text-sm sm:text-base">
+            {(typeof window !== "undefined" &&
+              booking.referenceNumber.startsWith("MMC-TYR-") &&
+              localStorage.getItem("last_tyre_booking_id"))
+              ? `#${localStorage.getItem("last_tyre_booking_id")}`
+              : booking.referenceNumber.startsWith("#")
+              ? booking.referenceNumber
+              : `#${booking.referenceNumber}`}
           </span>
         </p>
       </div>
@@ -179,7 +185,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
           onClick={onBack}
           className="py-4 px-6 rounded-2xl text-xs sm:text-sm font-semibold text-white/80 bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer text-center"
         >
-          Book Another Tyre Service
+          Book Another Tyre / Return to Start
         </button>
 
         <button

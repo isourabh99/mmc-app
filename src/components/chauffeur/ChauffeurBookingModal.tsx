@@ -221,6 +221,19 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         carName: `${bookingChauffeur.brand} ${bookingChauffeur.model}`,
       });
 
+      // Trigger native notification pop-up on user device
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("MMC Chauffeur Reservation Confirmed! 🎩", {
+            body: `Booking Ref #${bookingRef} confirmed for ${bookingChauffeur.brand} ${bookingChauffeur.model}!`,
+            icon: "/mmc-logo.png",
+            badge: "/mmc-logo.png",
+          });
+        } catch (notifErr) {
+          console.warn("Chauffeur notification error:", notifErr);
+        }
+      }
+
     } catch (err: any) {
       console.error("Booking API error:", err);
       const errorMsg =

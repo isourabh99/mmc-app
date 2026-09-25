@@ -22,6 +22,7 @@ import {
     User,
     Phone,
     ShieldCheck,
+    Bell,
 } from "lucide-react";
 import type {
     ProviderItem,
@@ -127,7 +128,24 @@ export default function BookingPageView({
             "CONFIRMED";
 
         return (
-            <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6 animate-fade-in space-y-6">
+            <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6 animate-fade-in space-y-6 relative">
+                {/* Floating Top In-App Notification Popup */}
+                <div className="fixed top-24 right-4 sm:right-8 z-[110] animate-bounce max-w-sm w-full bg-[#181512] border-2 border-[#E8AF66] p-4 rounded-2xl shadow-[0_10px_35px_rgba(232,175,102,0.4)] flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[#E8AF66]/20 border border-[#E8AF66] flex items-center justify-center text-[#E8AF66] shrink-0">
+                        <Bell className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-[#E8AF66]">
+                                Booking Notification
+                            </span>
+                            <span className="text-[9px] text-zinc-400">Just now</span>
+                        </div>
+                        <p className="text-xs font-bold text-white truncate">Booking #{refId} Reserved!</p>
+                        <p className="text-[11px] text-zinc-300 truncate">Specialist: {provider.company_name}</p>
+                    </div>
+                </div>
+
                 <div className="bg-[#141518] border-2 border-[#E8AF66] rounded-3xl p-8 sm:p-10 shadow-2xl text-center space-y-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-[#E8AF66]/10 rounded-full blur-3xl pointer-events-none" />
 
