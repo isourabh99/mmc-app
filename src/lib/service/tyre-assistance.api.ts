@@ -492,6 +492,11 @@ export function formatValidServiceSchedule(
   return `${yyyy}-${mm}-${dd} ${time}`;
 }
 
+export const isUuid = (id?: string | null): boolean => {
+  if (!id || typeof id !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id.trim());
+};
+
 export async function addTyreToCart(payload: {
   provider_id: string;
   service_id: string;
@@ -503,15 +508,22 @@ export async function addTyreToCart(payload: {
   guest_id?: string;
 }): Promise<any> {
   const zoneId =
-    (typeof window !== "undefined" && localStorage.getItem(ZONE_KEY)) ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId") ||
+        localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
 
   const guestId = payload.guest_id || getOrCreateGuestId();
+  const effectiveProviderId = isUuid(payload.provider_id)
+    ? payload.provider_id
+    : DEFAULT_PROVIDER_ID;
 
   try {
     const postBody: Record<string, any> = {
       guest_id: guestId,
-      provider_id: payload.provider_id || DEFAULT_PROVIDER_ID,
+      provider_id: effectiveProviderId,
       service_id: payload.service_id || DEFAULT_SERVICE_ID,
       category_id: payload.category_id || TYRE_CATEGORY_ID,
       quantity: payload.quantity || 1,
@@ -526,11 +538,16 @@ export async function addTyreToCart(payload: {
     }
 
     const response = await apiClient.post("/customer/cart/add", postBody, {
-      headers: { zoneId, zoneid: zoneId },
+      headers: {
+        zoneid: zoneId,
+        ZoneId: zoneId,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
     });
     return response.data;
-  } catch (error) {
-    console.warn("cart/add call note:", error);
+  } catch (error: any) {
+    console.warn("cart/add call note:", error?.response?.data || error?.message);
     return null;
   }
 }
@@ -564,7 +581,11 @@ export async function sendBookingRequestToBackend(
 ): Promise<any> {
   const zoneId =
     payload.zone_id ||
-    (typeof window !== "undefined" && localStorage.getItem(ZONE_KEY)) ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId") ||
+        localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
 
   const guestId =
@@ -583,42 +604,83 @@ export async function sendBookingRequestToBackend(
   if (!cleanPostcode) cleanPostcode = "12345";
 
   const fullAddress = payload.service_address || "Customer Location, UK";
+  const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
 
-  const formattedPayload: Record<string, any> = {
+  let effectiveNotes = payload.notes || "";
+  if (payload.service_location === "provider" || payload.service_location === "workshop") {
+    if (!effectiveNotes.includes("Workshop")) {
+      effectiveNotes = `[Service Mode: Workshop Bay Drop-Off]\n\n${effectiveNotes}`;
+    }
+  }
+
+  const effectiveProviderId = isUuid(payload.provider_id)
+    ? payload.provider_id!
+    : DEFAULT_PROVIDER_ID;
+
+  const postData: Record<string, any> = {
     ...payload,
     guest_id: guestId,
+    provider_id: effectiveProviderId,
+    payment_method: payload.payment_method || "cash_after_service",
     zone_id: zoneId,
+    service_schedule: payload.service_schedule,
     service_address_id: String(payload.service_address_id || "6"),
     service_address: fullAddress,
-    service_location: "customer",
+    service_location: "customer", // Demandium validator strictly requires 'customer'
+    booking_type: payload.booking_type || "normal",
+    car_registration_number: (payload.car_registration_number || "UK22-ABC-1234").trim().toUpperCase(),
+    car_model: payload.car_model || "Vehicle",
+    notes: effectiveNotes,
     postcode: cleanPostcode,
     latitude: String(payload.latitude || "22.66215"),
     longitude: String(payload.longitude || "75.9035"),
+    is_terms_accepted: 1,
+    is_provider_terms_accepted: 1,
+    terms_accepted: 1,
+    terms_and_conditions: 1,
+    ...(fcmToken ? { fcm_token: fcmToken } : {}),
   };
 
   try {
-    const postData: Record<string, any> = {
-      ...payload,
-      guest_id: guestId,
-      provider_id: payload.provider_id || DEFAULT_PROVIDER_ID,
-      is_terms_accepted: 1,
-      is_provider_terms_accepted: 1,
-      terms_accepted: 1,
-      terms_and_conditions: 1,
-      ...(fcmToken ? { fcm_token: fcmToken } : {}),
-    };
-
     const response = await apiClient.post(
       "/customer/booking/request/send",
-      formattedPayload,
+      postData,
       {
-        headers: { zoneId, zoneid: zoneId, ZoneId: zoneId },
+        headers: {
+          zoneid: zoneId,
+          ZoneId: zoneId,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       }
     );
-    return response.data;
-  } catch (error) {
-    console.warn("booking/request/send note:", error);
-    return null;
+    if (response?.data) return response.data;
+  } catch (error: any) {
+    console.warn("booking/request/send JSON attempt failed, trying multipart/form-data:", error?.response?.data || error?.message);
+    try {
+      const formData = new FormData();
+      Object.entries(postData).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          formData.append(k, String(v));
+        }
+      });
+      const fdResponse = await apiClient.post(
+        "/customer/booking/request/send",
+        formData,
+        {
+          headers: {
+            zoneid: zoneId,
+            ZoneId: zoneId,
+            "Content-Type": "multipart/form-data",
+            Accept: "application/json",
+          },
+        }
+      );
+      return fdResponse.data;
+    } catch (fdError: any) {
+      console.error("booking/request/send final failure:", fdError?.response?.data || fdError?.message);
+      return null;
+    }
   }
 }
 
@@ -713,7 +775,11 @@ export async function createAssistanceRequest(
   let provider: TyreProvider;
   if (matchedTyre?.provider) {
     provider = {
-      id: matchedTyre.provider_id || matchedTyre.provider.id || DEFAULT_PROVIDER_ID,
+      id: isUuid(matchedTyre.provider_id)
+        ? matchedTyre.provider_id
+        : isUuid(matchedTyre.provider.id)
+          ? matchedTyre.provider.id
+          : DEFAULT_PROVIDER_ID,
       name: matchedTyre.provider.company_name || "MMC Certified Tyre Partner",
       companyName: matchedTyre.provider.company_name || "MMC Certified Tyre Partner",
       rating: Number(matchedTyre.provider.avg_rating || 4.9),
@@ -826,9 +892,8 @@ export async function createAssistanceRequest(
   const id = `MMC-TYR-${randomNum}`;
   const now = new Date().toISOString();
 
-  const formattedDateTime = `${params.scheduledDate || "Today"}, ${
-    params.scheduledTimeSlot || "Immediate Dispatch"
-  }`;
+  const formattedDateTime = `${params.scheduledDate || "Today"}, ${params.scheduledTimeSlot || "Immediate Dispatch"
+    }`;
 
   const combinedNotes = [
     params.situation ? `Situation: ${params.situation}` : null,
@@ -900,9 +965,13 @@ export async function confirmQuoteAndAssignTechnician(
       : "puncture"
     : undefined;
 
+  const effectiveProviderId = isUuid(booking.provider?.id)
+    ? booking.provider.id
+    : DEFAULT_PROVIDER_ID;
+
   // 1. Ensure service is in the cart with is_terms_accepted: 1 before checkout
   await addTyreToCart({
-    provider_id: booking.provider?.id || DEFAULT_PROVIDER_ID,
+    provider_id: effectiveProviderId,
     service_id: serviceId,
     category_id: TYRE_CATEGORY_ID,
     variant_key: variantKey,
@@ -918,29 +987,30 @@ export async function confirmQuoteAndAssignTechnician(
   // 2. Real backend booking dispatch
   const response = await sendBookingRequestToBackend({
     guest_id: getOrCreateGuestId(),
-    provider_id: booking.provider?.id || DEFAULT_PROVIDER_ID,
+    provider_id: effectiveProviderId,
     payment_method: "cash_after_service",
     zone_id: zoneId,
     service_schedule: validSchedule,
     service_address_id: "6",
-    service_location:
-      booking.serviceLocationType === "workshop" ? "provider" : "customer",
+    service_address: booking.locationAddress,
+    service_location: "customer",
     booking_type: isEmergency ? "emergency" : "normal",
     car_registration_number: booking.vehicleRegistration,
     car_model: booking.vehicleMakeModel,
     notes: booking.notes || "Mobile tyre fitting required at location.",
+    postcode: booking.locationPostcode,
+    latitude: booking.latitude,
+    longitude: booking.longitude,
   });
 
-  const realBookingId =
-    response?.content?.readable_id ||
-    response?.content?.booking_id ||
-    response?.content?.id ||
-    response?.readable_id ||
-    response?.booking_id;
+  const realBookingId = extractReadableBookingId(response);
 
   if (realBookingId) {
     booking.referenceNumber = String(realBookingId);
     booking.id = String(realBookingId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("last_tyre_booking_id", String(realBookingId));
+    }
   }
 
   booking.status = "assigning_technician";
@@ -949,6 +1019,52 @@ export async function confirmQuoteAndAssignTechnician(
   setActiveBookingId(booking.id);
 
   return booking;
+}
+
+export function extractReadableBookingId(res: any): string | null {
+  if (!res) return null;
+
+  const payload =
+    res.data && (res.data.content !== undefined || res.data.response_code !== undefined)
+      ? res.data
+      : res;
+
+  const content =
+    payload.content !== undefined
+      ? payload.content
+      : payload.data !== undefined
+        ? payload.data
+        : payload;
+
+  // 1. If content is an array: [ { readable_id: 100040, ... } ]
+  if (Array.isArray(content) && content.length > 0) {
+    const item = content[0];
+    if (item?.readable_id) return String(item.readable_id);
+    if (item?.booking_id) return String(Array.isArray(item.booking_id) ? item.booking_id[0] : item.booking_id);
+    if (item?.id) return String(item.id);
+  }
+
+  // 2. If content is an object: { readable_id: 100040, ... }
+  if (content && typeof content === "object") {
+    if (content.readable_id) return String(content.readable_id);
+    if (Array.isArray(content.booking_id) && content.booking_id.length > 0) {
+      return String(content.booking_id[0]);
+    }
+    if (content.booking_id) return String(content.booking_id);
+    if (content.booking?.readable_id) return String(content.booking.readable_id);
+    if (content.booking?.id) return String(content.booking.id);
+    if (content.id) return String(content.id);
+  }
+
+  // 3. Check top-level properties
+  if (payload.readable_id) return String(payload.readable_id);
+  if (Array.isArray(payload.booking_id) && payload.booking_id.length > 0) {
+    return String(payload.booking_id[0]);
+  }
+  if (payload.booking_id) return String(payload.booking_id);
+  if (payload.id) return String(payload.id);
+
+  return null;
 }
 
 export async function assignTechnicianToBooking(
@@ -970,6 +1086,16 @@ export async function assignTechnicianToBooking(
   bookings[index].status = "confirmed";
   bookings[index].technician = technician;
   bookings[index].updatedAt = new Date().toISOString();
+
+  // If a real booking ID was saved in localStorage, ensure referenceNumber uses it!
+  const savedRealId =
+    typeof window !== "undefined"
+      ? localStorage.getItem("last_tyre_booking_id")
+      : null;
+  if (savedRealId && bookings[index].referenceNumber.startsWith("MMC-TYR-")) {
+    bookings[index].referenceNumber = savedRealId;
+    bookings[index].id = savedRealId;
+  }
 
   saveBookings(bookings);
   return bookings[index];
