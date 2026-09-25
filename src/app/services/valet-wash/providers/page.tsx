@@ -45,6 +45,7 @@ import {
 } from "@/lib/service/valet.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
+import { isAuthenticated } from "@/lib/auth.api";
 
 function ProvidersContent() {
   const router = useRouter();
@@ -149,6 +150,11 @@ function ProvidersContent() {
   }, [activeVariation, selectedProviderForBooking, activeServiceItem]);
 
   const handleOpenBookingModal = (provider: ValetProvider) => {
+    if (!isAuthenticated()) {
+      showToast("Please login to book a valet wash service.", "info");
+      router.push("/login");
+      return;
+    }
     setSelectedProviderForBooking(provider);
     setIsBookingSuccess(false);
 
@@ -329,6 +335,12 @@ function ProvidersContent() {
   const handleConfirmBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProviderForBooking) return;
+
+    if (!isAuthenticated()) {
+      showToast("Please login to book a valet wash service.", "info");
+      router.push("/login");
+      return;
+    }
 
     try {
       setIsBookingSubmitting(true);

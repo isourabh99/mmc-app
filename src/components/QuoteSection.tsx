@@ -1,6 +1,37 @@
 "use client";
 
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
+
 export default function QuoteSection() {
+  const router = useRouter();
+  const [serviceType, setServiceType] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated()) {
+      router.push("/login");
+      return;
+    }
+    if (serviceType === "chauffeur") {
+      router.push("/services/Chauffeur");
+    } else if (serviceType === "car-rental") {
+      router.push("/car-hire");
+    } else if (serviceType === "tyres") {
+      router.push("/tyre-fittings");
+    } else if (serviceType === "car-wash") {
+      router.push("/services/valet-wash");
+    } else if (serviceType === "alloy-refurbishment") {
+      router.push("/services/alloy-wheel");
+    } else if (serviceType === "denting-painting" || serviceType === "smart-repair") {
+      router.push("/services/bodywork");
+    } else if (serviceType === "modifications") {
+      router.push("/services/modification");
+    } else {
+      router.push("/services");
+    }
+  };
   return (
     <section
       id="get-quote"

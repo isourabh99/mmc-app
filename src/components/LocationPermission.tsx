@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-
 import {
   getAddressFromCoordinates,
   saveCustomerAddress,
@@ -9,8 +8,7 @@ import {
 
 export default function LocationPermission() {
   useEffect(() => {
-    if (!navigator.geolocation) {
-      console.error("Geolocation is not supported.");
+    if (typeof window === "undefined" || !navigator.geolocation) {
       return;
     }
 
@@ -19,27 +17,35 @@ export default function LocationPermission() {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
 
-
         try {
           const googleData = await getAddressFromCoordinates(
             latitude,
             longitude
           );
 
-          const address = googleData.address;
+          const address = googleData?.address;
+          if (address) {
+            localStorage.setItem("user_address", address);
+            localStorage.setItem("user_lat", String(latitude));
+            localStorage.setItem("user_lon", String(longitude));
+          }
 
-          const storedUser = localStorage.getItem("user");
-        const user = storedUser ? JSON.parse(storedUser) : null;
-
-          const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-          if (token) {
+          const token = localStorage.getItem("token");
+          if (token && address) {
             const storedUser = localStorage.getItem("user");
             const user = storedUser ? JSON.parse(storedUser) : null;
 
-          if (
-            response.status >= 200 &&
-            response.status < 300
-          ) {
+            await saveCustomerAddress({
+              lat: String(latitude),
+              lon: String(longitude),
+              address: address,
+              address_type: "service",
+              contact_person_name: user
+                ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                : "",
+              contact_person_number: user?.phone || "",
+              address_label: "Home",
+            });
           }
         } catch (error: any) {
           // Graceful handling without spamming console
@@ -52,10 +58,7 @@ export default function LocationPermission() {
         }
       },
       (error) => {
-        console.error(
-          "Location permission/error:",
-          error
-        );
+        // Location permission dismissed or timed out
       },
       {
         enableHighAccuracy: false,

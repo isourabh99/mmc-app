@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ShieldCheck,
   Fuel,
@@ -20,6 +21,7 @@ import {
   Car,
 } from "lucide-react";
 import { TyreItem } from "@/lib/data/tyres.data";
+import { isAuthenticated } from "@/lib/auth.api";
 
 interface TyreCardProps {
   tyre: TyreItem;
@@ -32,7 +34,9 @@ export const TyreCard: React.FC<TyreCardProps> = ({
   serviceMode,
   onBookNow,
 }) => {
+  const router = useRouter();
   const [quantity, setQuantity] = useState(2);
+
 
   const totalPrice = (tyre.unit_price + tyre.fitting_fee) * quantity;
 
@@ -246,8 +250,14 @@ export const TyreCard: React.FC<TyreCardProps> = ({
             <button
               type="button"
               id={`book-tyre-${tyre.id}`}
-              onClick={() => onBookNow(tyre, quantity)}
-              className="flex-1 sm:flex-initial py-2.5 px-4 rounded-xl font-extrabold text-black text-xs transition shadow-lg hover:brightness-110 active:scale-98 flex items-center justify-center gap-1.5"
+              onClick={() => {
+                if (!isAuthenticated()) {
+                  router.push("/login");
+                  return;
+                }
+                onBookNow(tyre, quantity);
+              }}
+              className="flex-1 sm:flex-initial py-2.5 px-4 rounded-xl font-extrabold text-black text-xs transition shadow-lg hover:brightness-110 active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
               style={{
                 background: "linear-gradient(135deg, #FAD293, #CEA46B)",
               }}

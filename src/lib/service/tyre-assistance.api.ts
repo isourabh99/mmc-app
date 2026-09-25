@@ -345,6 +345,7 @@ export interface SendBookingRequestPayload {
   zone_id: string;
   service_schedule: string;
   service_address_id?: string | number;
+  service_address?: string;
   service_location: "customer" | "provider" | string;
   booking_type: string;
   car_registration_number: string;
@@ -352,6 +353,9 @@ export interface SendBookingRequestPayload {
   car_manufacture_year?: string;
   car_color?: string;
   notes?: string;
+  postcode?: string;
+  latitude?: number | string;
+  longitude?: number | string;
 }
 
 export async function sendBookingRequestToBackend(
@@ -362,12 +366,41 @@ export async function sendBookingRequestToBackend(
     (typeof window !== "undefined" && localStorage.getItem(ZONE_KEY)) ||
     DEFAULT_ZONE_ID;
 
+  const guestId =
+    payload.guest_id ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("guest_id") ||
+        localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid"))) ||
+    zoneId;
+
+  let cleanPostcode = (payload.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "12345";
+
+  const fullAddress = payload.service_address || "Customer Location, UK";
+
+  const formattedPayload: Record<string, any> = {
+    ...payload,
+    guest_id: guestId,
+    zone_id: zoneId,
+    service_address_id: String(payload.service_address_id || "6"),
+    service_address: fullAddress,
+    service_location: "customer",
+    postcode: cleanPostcode,
+    latitude: String(payload.latitude || "22.66215"),
+    longitude: String(payload.longitude || "75.9035"),
+  };
+
   try {
     const response = await apiClient.post(
       "/customer/booking/request/send",
-      payload,
+      formattedPayload,
       {
-        headers: { zoneId, zoneid: zoneId },
+        headers: { zoneId, zoneid: zoneId, ZoneId: zoneId },
       }
     );
     return response.data;

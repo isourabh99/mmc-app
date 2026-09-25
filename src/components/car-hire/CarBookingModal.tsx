@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
 import {
   X,
   Calendar,
@@ -43,6 +45,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const router = useRouter();
   const { showToast } = useToast();
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -124,6 +127,13 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!isAuthenticated()) {
+      showToast("Please login to book a vehicle.", "info");
+      onClose();
+      router.push("/login");
+      return;
+    }
+
     if (!agreeTerms) {
       showToast(
         "Please agree to the vehicle hire terms & deposit conditions before continuing.",
@@ -149,8 +159,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
         pickup_type: pickupType, // "delivery" | "self"
         delivery_address: deliveryAddress.trim(),
         delivery_latitude: deliveryCoords.latitude,
-        delivery_longitude: deliveryCoords.longitude,
-        payment_method: paymentMethod, // "cash_after_service"
+        payment_method: "cash_after_service",
         description: description.trim() || undefined,
       };
 

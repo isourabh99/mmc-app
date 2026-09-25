@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useMemo, MouseEvent, TouchEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
 import {
     Sparkles,
     Shield,
@@ -87,6 +89,7 @@ import ModificationQuotesView from "./components/ModificationQuotesView";
 import ModificationBookingView from "./components/ModificationBookingView";
 
 export default function ModificationPage() {
+    const router = useRouter();
     const { showToast } = useToast();
 
     // ---------------------------------------------------------------------------
@@ -265,7 +268,13 @@ export default function ModificationPage() {
     };
 
     // Start Quotation Request - Opens the Quotation Form for user to review & fill details
-    const handleStartMultiQuote = (targetProviderIds?: string[]) => {
+    const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
+        if (!isAuthenticated()) {
+            showToast("Please login to request a quotation.", "info");
+            router.push("/login");
+            return;
+        }
+
         const ids = (targetProviderIds && targetProviderIds.length > 0)
             ? targetProviderIds
             : selectedProviderIdsForQuote;
@@ -675,6 +684,15 @@ export default function ModificationPage() {
     };
 
     const handleBookBidOffer = (bid: PostBidItem) => {
+        if (!isAuthenticated()) {
+            showToast("Please login to proceed with booking", "info");
+            router.push("/login");
+            return;
+        }
+        if (!bid.provider) {
+            showToast("Provider information is missing for this quote", "error");
+            return;
+        }
         const post = selectedPostForBids;
         const targetPostId = bid.post_id || post?.id || "";
 
@@ -734,6 +752,12 @@ export default function ModificationPage() {
 
     // Final submit via selected payment method
     const handleExecuteBooking = async () => {
+        if (!isAuthenticated()) {
+            showToast("Please login to complete your booking", "info");
+            router.push("/login");
+            return;
+        }
+
         if (!bookingProviderModal) return;
 
         const effectivePostId = bookingPostId.trim();

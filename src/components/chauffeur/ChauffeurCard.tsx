@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Star,
@@ -9,24 +11,28 @@ import {
   MapPin,
   CreditCard,
   Snowflake,
+  ArrowRight,
 } from "lucide-react";
 import type { Chauffeur } from "@/lib/service/chauffeur.api";
+import { isAuthenticated } from "@/lib/auth.api";
 
 interface ChauffeurCardProps {
   chauffeur: Chauffeur;
-  isWishlisted: boolean;
-  onToggleWishlist: (id: number) => void;
-  onViewDetails: (chauffeur: Chauffeur) => void;
-  onBookNow: (chauffeur: Chauffeur) => void;
+  isWishlisted?: boolean;
+  onToggleWishlist?: (id: number) => void;
+  onViewDetails?: (chauffeur: Chauffeur) => void;
+  onBookNow?: (chauffeur: Chauffeur) => void;
 }
 
 export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
   chauffeur,
-  isWishlisted,
+  isWishlisted = false,
   onToggleWishlist,
   onViewDetails,
   onBookNow,
 }) => {
+  const router = useRouter();
+
   const carPhoto =
     chauffeur.image_full_paths?.[0] ||
     (chauffeur.images?.[0] && !chauffeur.images[0].endsWith(".png")
@@ -48,34 +54,38 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
     <div className="group flex flex-col rounded-2xl border border-[#2c2219] bg-[#16120e] p-3.5 transition hover:border-[#d9a85f]/60 hover:shadow-xl hover:shadow-[#e7bd78]/5">
       {/* Top Vehicle Image Banner */}
       <div className="relative h-44 w-full overflow-hidden rounded-xl bg-black">
-        <img
-          src={carPhoto}
-          alt={`${chauffeur.brand || ""} ${chauffeur.model || ""}`}
-          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src =
-              "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80";
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+        <Link href={`/services/Chauffeur/${chauffeur.id}`} className="block h-full w-full">
+          <img
+            src={carPhoto}
+            alt={`${chauffeur.brand || ""} ${chauffeur.model || ""}`}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80";
+            }}
+          />
+        </Link>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
 
         {/* Wishlist Heart Icon */}
-        <button
-          type="button"
-          onClick={() => onToggleWishlist(chauffeur.id)}
-          aria-label="Add to wishlist"
-          className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 border border-white/15 text-white/80 backdrop-blur-md transition hover:scale-110 hover:text-red-500"
-        >
-          <Heart
-            size={14}
-            className={
-              isWishlisted ? "fill-red-500 text-red-500" : "text-white/80"
-            }
-          />
-        </button>
+        {onToggleWishlist && (
+          <button
+            type="button"
+            onClick={() => onToggleWishlist(chauffeur.id)}
+            aria-label="Add to wishlist"
+            className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 border border-white/15 text-white/80 backdrop-blur-md transition hover:scale-110 hover:text-red-500 z-10"
+          >
+            <Heart
+              size={14}
+              className={
+                isWishlisted ? "fill-red-500 text-red-500" : "text-white/80"
+              }
+            />
+          </button>
+        )}
 
         {/* Image Carousel Dots & Capacity Indicator */}
-        <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 text-[10px] text-white/70 backdrop-blur-md bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
+        <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 text-[10px] text-white/70 backdrop-blur-md bg-black/40 px-2 py-0.5 rounded-full border border-white/10 pointer-events-none">
           <Users size={11} className="text-[#e7bd78]" />
           <span>{chauffeur.seating_capacity || 4}</span>
           <span className="text-white/30">•</span>
@@ -86,7 +96,7 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
         </div>
 
         {/* Status Green Badge */}
-        <div className="absolute bottom-2.5 right-2.5 rounded-md border border-[#1e542a] bg-[#102919] px-2 py-0.5 text-[10px] font-semibold text-[#34d399] backdrop-blur-md">
+        <div className="absolute bottom-2.5 right-2.5 rounded-md border border-[#1e542a] bg-[#102919] px-2 py-0.5 text-[10px] font-semibold text-[#34d399] backdrop-blur-md pointer-events-none">
           {chauffeur.status === 1 ? "Available" : "Unavailable"}
         </div>
       </div>
@@ -94,9 +104,11 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
       {/* Brand, Model & Hourly Rate */}
       <div className="mt-3 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-bold text-white group-hover:text-[#e7bd78] transition">
-            {chauffeur.brand || "Chauffeur Vehicle"}
-          </h3>
+          <Link href={`/services/Chauffeur/${chauffeur.id}`}>
+            <h3 className="text-sm font-bold text-white group-hover:text-[#e7bd78] transition">
+              {chauffeur.brand || "Chauffeur Vehicle"}
+            </h3>
+          </Link>
           <p className="text-xs text-white/45">{chauffeur.model || ""}</p>
         </div>
 
@@ -176,29 +188,37 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onViewDetails(chauffeur)}
+        <Link
+          href={`/services/Chauffeur/${chauffeur.id}`}
           className="text-[11px] text-[#e7bd78] hover:underline"
         >
           View Profile &rsaquo;
-        </button>
+        </Link>
       </div>
 
-      {/* Action Buttons: View Details & Book Now */}
+      {/* Action Buttons: View Details & Book Now Navigate to Details Page */}
       <div className="mt-auto grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => onViewDetails(chauffeur)}
+        <Link
+          href={`/services/Chauffeur/${chauffeur.id}`}
           className="rounded-xl border border-[#33271d] bg-[#1a140f] py-2 text-xs font-semibold text-white transition hover:bg-[#241c15] text-center"
         >
           View Details
-        </button>
+        </Link>
 
         <button
           type="button"
-          onClick={() => onBookNow(chauffeur)}
-          className="rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] py-2 text-xs font-bold text-[#140e0a] transition hover:brightness-105 text-center shadow-md shadow-[#e7bd78]/10"
+          onClick={() => {
+            if (!isAuthenticated()) {
+              router.push("/login");
+              return;
+            }
+            if (onBookNow) {
+              onBookNow(chauffeur);
+            } else {
+              router.push(`/services/Chauffeur/${chauffeur.id}`);
+            }
+          }}
+          className="rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] py-2 text-xs font-bold text-[#140e0a] transition hover:brightness-105 text-center shadow-md shadow-[#e7bd78]/10 cursor-pointer"
         >
           Book Now
         </button>
@@ -206,3 +226,4 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
     </div>
   );
 };
+

@@ -18,7 +18,6 @@ import {
   type ChauffeurSearchContent,
 } from "@/lib/service/chauffeur.api";
 import { ChauffeurCard } from "@/components/chauffeur/ChauffeurCard";
-import { ChauffeurBookingModal } from "@/components/chauffeur/ChauffeurBookingModal";
 
 const PAGE_LIMIT = 10;
 
@@ -66,10 +65,6 @@ export default function ChauffeurServicePage() {
 
   // Wishlist
   const [wishlist, setWishlist] = useState<number[]>([]);
-
-  // Selected Chauffeur for Booking & Details Modal
-  const [bookingChauffeur, setBookingChauffeur] = useState<Chauffeur | null>(null);
-  const [detailsChauffeur, setDetailsChauffeur] = useState<Chauffeur | null>(null);
 
   // Fetch initial Chauffeurs list
   const fetchInitialChauffeurs = async (typeId: number, date: string) => {
@@ -542,8 +537,6 @@ export default function ChauffeurServicePage() {
                       chauffeur={chauffeur}
                       isWishlisted={wishlist.includes(chauffeur.id)}
                       onToggleWishlist={toggleWishlist}
-                      onViewDetails={(c) => setDetailsChauffeur(c)}
-                      onBookNow={(c) => setBookingChauffeur(c)}
                     />
                   ))}
                 </div>
@@ -568,20 +561,6 @@ export default function ChauffeurServicePage() {
             )}
           </div>
         </div>
-
-        {/* =========================================================================
-            4. MODAL COMPONENT FOR BOOKING AND DETAILS
-        ========================================================================== */}
-        <ChauffeurBookingModal
-          bookingChauffeur={bookingChauffeur}
-          detailsChauffeur={detailsChauffeur}
-          onCloseBooking={() => setBookingChauffeur(null)}
-          onCloseDetails={() => setDetailsChauffeur(null)}
-          onProceedFromDetailsToBooking={(c) => {
-            setDetailsChauffeur(null);
-            setBookingChauffeur(c);
-          }}
-        />
       </div>
     </div>
   );

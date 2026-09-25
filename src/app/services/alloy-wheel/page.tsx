@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useMemo, MouseEvent, TouchEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
 import {
     Sparkles,
     Shield,
@@ -84,6 +86,7 @@ import QuotesPageView from "./components/QuotesPageView";
 import BookingPageView from "./components/BookingPageView";
 
 export default function AlloyWheelPage() {
+    const router = useRouter();
     const { showToast } = useToast();
 
     // ---------------------------------------------------------------------------
@@ -256,7 +259,13 @@ export default function AlloyWheelPage() {
     };
 
     // Start Quotation Request - Opens the Quotation Form for user to review & fill details
-    const handleStartMultiQuote = (targetProviderIds?: string[]) => {
+    const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
+        if (!isAuthenticated()) {
+                showToast("Please login to request a quotation.", "info");
+                router.push("/login");
+                return;
+            }
+
             const ids = (targetProviderIds && targetProviderIds.length > 0)
                 ? targetProviderIds
                 : selectedProviderIdsForQuote;
@@ -665,6 +674,12 @@ export default function AlloyWheelPage() {
     };
 
     const handleBookBidOffer = (bid: PostBidItem) => {
+        if (!isAuthenticated()) {
+            showToast("Please login to book this quotation offer.", "info");
+            router.push("/login");
+            return;
+        }
+
         const priceNum =
             typeof bid.offered_price === "number"
                 ? bid.offered_price
@@ -676,7 +691,7 @@ export default function AlloyWheelPage() {
             company_name: bid.provider.company_name,
             company_phone: bid.provider.company_phone,
             company_address: bid.provider.company_address,
-            company_email: bid.provider.company_email,
+            company_email: (bid.provider as any)?.company_email || "",
             logo: bid.provider.logo,
             logo_full_path: bid.provider.logo_full_path,
             contact_person_name: bid.provider.contact_person_name,
@@ -716,6 +731,13 @@ export default function AlloyWheelPage() {
     // Step 1: Validate and open the Payment Method Bottom Sheet
     const handleProceedToPayment = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
+
+        if (!isAuthenticated()) {
+            showToast("Please login to proceed with booking.", "info");
+            router.push("/login");
+            return;
+        }
+
         if (!bookingProviderModal) return;
 
         const effectivePostId = bookingPostId.trim();
@@ -898,8 +920,8 @@ export default function AlloyWheelPage() {
 
     const handleCopyPostId = (id: string) => {
         navigator.clipboard.writeText(id);
-        setCopiedPostId(true);
-        setTimeout(() => setCopiedPostId(false), 2000);
+        setCopiedAnyId(id);
+        setTimeout(() => setCopiedAnyId(null), 2000);
     };
 
     const handleOpenQuoteForm = (provider: ProviderItem) => {

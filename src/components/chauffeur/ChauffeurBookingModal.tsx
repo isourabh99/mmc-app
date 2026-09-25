@@ -33,6 +33,7 @@ import {
   type ChauffeurBookingCoordinates,
 } from "@/lib/service/chauffeur.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
+import { isAuthenticated } from "@/lib/auth.api";
 
 interface ChauffeurBookingModalProps {
   bookingChauffeur: Chauffeur | null;
@@ -66,7 +67,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
   );
   const [pickupTime, setPickupTime] = useState("10:00 AM");
   const [dropTime, setDropTime] = useState("10:00 PM");
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "digital" | "cash">("stripe");
+  const [paymentMethod, setPaymentMethod] = useState("cash_after_service");
   const [bookingNote, setBookingNote] = useState("");
   
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -144,6 +145,11 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
 
   // Confirm Ride Submission
   const handleConfirmRide = async () => {
+    if (!isAuthenticated()) {
+      onCloseBooking();
+      router.push("/login");
+      return;
+    }
     if (!bookingChauffeur) return;
     if (!pickupLocation.trim()) {
       setBookingError("Please specify a pickup location.");
@@ -188,7 +194,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         pickup_coordinates: finalPickupCoords,
         drop_location: dropLocation,
         drop_coordinates: finalDropCoords,
-        payment_method: paymentMethod,
+        payment_method: "cash_after_service",
         callback: callbackUrl,
         note: bookingNote,
       };
@@ -646,6 +652,11 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  if (!isAuthenticated()) {
+                    onCloseDetails();
+                    router.push("/login");
+                    return;
+                  }
                   const target = detailsChauffeur;
                   onProceedFromDetailsToBooking(target);
                 }}
