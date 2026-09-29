@@ -143,12 +143,17 @@ export interface ProviderSearchResponse {
 export interface AddValetToCartPayload {
   service_id: string;
   provider_id: string;
+  zone_id?: string;
+  guest_id?: string;
   variant_key?: string;
   quantity?: number;
   is_terms_accepted?: number;
 }
 
 export interface SendValetBookingPayload {
+  service_id?: string;
+  provider_id?: string;
+  variant_key?: string;
   payment_method?: string;
   zone_id?: string;
   guest_id?: string;
@@ -469,6 +474,30 @@ export const sendValetBookingRequest = async (
         localStorage.getItem("zoneid"))) ||
     activeZone;
 
+  // Safely resolve FCM token from browser localStorage
+  const fcmToken =
+    typeof window !== "undefined"
+      ? localStorage.getItem("fcm_token") ||
+        localStorage.getItem("firebase_token")
+      : null;
+
+  // STEP 1: Ensure cart has the item if service_id and provider_id are provided
+  if (payload.service_id && payload.provider_id) {
+    try {
+      await addValetToCart({
+        service_id: payload.service_id,
+        provider_id: payload.provider_id,
+        variant_key: payload.variant_key || "basic",
+        quantity: 1,
+        is_terms_accepted: 1,
+        zone_id: activeZone,
+        guest_id: guestId,
+      });
+    } catch (cartErr) {
+      console.warn("addValetToCart before booking request:", cartErr);
+    }
+  }
+
   let cleanPostcode = (payload.postcode || "").trim();
   if (cleanPostcode.length > 15) {
     const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
@@ -485,11 +514,10 @@ export const sendValetBookingRequest = async (
         guest_id: guestId,
         payment_method: payload.payment_method || "cash_after_service",
         zone_id: activeZone,
-        guest_id: guestId,
         service_schedule: payload.service_schedule,
         service_address_id: String(payload.service_address_id || "6"),
         service_address: fullAddress,
-        service_location: "customer",
+        service_location: payload.service_location || "customer",
         booking_type: "normal",
         selected_slot_id:
           payload.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",

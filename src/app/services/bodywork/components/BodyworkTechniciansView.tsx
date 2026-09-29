@@ -443,11 +443,12 @@ export default function BodyworkTechniciansView({
                                     <div className="flex items-center justify-between gap-3 mt-4 pt-3.5 border-t border-zinc-800/80 bg-[#121316] -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 rounded-b-3xl">
                                         <button
                                             type="button"
+                                            disabled={submittingMultiQuote}
                                             onClick={() => onOpenQuoteForm(provider)}
-                                            className="w-full bg-[#E8AF66] hover:bg-[#d89e55] active:scale-95 text-zinc-950 font-black text-xs sm:text-sm py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#E8AF66]/20 cursor-pointer uppercase tracking-wider"
+                                            className="w-full bg-[#E8AF66] hover:bg-[#d89e55] active:scale-95 text-zinc-950 font-black text-xs sm:text-sm py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#E8AF66]/20 cursor-pointer uppercase tracking-wider disabled:opacity-50"
                                         >
-                                            <span>Request Direct Quote</span>
-                                            <ArrowRight className="w-4 h-4" />
+                                            <span>Send Quotation Request</span>
+                                            <Send className="w-3.5 h-3.5" />
                                         </button>
                                     </div>
                                 </div>

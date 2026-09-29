@@ -364,14 +364,8 @@ export default function TyreAssistancePage() {
             </span>
           </div>
 
-          {/* Right Zone ID & Helpline */}
+          {/* Right Helpline */}
           <div className="flex items-center space-x-3">
-            {activeZoneId && (
-              <div className="text-[11px] text-[#FAD293] bg-[#FAD293]/10 border border-[#FAD293]/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono">
-                <MapPin size={11} />
-                <span>Zone: {activeZoneId.slice(0, 8)}...</span>
-              </div>
-            )}
             <a
               href="tel:+448001234567"
               className="text-xs text-white/80 hover:text-white bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-1.5 transition"

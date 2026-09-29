@@ -207,7 +207,7 @@ export default function CarHireBookingPage() {
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
           try {
             new Notification("MMC Reservation Confirmed! 🚗", {
-              body: `Your hire request for ${car.brand} (Ref: ${res?.content?.booking_id || res?.content?.id || "Confirmed"}) has been placed!`,
+              body: `Your hire request for ${car?.brand || "your vehicle"} (Ref: ${res?.content?.booking_id || res?.content?.id || "Confirmed"}) has been placed!`,
               icon: "/mmc-logo.png",
               badge: "/mmc-logo.png",
             });

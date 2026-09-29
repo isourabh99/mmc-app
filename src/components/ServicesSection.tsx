@@ -347,6 +347,19 @@ export default function ServicesSection() {
                 nameLower.includes("breakdown")
               ) {
                 targetHref = "/emergency-assistance";
+              } else if (nameLower.includes("alloy")) {
+                targetHref = "/services/alloy-wheel";
+              } else if (nameLower.includes("modifi")) {
+                targetHref = "/services/modification";
+              } else if (nameLower.includes("mechanic") || nameLower.includes("mechanical")) {
+                targetHref = "/services/mechanical";
+              } else if (
+                nameLower.includes("body") ||
+                nameLower.includes("repair") ||
+                nameLower.includes("dent") ||
+                nameLower.includes("paint")
+              ) {
+                targetHref = "/services/bodywork";
               }
 
               return (

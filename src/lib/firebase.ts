@@ -94,22 +94,44 @@ export const onForegroundMessage = async (callback: (payload: any) => void) => {
 };
 
 /**
- * Reliably displays a native device push notification using Service Worker or Notification API.
+ * Reliably displays a native device push notification using Window Notification API or Service Worker.
  */
-export const triggerDevicePushNotification = async (title: string, body: string) => {
+export const triggerDevicePushNotification = async (title: string, body: string, url?: string) => {
   if (typeof window === "undefined") return;
 
-  // 1. Try Service Worker showNotification first (Standard for PWA / Web Push)
+  const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
+
+  // 1. Direct Window Notification API first (Instant on desktop & laptops)
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const notif = new Notification(title, {
+        body,
+        icon: "/mmc-logo.png",
+        badge: "/mmc-logo.png",
+      });
+      notif.onclick = () => {
+        window.focus();
+        if (targetUrl) window.location.href = targetUrl;
+      };
+      return;
+    } catch (e) {
+      // Fallback for Android Chrome where new Notification() without SW may throw
+    }
+  }
+
+  // 2. Try Service Worker with 500ms timeout so it NEVER hangs indefinitely
   if ("serviceWorker" in navigator) {
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const swReadyPromise = navigator.serviceWorker.ready;
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
+      const reg = await Promise.race([swReadyPromise, timeoutPromise]);
       if (reg && "showNotification" in reg) {
         await reg.showNotification(title, {
           body,
           icon: "/mmc-logo.png",
           badge: "/mmc-logo.png",
           vibrate: [200, 100, 200],
-          data: { url: window.location.href },
+          data: { url: targetUrl, click_action: targetUrl },
         } as any);
         return;
       }
@@ -118,28 +140,21 @@ export const triggerDevicePushNotification = async (title: string, body: string)
     }
   }
 
-  // 2. Direct Window Notification API
-  if ("Notification" in window) {
-    if (Notification.permission === "granted") {
-      try {
-        new Notification(title, {
+  // 3. Proactively request permission if default (not denied)
+  if ("Notification" in window && Notification.permission === "default") {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm === "granted") {
+        const notif = new Notification(title, {
           body,
           icon: "/mmc-logo.png",
           badge: "/mmc-logo.png",
         });
-      } catch {}
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission().then((perm) => {
-        if (perm === "granted") {
-          try {
-            new Notification(title, {
-              body,
-              icon: "/mmc-logo.png",
-              badge: "/mmc-logo.png",
-            });
-          } catch {}
-        }
-      });
-    }
+        notif.onclick = () => {
+          window.focus();
+          if (targetUrl) window.location.href = targetUrl;
+        };
+      }
+    } catch {}
   }
 };

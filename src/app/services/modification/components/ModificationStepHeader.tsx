@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronRight, FileText, Lock } from "lucide-react";
 
 export type ActiveView =
@@ -36,7 +37,9 @@ export default function ModificationStepHeader({
   hasActiveBooking = false,
   onBlockedNavigate,
 }: ModificationStepHeaderProps) {
-  const handleBack = () => {
+    const router = useRouter();
+
+    const handleBack = () => {
     if (activeView === "request_quote") {
       onNavigate("technicians");
     } else if (activeView === "provider_profile") {
@@ -44,7 +47,7 @@ export default function ModificationStepHeader({
     } else if (activeView === "booking") {
       onNavigate("quotes");
     } else if (activeView === "quotes") {
-      onNavigate("technicians");
+      router.push("/");
     } else {
       onNavigate("landing");
     }
@@ -128,28 +131,42 @@ export default function ModificationStepHeader({
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] uppercase tracking-wider text-[#E8AF66] font-extrabold block">
-                Modification Service
+                {activeView === "quotes" ? "My Quotes & Offers" : "Modification Service"}
               </span>
-              {vehicleReg && (
+              {vehicleReg && activeView !== "quotes" && (
                 <span className="bg-zinc-800/90 text-zinc-300 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-700 uppercase">
                   {vehicleReg}
                 </span>
               )}
-              {postcode && (
+              {postcode && activeView !== "quotes" && (
                 <span className="text-zinc-500 text-[11px] truncate max-w-[150px] hidden sm:inline">
                   • {postcode}
                 </span>
               )}
             </div>
             <h1 className="text-sm sm:text-base md:text-lg font-extrabold text-white leading-tight truncate">
-              {getViewTitle()}
+              {activeView === "quotes" ? "Quotation Requests & Live Bids" : getViewTitle()}
             </h1>
           </div>
         </div>
 
-        {/* Center: Step indicators with step progression guards */}
-        <nav
-          aria-label="Booking flow steps"
+        {/* Center: Step indicators - Hidden on quotes view */}
+        {activeView === "quotes" ? (
+          <div className="flex items-center gap-2 shrink-0">
+            {activeBidsCount > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-400 bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/25 uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>{activeBidsCount} Live Bid{activeBidsCount > 1 ? "s" : ""} Received</span>
+              </span>
+            ) : myQuotesCount > 0 ? (
+              <span className="text-xs font-bold text-zinc-400 bg-zinc-800/80 px-3 py-1.5 rounded-full border border-zinc-700/60 uppercase tracking-wider">
+                {myQuotesCount} Active Request{myQuotesCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <nav
+            aria-label="Booking flow steps"
           className="flex items-center gap-1 sm:gap-1.5 text-[11px] font-bold overflow-x-auto py-1 no-scrollbar shrink-0"
         >
           {/* Step 1: Details */}
@@ -217,9 +234,7 @@ export default function ModificationStepHeader({
             type="button"
             onClick={() => handleStepClick("quotes")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
-              activeView === "quotes"
-                ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20 cursor-pointer"
-                : canAccessStep3
+              canAccessStep3
                 ? "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 cursor-pointer"
                 : "text-zinc-600 opacity-40 cursor-not-allowed border border-transparent"
             }`}
@@ -230,11 +245,7 @@ export default function ModificationStepHeader({
             }
           >
             <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
-                activeView === "quotes"
-                  ? "bg-black/30 text-zinc-950"
-                  : "bg-zinc-800 text-zinc-400"
-              }`}
+              className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-extrabold bg-zinc-800 text-zinc-400"
             >
               3
             </span>
@@ -284,27 +295,7 @@ export default function ModificationStepHeader({
             {!canAccessStep4 && <Lock className="w-2.5 h-2.5 text-zinc-500" />}
           </button>
         </nav>
-
-        {/* Right: Quick Quotation Hub button */}
-        <div className="hidden lg:flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleStepClick("quotes")}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
-              canAccessStep3
-                ? "bg-zinc-900 border-zinc-700/80 hover:border-[#E8AF66] text-zinc-200 hover:text-white cursor-pointer"
-                : "bg-zinc-900/50 border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-[#E8AF66]" />
-            <span>My Quotes</span>
-            {myQuotesCount > 0 && (
-              <span className="bg-[#E8AF66] text-zinc-950 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold">
-                {myQuotesCount}
-              </span>
-            )}
-          </button>
-        </div>
+        )}
       </div>
     </header>
   );

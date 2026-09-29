@@ -122,11 +122,6 @@ export const TyreSearchWidget: React.FC<TyreSearchWidgetProps> = ({
           </div>
         </div>
 
-        {/* GPS Zone Badge (from API response) */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-500/30 text-emerald-400 text-xs font-medium self-start sm:self-auto backdrop-blur-md">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Zone Active: <strong className="text-white font-mono">London Central (a1614dbe)</strong></span>
-        </div>
       </div>
 
       {/* Mode Switcher Tabs */}

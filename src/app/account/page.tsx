@@ -21,6 +21,7 @@ import { BookingsTab } from "@/components/account/BookingsTab";
 import { ProfileTab } from "@/components/account/ProfileTab";
 import { AddressesTab } from "@/components/account/AddressesTab";
 import { SecurityTab } from "@/components/account/SecurityTab";
+import { QuotesTab } from "@/components/account/QuotesTab";
 
 function AccountContent() {
   const searchParams = useSearchParams();
@@ -28,6 +29,8 @@ function AccountContent() {
   const { showToast } = useToast();
 
   const tabParam = searchParams.get("tab") || "bookings";
+  const bookingIdParam = searchParams.get("bookingId");
+  const statusParam = searchParams.get("status");
   const [activeTab, setActiveTab] = useState<string>(tabParam);
 
   // User Profile State
@@ -131,7 +134,7 @@ function AccountContent() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                  VIP Account Dashboard
+                  Account Dashboard
                 </h1>
                 <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#10b981]/10 border border-[#10b981]/30 px-2 py-0.5 text-[10px] font-semibold text-[#10b981]">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse" />
@@ -173,6 +176,8 @@ function AccountContent() {
                 loading={bookingsLoading}
                 error={bookingsError}
                 onRefresh={fetchBookings}
+                initialBookingId={bookingIdParam}
+                initialStatus={statusParam}
               />
             )}
 
@@ -186,6 +191,8 @@ function AccountContent() {
             {activeTab === "addresses" && (
               <AddressesTab user={user} onAddressUpdated={fetchUserProfile} />
             )}
+
+            {activeTab === "quotes" && <QuotesTab />}
 
             {activeTab === "security" && <SecurityTab />}
           </main>

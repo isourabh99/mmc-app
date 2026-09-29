@@ -69,6 +69,19 @@ export default function QuotesPageView({
 
     return (
         <div className="max-w-6xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8 animate-fade-in space-y-6">
+            {/* Quotation Requests Showcase Banner */}
+            <div className="relative w-full overflow-hidden rounded-3xl border border-zinc-800 aspect-[1672/941] shadow-2xl group">
+                <Image
+                    src="/qoutes.png"
+                    alt="MMC Quotation Requests & Specialist Offers"
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 1200px"
+                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.01]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#141518]/60 via-transparent to-transparent pointer-events-none" />
+            </div>
+
             {/* Top Bar */}
             <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">

@@ -1,16 +1,7 @@
-// import type { NextConfig } from "next";
-
-// const nextConfig: NextConfig = {
-//   output: "export",
-// };
-
-// export default nextConfig;
-
-
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // output: "export",
+  output: "standalone",
+  distDir: "out",
 
   images: {
     remotePatterns: [

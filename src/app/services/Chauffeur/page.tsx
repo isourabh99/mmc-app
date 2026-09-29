@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   Car,
@@ -285,10 +286,13 @@ export default function ChauffeurServicePage() {
           {/* Right Hero Image Card */}
           <div className="order-1 lg:order-2">
             <div className="relative overflow-hidden rounded-[26px] border border-[#d9a85f]/60 bg-black shadow-2xl">
-              <div className="h-[260px] sm:h-[320px] lg:h-[340px]">
-                <img
-                  src="https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1400&q=85"
-                  alt="Professional chauffeur Range Rover"
+              <div className="h-[260px] sm:h-[320px] lg:h-[340px] relative">
+                <Image
+                  src="/chauffer.jpeg"
+                  alt="Professional chauffeur luxury vehicle"
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 700px"
                   className="h-full w-full object-cover"
                 />
               </div>

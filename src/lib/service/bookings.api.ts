@@ -9,6 +9,7 @@ export type BookingServiceType =
   | "bodywork"
   | "alloy"
   | "modification"
+  | "mechanical"
   | "service";
 
 export type BookingStatusType =
@@ -22,6 +23,7 @@ export type BookingStatusType =
 export interface UnifiedBookingItem {
   id: string;
   rawId: string | number;
+  readableId?: string | number;
   serviceType: BookingServiceType;
   serviceCategoryName: string;
   serviceTitle: string;
@@ -75,22 +77,137 @@ export interface FetchBookingsParams {
   booking_type?: string;
 }
 
+// Known Category IDs in MMC platform
+export const MMC_CATEGORY_IDS = {
+  VALET: "812a149b-2ccd-43ef-901a-a665f2ff78ea",
+  TYRE: "5d98d5c9-509e-4ab7-859d-806174384e27",
+  EMERGENCY: "860791e7-ed6d-46ca-992c-1348dd4c42ad",
+};
+
 /**
- * Helper to detect service type from category, subcategory, detail, or notes
+ * Save booking metadata to browser localStorage for instant 100% accurate synchronization
+ */
+export function saveBookingMeta(
+  bookingId: string | number,
+  meta: {
+    serviceTitle?: string;
+    serviceCategoryName?: string;
+    serviceType?: BookingServiceType;
+    variant?: string;
+    vehicleModel?: string;
+    vehicleReg?: string;
+    providerName?: string;
+    price?: number;
+    isPaid?: boolean;
+    paymentStatus?: string;
+  }
+) {
+  if (typeof window === "undefined" || !bookingId) return;
+  try {
+    const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
+    existing[String(bookingId).toLowerCase().trim()] = meta;
+    localStorage.setItem("mmc_bookings_metadata", JSON.stringify(existing));
+  } catch (e) {
+    console.warn("Could not save booking metadata:", e);
+  }
+}
+
+/**
+ * Retrieve saved booking metadata by ID
+ */
+export function getBookingMeta(bookingId: string | number) {
+  if (typeof window === "undefined" || !bookingId) return null;
+  try {
+    const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
+    const key = String(bookingId).toLowerCase().trim();
+    return existing[key] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if an ID is a fake client-generated dummy timestamp ID (e.g. AW-1790680687259, BW-..., MOD-...)
+ */
+export function isFakeDummyId(id: any): boolean {
+  if (!id) return true;
+  const str = String(id).trim();
+  if (/^(AW|BW|MOD|MMC|tmp|temp)[-_]\d{8,}/i.test(str)) return true;
+  return false;
+}
+
+/**
+ * Persist a confirmed service booking into local storage so that page refreshes never lose it
+ */
+export function saveConfirmedBooking(booking: any) {
+  if (typeof window === "undefined" || !booking) return;
+  const bId = String(booking.id || booking.rawId || booking.booking_id || "").toLowerCase().trim();
+  if (!bId || isFakeDummyId(bId)) {
+    return; // Never persist fake client-generated dummy IDs
+  }
+  try {
+    const raw = localStorage.getItem("mmc_confirmed_bookings");
+    const list: any[] = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex(
+      (b) => String(b.id || b.rawId || b.booking_id || "").toLowerCase().trim() === bId
+    );
+    if (index >= 0) {
+      list[index] = { ...list[index], ...booking };
+    } else {
+      list.unshift(booking);
+    }
+    const cleaned = list.filter((b) => b && !isFakeDummyId(b.id || b.rawId || b.booking_id));
+    localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(cleaned.slice(0, 50)));
+    window.dispatchEvent(new CustomEvent("mmc-bookings-updated"));
+  } catch (err) {
+    console.warn("Could not save confirmed booking locally:", err);
+  }
+}
+
+/**
+ * Helper to detect service type from category, subcategory, detail, provider, or notes
  */
 function detectServiceType(item: any): BookingServiceType {
+  // Check local metadata store first
+  const localId = String(item.id || item.booking_id || item.readable_id || "").toLowerCase().trim();
+  if (localId) {
+    const meta = getBookingMeta(localId);
+    if (meta?.serviceType) return meta.serviceType;
+  }
+
+  // 1. Chauffeur detection
   if (item.car || item.car_id || item.car_bookings || item.pickup_type || item.drop_location) {
     return "chauffeur";
   }
 
+  // 2. Category ID matching
+  const catId = String(item.category_id || item.sub_category_id || item.category?.id || "");
+  if (catId === MMC_CATEGORY_IDS.VALET) return "valet";
+  if (catId === MMC_CATEGORY_IDS.TYRE) return "tyre";
+  if (catId === MMC_CATEGORY_IDS.EMERGENCY) return "emergency";
+
+  // 3. Provider company name matching (e.g. TATA ROHIT is a Valet provider)
+  const provName = String(item.provider?.company_name || item.provider_name || "").toLowerCase();
+  if (provName.includes("rohit") || provName.includes("valet") || provName.includes("wash") || provName.includes("detailing")) {
+    return "valet";
+  }
+
+  // 4. Text scanning across ALL available text fields
   const textToScan = [
     item.category?.name,
     item.sub_category?.name,
+    item.special_conditions,
+    item.damage_description,
     item.notes,
+    item.instructions,
     item.service_location,
     item.booking_type,
+    item.service_name,
+    item.service_title,
     item.detail?.[0]?.service_name,
     item.detail?.[0]?.service?.name,
+    item.detail?.[0]?.variant_key,
+    provName,
   ]
     .filter(Boolean)
     .join(" ")
@@ -109,7 +226,14 @@ function detectServiceType(item: any): BookingServiceType {
   ) {
     return "emergency";
   }
-  if (textToScan.includes("valet") || textToScan.includes("wash") || textToScan.includes("detailing") || textToScan.includes("clean")) {
+  if (
+    textToScan.includes("valet") ||
+    textToScan.includes("wash") ||
+    textToScan.includes("detailing") ||
+    textToScan.includes("clean") ||
+    textToScan.includes("prime") ||
+    textToScan.includes("basic")
+  ) {
     return "valet";
   }
   if (textToScan.includes("bodywork") || textToScan.includes("dent") || textToScan.includes("paint") || textToScan.includes("scratch")) {
@@ -120,6 +244,9 @@ function detectServiceType(item: any): BookingServiceType {
   }
   if (textToScan.includes("mod") || textToScan.includes("remap") || textToScan.includes("tuning") || textToScan.includes("exhaust") || textToScan.includes("wrap")) {
     return "modification";
+  }
+  if (textToScan.includes("mechanic") || textToScan.includes("engine") || textToScan.includes("brake") || textToScan.includes("suspension") || textToScan.includes("diagnostic")) {
+    return "mechanical";
   }
 
   return "service";
@@ -133,7 +260,7 @@ export function getServiceCategoryLabel(type: BookingServiceType): string {
     case "chauffeur":
       return "Chauffeur Fleet";
     case "tyre":
-      return "Tyre Fitting & Replacement";
+      return "Tyre Fitting & Repair";
     case "emergency":
       return "Emergency Roadside";
     case "valet":
@@ -145,7 +272,7 @@ export function getServiceCategoryLabel(type: BookingServiceType): string {
     case "modification":
       return "Modifications & Tuning";
     default:
-      return "General MMC Service";
+      return "Vehicle Maintenance";
   }
 }
 
@@ -292,27 +419,99 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
 
   if (isChauffeur && raw.car) {
     serviceTitle = `${raw.car.brand || "Luxury Chauffeur"} ${raw.car.model || ""}`.trim();
-    serviceSubtitle = raw.car.registration_number ? `Reg: ${raw.car.registration_number}` : (raw.car.car_type?.name || "VIP Car");
+    serviceSubtitle = raw.car.registration_number ? `Reg: ${raw.car.registration_number}` : (raw.car.car_type?.name || " Car");
     image =
       raw.car.image_full_paths?.[0] ||
       (Array.isArray(raw.car.images) && raw.car.images[0]
         ? `https://mmcclub.co.uk/storage/app/public/car/${raw.car.images[0]}`
         : "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80");
-  } else if (raw.detail && Array.isArray(raw.detail) && raw.detail.length > 0) {
-    const firstDetail = raw.detail[0];
-    serviceTitle = firstDetail.service_name || firstDetail.service?.name || raw.sub_category?.name || raw.category?.name || "MMC Service";
-    serviceSubtitle = raw.car_model ? `${raw.car_model} (${raw.car_registration_number || ""})` : cleanReadableText(raw.notes);
-    image = firstDetail.service?.thumbnail_full_path || firstDetail.service?.cover_image_full_path || raw.category?.image_full_path || "";
   } else {
-    serviceTitle =
-      raw.serviceTitle ||
-      raw.serviceName ||
-      raw.sub_category?.name ||
-      raw.category?.name ||
-      (raw.car_model ? `Service for ${raw.car_model}` : "") ||
-      getServiceCategoryLabel(serviceType);
-    serviceSubtitle = cleanReadableText(raw.notes) || (raw.car_registration_number ? `Vehicle: ${raw.car_registration_number}` : "");
-    image = raw.category?.image_full_path || raw.image || "";
+    // 1. Check local metadata store
+    const meta = getBookingMeta(idStr) || getBookingMeta(String(rawId));
+    if (meta?.serviceTitle) {
+      serviceTitle = meta.serviceTitle;
+    }
+
+    // 2. Check detail items array from backend
+    if (!serviceTitle && raw.detail && Array.isArray(raw.detail) && raw.detail.length > 0) {
+      const firstDetail = raw.detail[0];
+      const name = firstDetail.service_name || firstDetail.service?.name;
+      if (name) {
+        serviceTitle = firstDetail.variant_key && !name.toLowerCase().includes(firstDetail.variant_key.toLowerCase())
+          ? `${name} (${firstDetail.variant_key})`
+          : name;
+      }
+      image = firstDetail.service?.thumbnail_full_path || firstDetail.service?.cover_image_full_path || "";
+    }
+
+    // 3. Check direct API fields
+    if (!serviceTitle) {
+      serviceTitle =
+        raw.service_name ||
+        raw.service?.name ||
+        raw.serviceTitle ||
+        raw.serviceName ||
+        raw.sub_category?.name ||
+        raw.category?.name;
+    }
+
+    // 4. Extract from special_conditions, notes, damage_description tags
+    if (!serviceTitle) {
+      const combinedText = [
+        raw.special_conditions,
+        raw.notes,
+        raw.damage_description,
+        raw.instructions,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const tagMatch = combinedText.match(/\[(?:Valet|Service|Package):\s*([^\]]+)\]/i);
+      if (tagMatch && tagMatch[1]) {
+        serviceTitle = tagMatch[1].trim();
+      } else if (/full exterior valet/i.test(combinedText)) {
+        serviceTitle = "Full Exterior Valet";
+      } else if (/interior valet/i.test(combinedText)) {
+        serviceTitle = "Full Interior Valet";
+      } else if (/full valet/i.test(combinedText)) {
+        serviceTitle = "Full Valet & Detailing";
+      } else if (/express wash|mini valet/i.test(combinedText)) {
+        serviceTitle = "Express Valet Wash";
+      } else if (/tyre fitting|tire fitting/i.test(combinedText)) {
+        serviceTitle = "Mobile Tyre Fitting";
+      } else if (/puncture repair/i.test(combinedText)) {
+        serviceTitle = "Tyre Puncture Repair";
+      } else if (/roadside|recovery|towing/i.test(combinedText)) {
+        serviceTitle = "Emergency Roadside Assistance";
+      } else if (/alloy/i.test(combinedText)) {
+        serviceTitle = "Alloy Wheel Refurbishment";
+      } else if (/bodywork|scratch|dent|paint/i.test(combinedText)) {
+        serviceTitle = "Bodywork & Paint Repair";
+      }
+    }
+
+    // 5. Provider-based intelligence (e.g. TATA ROHIT is a Valet provider)
+    if (!serviceTitle && raw.provider?.company_name) {
+      const pName = raw.provider.company_name.toLowerCase();
+      if (pName.includes("rohit") || pName.includes("valet") || pName.includes("wash") || pName.includes("detail")) {
+        serviceTitle = "Full Exterior Valet";
+      }
+    }
+
+    // 6. Category-based fallback (Never use generic car model string as service title)
+    if (!serviceTitle) {
+      serviceTitle = getServiceCategoryLabel(serviceType);
+    }
+
+    // Clean Subtitle
+    let rawNotesStr = cleanReadableText(raw.notes || raw.instructions || raw.special_conditions);
+    if (rawNotesStr.startsWith("[")) {
+      rawNotesStr = rawNotesStr.replace(/^\[[^\]]+\]\s*/, "");
+    }
+    serviceSubtitle = rawNotesStr || (raw.car_registration_number ? `Vehicle: ${raw.car_registration_number}` : "");
+    if (!image) {
+      image = raw.category?.image_full_path || raw.image || "";
+    }
   }
 
   // Schedule dates
@@ -549,36 +748,14 @@ export async function fetchAllCustomerBookings(
     console.warn("Could not fetch /customer/booking (car):", error);
   }
 
-  // 3. Read local assistance bookings if stored in browser
+  // 3. Purge all dummy client-side localStorage booking entries so ONLY real backend API bookings are displayed
   if (typeof window !== "undefined") {
     try {
-      const localTyre = localStorage.getItem("mmc_tyre_assistance_bookings");
-      if (localTyre) {
-        const parsed = JSON.parse(localTyre);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((b) => {
-            const norm = normalizeBooking(b, "tyre");
-            if (!unifiedMap.has(norm.id)) {
-              unifiedMap.set(norm.id, norm);
-            }
-          });
-        }
-      }
-
-      const localEmergency = localStorage.getItem("mmc_emergency_assistance_bookings");
-      if (localEmergency) {
-        const parsed = JSON.parse(localEmergency);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((b) => {
-            const norm = normalizeBooking(b, "emergency");
-            if (!unifiedMap.has(norm.id)) {
-              unifiedMap.set(norm.id, norm);
-            }
-          });
-        }
-      }
+      localStorage.removeItem("mmc_confirmed_bookings");
+      localStorage.removeItem("mmc_tyre_assistance_bookings");
+      localStorage.removeItem("mmc_emergency_assistance_bookings");
     } catch (e) {
-      console.warn("Error reading local bookings:", e);
+      console.warn("Error cleaning local dummy bookings:", e);
     }
   }
 
