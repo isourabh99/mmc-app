@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 const steps = [
   {
     number: "01",
@@ -148,8 +150,8 @@ export default function HowItWorksSection() {
 
         {/* CTA */}
         <div className="text-center mt-14">
-          <a
-            href="#get-started"
+          <Link
+            href="/services"
             id="how-it-works-cta"
             className="inline-flex items-center gap-3 px-8 py-4 rounded-full font-semibold text-black text-sm transition-all duration-300 hover:shadow-[0_0_30px_rgba(250,210,147,0.35)] hover:scale-105"
             style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
@@ -158,7 +160,7 @@ export default function HowItWorksSection() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
-          </a>
+          </Link>
         </div>
       </div>
     </section>

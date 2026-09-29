@@ -1,26 +1,71 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { getCategories, Category } from "@/lib/service/categories.api";
 
-const footerLinks = {
-  Services: [
-    "Smart Repair",
-    "Denting & Painting",
-    "Modifications",
-    "Tyres",
-    "Car Wash",
-    "Chauffeur",
-    "Car Rental",
-  ],
-  Company: ["About Us", "How It Works", "Careers", "Press", "Blog"],
-  Support: [
-    "Help Centre",
-    "Contact Us",
-    "Dispute Resolution",
-    "Safety Policy",
-    "Provider Support",
-  ],
-  Legal: ["Privacy Policy", "Terms of Service", "Cookie Policy", "Accessibility"],
+const mapCategoryToHref = (name: string): string => {
+  const lower = name.toLowerCase();
+  if (lower.includes("valet") || lower.includes("wash") || lower.includes("detailing")) {
+    return "/services/valet-wash";
+  }
+  if (lower.includes("tyre") || lower.includes("tire")) {
+    return "/tyre-fittings";
+  }
+  if (lower.includes("chauffeur")) {
+    return "/services/Chauffeur";
+  }
+  if (lower.includes("hire") || lower.includes("rental")) {
+    return "/car-hire";
+  }
+  if (lower.includes("alloy")) {
+    return "/services/alloy-wheel";
+  }
+  if (lower.includes("modifi")) {
+    return "/services/modification";
+  }
+  if (lower.includes("mechanic") || lower.includes("mechanical")) {
+    return "/services/mechanical";
+  }
+  if (lower.includes("body") || lower.includes("repair") || lower.includes("paint") || lower.includes("dent")) {
+    return "/services/bodywork";
+  }
+  return `/services/${encodeURIComponent(name)}`;
 };
+
+const defaultServices = [
+  { label: "Smart Repair", href: "/services/bodywork" },
+  { label: "Mechanical Repair", href: "/services/mechanical" },
+  { label: "Modifications", href: "/services/modification" },
+  { label: "Tyre Assistance", href: "/tyre-fittings" },
+  { label: "Valet & Detailing", href: "/services/valet-wash" },
+  { label: "Chauffeur Service", href: "/services/Chauffeur" },
+  { label: "Alloy Wheel Refurbishment", href: "/services/alloy-wheel" },
+  { label: "Car Rental", href: "/car-hire" },
+];
+
+const companyLinks = [
+  { label: "About Us", href: "/about" },
+  { label: "How It Works", href: "/how-it-works" },
+  { label: "Careers", href: "/about" },
+  { label: "Press", href: "/about" },
+  { label: "Blog", href: "/how-it-works" },
+];
+
+const supportLinks = [
+  { label: "Help Centre", href: "/faqs" },
+  { label: "Contact Us", href: "/contact" },
+  { label: "Dispute Resolution", href: "/contact" },
+  { label: "Safety Policy", href: "/faqs" },
+  { label: "Provider Support", href: "/contact" },
+];
+
+const legalLinks = [
+  { label: "Privacy Policy", href: "/faqs" },
+  { label: "Terms of Service", href: "/faqs" },
+  { label: "Cookie Policy", href: "/faqs" },
+  { label: "Accessibility", href: "/faqs" },
+];
 
 const socials = [
   {
@@ -62,6 +107,40 @@ const socials = [
 ];
 
 export default function Footer() {
+  const [services, setServices] = useState<{ label: string; href: string }[]>(defaultServices);
+
+  useEffect(() => {
+    let isMounted = true;
+    getCategories(20, 1)
+      .then((res) => {
+        if (!isMounted) return;
+        const apiCats = res?.content?.data
+          ?.filter((c) => c.is_active === 1 && !c.name.toLowerCase().includes("emergency"))
+          ?.map((c) => ({
+            label: c.name,
+            href: mapCategoryToHref(c.name),
+          }));
+
+        if (apiCats && apiCats.length > 0) {
+          setServices(apiCats);
+        }
+      })
+      .catch((err) => {
+        console.warn("Footer: Could not load categories from backend", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const footerSections = [
+    { title: "Services", links: services },
+    { title: "Company", links: companyLinks },
+    { title: "Support", links: supportLinks },
+    { title: "Legal", links: legalLinks },
+  ];
+
   return (
     <footer
       id="contact"
@@ -85,21 +164,13 @@ export default function Footer() {
           <div className="sm:col-span-2 lg:col-span-2 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <div>
-                  <span
-                    className="text-2xl font-extrabold tracking-wider"
-                    style={{
-                      background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                    }}
-                  >
-                    MMC
-                  </span>
-                  <p className="text-[10px] text-white/40 tracking-widest uppercase -mt-0.5">
-                    Motor Market Connect
-                  </p>
-                </div>
+                <Image
+                  src="/mmc-logo.jpg"
+                  alt="Motor Market Connect"
+                  width={360}
+                  height={160}
+                  className="h-16 w-auto object-contain object-left"
+                />
               </div>
 
               <p className="text-sm text-white/50 leading-relaxed mb-6 max-w-sm">
@@ -150,8 +221,8 @@ export default function Footer() {
           </div>
 
           {/* Link Categories (Each takes exactly 1 column out of 6 on lg screens) */}
-          {Object.entries(footerLinks).map(([category, links]) => (
-            <div key={category} className="lg:col-span-1">
+          {footerSections.map((section) => (
+            <div key={section.title} className="lg:col-span-1">
               <h4
                 className="text-xs font-bold mb-4 tracking-widest uppercase"
                 style={{
@@ -160,17 +231,17 @@ export default function Footer() {
                   WebkitTextFillColor: "transparent",
                 }}
               >
-                {category}
+                {section.title}
               </h4>
               <ul className="space-y-2.5">
-                {links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
+                {section.links.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
                       className="text-sm text-white/50 hover:text-[#FAD293] transition-colors duration-200 block py-0.5"
                     >
-                      {link}
-                    </a>
+                      {link.label}
+                    </Link>
                   </li>
                 ))}
               </ul>

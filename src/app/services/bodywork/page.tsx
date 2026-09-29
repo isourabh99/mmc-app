@@ -20,6 +20,8 @@ import {
     Users,
     ShieldCheck,
     Check,
+    HelpCircle,
+    ArrowLeft,
     Phone,
     Mail,
     Calendar,
@@ -53,6 +55,7 @@ import {
     getBodyworkServices,
     type BodyworkServiceItem,
     searchBodyworkProviders,
+    FALLBACK_BODYWORK_PROVIDERS,
     getProviderDetails,
     type ProviderItem,
     type ProviderDetailsContent,
@@ -72,12 +75,13 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/bodywork.api";
+import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 import BodyworkStepHeader, { type ActiveView } from "./components/BodyworkStepHeader";
 import BodyworkTechniciansView from "./components/BodyworkTechniciansView";
-import BodyworkQuoteFormView from "./components/BodyworkQuoteFormView";
 import BodyworkProviderProfileView from "./components/BodyworkProviderProfileView";
 import BodyworkQuotesView from "./components/BodyworkQuotesView";
 import BodyworkBookingView from "./components/BodyworkBookingView";
+import { searchPlaces, type LocationSuggestion } from "@/lib/service/location.service";
 
 export default function BodyworkPage() {
     const router = useRouter();
@@ -106,8 +110,10 @@ export default function BodyworkPage() {
         if (typeof window === "undefined") return;
         const params = new URLSearchParams(window.location.search);
         const view = params.get("view");
-        if (view && ["landing", "technicians", "request_quote", "quotes", "provider_profile", "booking"].includes(view)) {
+        if (view && ["landing", "technicians", "quotes", "provider_profile", "booking"].includes(view)) {
             setActiveView(view as ActiveView);
+        } else if (view === "request_quote") {
+            setActiveView("technicians");
         }
 
         const handlePopState = () => {
@@ -124,6 +130,7 @@ export default function BodyworkPage() {
     // ---------------------------------------------------------------------------
     const [postcode, setPostcode] = useState("");
     const [regNo, setRegNo] = useState("");
+    const [carModel, setCarModel] = useState("");
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
     const [showServicesDropdown, setShowServicesDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -134,83 +141,161 @@ export default function BodyworkPage() {
     // Google Maps Places Autocomplete & Geocoding State
     const GOOGLE_MAPS_KEY = "AIzaSyCzqspc3fl1LtnypCGowb6VmBVzf9zXXn4";
     const postcodeRef = useRef<HTMLInputElement>(null);
+    const locationContainerRef = useRef<HTMLDivElement>(null);
+    const locationDebounceTimer = useRef<NodeJS.Timeout | null>(null);
     const [userLat, setUserLat] = useState<string>("");
     const [userLon, setUserLon] = useState<string>("");
+    const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+    const [searchingLocation, setSearchingLocation] = useState(false);
+    const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
-    // Media upload state for Hero Form
-    const [heroCarImage, setHeroCarImage] = useState<File | null>(null);
-    const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
+    // Multiple Media upload state for Hero Form
+    const [heroCarImages, setHeroCarImages] = useState<File[]>([]);
+    const [heroImagePreviews, setHeroImagePreviews] = useState<string[]>([]);
+
+    // Step 1 vs Step 2 Damage Assessment State
+    const [heroStep, setHeroStep] = useState<1 | 2>(1);
+    const [assessmentQuestions, setAssessmentQuestions] = useState<BookingQuestionItem[]>([]);
+    const [loadingAssessmentQuestions, setLoadingAssessmentQuestions] = useState(false);
+    const [assessmentAnswers, setAssessmentAnswers] = useState<Record<string, any>>({});
+    const [step2DamageDesc, setStep2DamageDesc] = useState("");
+    const [assessmentScheduleDate, setAssessmentScheduleDate] = useState(() => new Date().toISOString().split("T")[0]);
+    const [assessmentScheduleTime, setAssessmentScheduleTime] = useState("17:45");
+
+    const formattedSchedulePreview = useMemo(() => {
+        try {
+            if (!assessmentScheduleDate) return "28 Sep 2026, 05:45 PM";
+            const [year, month, day] = assessmentScheduleDate.split("-").map(Number);
+            const d = new Date(year, month - 1, day);
+            const dayStr = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+            if (assessmentScheduleTime) {
+                const [h, m] = assessmentScheduleTime.split(":");
+                const hour = parseInt(h, 10);
+                const ampm = hour >= 12 ? "PM" : "AM";
+                const h12 = hour % 12 || 12;
+                const timeStr = `${String(h12).padStart(2, "0")}:${m} ${ampm}`;
+                return `${dayStr}, ${timeStr}`;
+            }
+            return dayStr;
+        } catch {
+            return `${assessmentScheduleDate} ${assessmentScheduleTime || ""}`;
+        }
+    }, [assessmentScheduleDate, assessmentScheduleTime]);
+
+    // Load Dynamic Assessment Questions from backend API:
+    // GET /customer/booking/provider/questions?category_id=dbafef35-cfa4-4757-90f4-ddbf568d5d83
+    useEffect(() => {
+        setLoadingAssessmentQuestions(true);
+        getProviderQuestions(undefined, DEFAULT_BODYWORK_CATEGORY_ID)
+            .then((res) => {
+                if (res && res.length > 0) {
+                    setAssessmentQuestions(res);
+                }
+            })
+            .catch((err) => console.warn("Failed to load bodywork questions:", err))
+            .finally(() => setLoadingAssessmentQuestions(false));
+    }, []);
+
+    const toggleMultiAnswer = (questionId: string, option: string) => {
+        setAssessmentAnswers((prev) => {
+            const currentList: string[] = Array.isArray(prev[questionId]) ? prev[questionId] : [];
+            const nextList = currentList.includes(option)
+                ? currentList.filter((item) => item !== option)
+                : [...currentList, option];
+            return { ...prev, [questionId]: nextList };
+        });
+    };
+
+    const setSingleAnswer = (questionId: string, option: string) => {
+        setAssessmentAnswers((prev) => ({
+            ...prev,
+            [questionId]: prev[questionId] === option ? "" : option,
+        }));
+    };
 
     // Multi-provider selection for RFQ quotation request
     const [selectedProviderIdsForQuote, setSelectedProviderIdsForQuote] = useState<string[]>([]);
     const [submittingMultiQuote, setSubmittingMultiQuote] = useState(false);
 
-    // Initialize Google Maps Places Autocomplete
+    // Initialize zone configuration & click outside for location search
     useEffect(() => {
         if (typeof window === "undefined") return;
 
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
         localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
-        const storedLat = localStorage.getItem("user_lat");
-        const storedLon = localStorage.getItem("user_lon");
-        if (storedLat) setUserLat(storedLat);
-        if (storedLon) setUserLon(storedLon);
-
-        const initAutocomplete = () => {
-            if (!postcodeRef.current || !(window as any).google?.maps?.places) return;
-            try {
-                const autocomplete = new (window as any).google.maps.places.Autocomplete(
-                    postcodeRef.current,
-                    {
-                        types: ["geocode", "establishment"],
-                        fields: ["geometry", "formatted_address", "name"],
-                    }
-                );
-
-                autocomplete.addListener("place_changed", () => {
-                    const place = autocomplete.getPlace();
-                    if (place && place.geometry && place.geometry.location) {
-                        const lat = String(place.geometry.location.lat());
-                        const lon = String(place.geometry.location.lng());
-                        const addressText = place.formatted_address || place.name || "";
-                        setPostcode(addressText);
-                        setUserLat(lat);
-                        setUserLon(lon);
-                        localStorage.setItem("user_lat", lat);
-                        localStorage.setItem("user_lon", lon);
-                        localStorage.setItem("user_address", addressText);
-                    }
-                });
-            } catch (err) {
-                console.error("Google Places Autocomplete error:", err);
+        const handleClickOutsideLocation = (e: globalThis.MouseEvent) => {
+            if (locationContainerRef.current && !locationContainerRef.current.contains(e.target as Node)) {
+                setShowLocationDropdown(false);
             }
         };
-
-        if ((window as any).google?.maps?.places) {
-            initAutocomplete();
-        } else {
-            const existingScript = document.getElementById("google-maps-places-script");
-            if (!existingScript) {
-                const script = document.createElement("script");
-                script.id = "google-maps-places-script";
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places`;
-                script.async = true;
-                script.defer = true;
-                script.onload = () => initAutocomplete();
-                document.head.appendChild(script);
-            } else {
-                existingScript.addEventListener("load", initAutocomplete);
-            }
-        }
+        document.addEventListener("mousedown", handleClickOutsideLocation);
+        return () => document.removeEventListener("mousedown", handleClickOutsideLocation);
     }, []);
 
-    const handleHeroImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setHeroCarImage(file);
-            setHeroImagePreview(URL.createObjectURL(file));
+    const handleLocationChange = (text: string) => {
+        setPostcode(text);
+        if (locationDebounceTimer.current) {
+            clearTimeout(locationDebounceTimer.current);
         }
+        if (text.trim().length < 2) {
+            setLocationSuggestions([]);
+            setShowLocationDropdown(false);
+            setSearchingLocation(false);
+            return;
+        }
+
+        setSearchingLocation(true);
+        setShowLocationDropdown(true);
+        locationDebounceTimer.current = setTimeout(async () => {
+            try {
+                const results = await searchPlaces(text);
+                setLocationSuggestions(results || []);
+            } catch (err) {
+                console.error("Location search error:", err);
+            } finally {
+                setSearchingLocation(false);
+            }
+        }, 200);
+    };
+
+    const handleSelectLocation = (s: LocationSuggestion) => {
+        const fullAddress = s.address && s.address !== s.name ? `${s.name}, ${s.address}` : (s.address || s.name);
+        setPostcode(fullAddress);
+        setUserLat(String(s.latitude));
+        setUserLon(String(s.longitude));
+        setShowLocationDropdown(false);
+        setLocationSuggestions([]);
+        if (typeof window !== "undefined") {
+            localStorage.setItem("user_lat", String(s.latitude));
+            localStorage.setItem("user_lon", String(s.longitude));
+            localStorage.setItem("user_address", fullAddress);
+        }
+    };
+
+    const handleHeroImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files ? Array.from(e.target.files) : [];
+        if (files.length > 0) {
+            setHeroCarImages((prev) => [...prev, ...files]);
+            const newPreviews = files.map((file) => URL.createObjectURL(file));
+            setHeroImagePreviews((prev) => [...prev, ...newPreviews]);
+        }
+        e.target.value = "";
+    };
+
+    const removeHeroImage = (index: number) => {
+        setHeroCarImages((prev) => prev.filter((_, i) => i !== index));
+        setHeroImagePreviews((prev) => {
+            const toRemove = prev[index];
+            if (toRemove) URL.revokeObjectURL(toRemove);
+            return prev.filter((_, i) => i !== index);
+        });
+    };
+
+    const clearAllHeroImages = () => {
+        heroImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+        setHeroCarImages([]);
+        setHeroImagePreviews([]);
     };
 
     const geocodeAddressFallback = async (query: string): Promise<{ lat: string; lon: string } | null> => {
@@ -335,6 +420,7 @@ export default function BodyworkPage() {
     const [serviceLocation, setServiceLocation] = useState<"customer" | "workshop">("customer");
     const [bookingNotes, setBookingNotes] = useState("");
     const [bookingPaymentMethod, setBookingPaymentMethod] = useState("stripe");
+    const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
     const [bookingCarImagePreview, setBookingCarImagePreview] = useState<string | null>(null);
     const [submittingBooking, setSubmittingBooking] = useState(false);
@@ -387,7 +473,7 @@ export default function BodyworkPage() {
         }
         let isMounted = true;
         setLoadingQuestions(true);
-        const catId = bookingPostItem?.category_id || BOOKING_QUESTIONS_CATEGORY_ID;
+        const catId = bookingPostItem?.category_id || DEFAULT_BODYWORK_CATEGORY_ID;
         getProviderQuestions(bookingProviderModal.id, catId)
             .then((questions) => {
                 if (isMounted) {
@@ -471,7 +557,22 @@ export default function BodyworkPage() {
         setLoadingMyQuotationRequests(true);
         try {
             const res = await getMyQuotationRequests(30, 1);
-            setMyQuotationRequests(res || []);
+            // Strictly filter out Alloy Wheel and Modification requests from Bodywork
+            const filtered = (res || []).filter((item) => {
+                const combined = `${item.service_description || ""} ${item.damage_description || ""} ${item.category?.name || ""}`.toLowerCase();
+                const isAlloy =
+                    item.category_id === "e1fb2dae-c233-4b45-852b-8253373e06d7" ||
+                    combined.includes("alloy") ||
+                    combined.includes("wheel") ||
+                    combined.includes("rim") ||
+                    combined.includes("refurb");
+                const isMod =
+                    item.category_id === "5d98d5c9-509e-4ab7-859d-806174384e27" ||
+                    combined.includes("modification") ||
+                    combined.includes("tuning");
+                return !isAlloy && !isMod;
+            });
+            setMyQuotationRequests(filtered);
         } catch (err) {
             console.error("Failed to load quotation requests:", err);
         } finally {
@@ -489,13 +590,44 @@ export default function BodyworkPage() {
         setTimeout(() => setCopiedAnyId(null), 2000);
     };
 
+    const notifyNewBids = (bids: PostBidItem[], post?: CustomerQuotationPostItem | null) => {
+        if (!bids || bids.length === 0) return;
+        bids.forEach((b) => {
+            const seenKey = `mmc_bid_push_${b.id}`;
+            if (typeof window !== "undefined" && !sessionStorage.getItem(seenKey)) {
+                sessionStorage.setItem(seenKey, "1");
+                const price = typeof b.offered_price === "number" ? `£${b.offered_price}` : `£${b.offered_price}`;
+                const title = `New Offer: ${price} from ${b.provider?.company_name || "Specialist"}! 🚗`;
+                const desc = b.notes || `${b.provider?.company_name || "Specialist"} sent an offer for your vehicle repair.`;
+                triggerDevicePushNotification(title, desc, `/services/bodywork?view=quotes`);
+                showToast(`New offer received: ${price} from ${b.provider?.company_name || "Specialist"}`, "info");
+            }
+        });
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
+        }
+    };
+
     const handleCheckBids = async (post: CustomerQuotationPostItem) => {
+        const combined = `${post.service_description || ""} ${post.damage_description || ""} ${post.category?.name || ""}`.toLowerCase();
+        const isAlloy =
+            post.category_id === "e1fb2dae-c233-4b45-852b-8253373e06d7" ||
+            combined.includes("alloy") ||
+            combined.includes("wheel") ||
+            combined.includes("rim") ||
+            combined.includes("refurb");
+        if (isAlloy) {
+            router.push(`/services/alloy-wheel?view=quotes&post_id=${post.id}`);
+            return;
+        }
+
         setSelectedPostForBids(post);
         setLoadingPostBids(true);
         setPostBidsList([]);
         try {
             const bids = await getReceivedBidsForPost(post.id, 10, 1);
             setPostBidsList(bids || []);
+            notifyNewBids(bids || [], post);
         } catch (err) {
             console.error("Failed to load bids for post:", err);
         } finally {
@@ -509,6 +641,7 @@ export default function BodyworkPage() {
         try {
             const bids = await getReceivedBidsForPost(selectedPostForBids.id, 10, 1);
             setPostBidsList(bids || []);
+            notifyNewBids(bids || [], selectedPostForBids);
         } catch (err) {
             console.error("Failed to refresh bids:", err);
         } finally {
@@ -520,6 +653,17 @@ export default function BodyworkPage() {
         if (!isAuthenticated()) {
             showToast("Please login to proceed with booking", "info");
             router.push("/login");
+            return;
+        }
+
+        const post = selectedPostForBids;
+        const combined = `${post?.service_description || ""} ${post?.damage_description || ""} ${post?.category?.name || ""}`.toLowerCase();
+        if (
+            post?.category_id === "e1fb2dae-c233-4b45-852b-8253373e06d7" ||
+            combined.includes("alloy") ||
+            combined.includes("wheel")
+        ) {
+            router.push(`/services/alloy-wheel?view=quotes&post_id=${post?.id}`);
             return;
         }
         const priceNum =
@@ -547,7 +691,6 @@ export default function BodyworkPage() {
             total_selected_services_price: priceNum,
         };
 
-        const post = selectedPostForBids;
         const targetPostId = bid.post_id || post?.id || "";
         setBookingPostId(targetPostId);
         setBookingBidOffer(bid);
@@ -599,11 +742,15 @@ export default function BodyworkPage() {
             .filter(Boolean)
             .join("\n\n");
 
+        const isStripe = bookingPaymentMethod === "stripe" || bookingPaymentMethod === "online";
+        const effectiveIsPartial = isStripe ? (isPartialPayment ? 1 : 0) : 0;
+
         try {
             const res = await sendBookingRequest({
                 post_id: effectivePostId,
                 provider_id: bookingProviderModal.id,
-                payment_method: bookingPaymentMethod,
+                payment_method: isStripe ? "stripe" : bookingPaymentMethod,
+                is_partial: effectiveIsPartial,
                 service_location: serviceLocation,
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
@@ -611,43 +758,68 @@ export default function BodyworkPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                payment_platform: bookingPaymentMethod === "stripe" ? "web" : undefined,
+                payment_platform: "app",
                 callback:
-                    bookingPaymentMethod === "stripe"
-                        ? "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
-                        : undefined,
+                    typeof window !== "undefined"
+                        ? `${window.location.origin}/booking-success`
+                        : "https://mmcclub.co.uk/booking-success",
             });
 
+            const responseContent: unknown = res.content;
             const redirectUrl =
+                res.content?.redirect_link ||
                 res.content?.redirect_url ||
                 res.content?.payment_url ||
                 res.content?.url ||
-                (typeof res.content === "string" && res.content.startsWith("http") ? res.content : null);
+                (typeof responseContent === "string" && responseContent.startsWith("http") ? responseContent : null);
 
-            if (bookingPaymentMethod === "stripe") {
-                if (redirectUrl) {
-                    try {
-                        sessionStorage.setItem(
-                            "mmc_pending_booking",
-                            JSON.stringify({
-                                booking_id: res.content?.booking_id,
-                                readable_id: res.content?.readable_id,
-                                provider: bookingProviderModal,
-                                schedule: formattedSchedule,
-                                price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
-                            })
-                        );
-                    } catch { }
+            const confirmedRefId = res.content?.readable_id || res.content?.booking_id;
+            if (confirmedRefId && !isStripe) {
+                saveConfirmedBooking({
+                    id: String(confirmedRefId),
+                    rawId: confirmedRefId,
+                    serviceType: "bodywork",
+                    serviceCategoryName: "Bodywork & Paint Repair",
+                    serviceTitle: "Bodywork & Paint Repair",
+                    providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    providerPhone: bookingProviderModal?.company_phone,
+                    totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
+                    isPaid: false,
+                    paymentStatus: "Pending Payment",
+                    paymentMethod: bookingPaymentMethod,
+                    status: "accepted",
+                    statusDisplay: "Accepted",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    fullScheduleDisplay: formattedSchedule || "Confirmed",
+                    createdAt: new Date().toISOString(),
+                });
+            }
 
-                    showToast("Redirecting to Stripe secure checkout...", "info");
-                    window.location.href = redirectUrl;
-                    return;
-                }
+            if (isStripe && redirectUrl) {
+                try {
+                    sessionStorage.setItem(
+                        "mmc_pending_booking",
+                        JSON.stringify({
+                            booking_id: res.content?.booking_id || confirmedRefId,
+                            readable_id: res.content?.readable_id || confirmedRefId,
+                            provider: bookingProviderModal,
+                            schedule: formattedSchedule,
+                            price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
+                            is_partial: effectiveIsPartial,
+                            deposit_amount: res.content?.amount,
+                        })
+                    );
+                } catch { }
+
+                showToast("Redirecting to Stripe secure checkout...", "info");
+                window.location.href = redirectUrl;
+                return;
             }
 
             setBookingApiResult(res.content || res);
             setBookingConfirmed(true);
-            const refId = res.content?.readable_id || res.content?.booking_id || "";
+            const refId = res.content?.readable_id || res.content?.booking_id || confirmedRefId;
             showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
 
             triggerDevicePushNotification(
@@ -664,12 +836,10 @@ export default function BodyworkPage() {
         }
     };
 
-    const handleOpenQuoteForm = (provider: ProviderItem) => {
+    const handleOpenQuoteForm = async (provider: ProviderItem) => {
         setSelectedQuoteProvider(provider);
-        setSelectedProviderIdsForQuote((prev) =>
-            prev.includes(provider.id) ? prev : [...prev, provider.id]
-        );
-        navigateToView("request_quote");
+        setSelectedProviderIdsForQuote([provider.id]);
+        await handleSendQuoteForProviders([provider.id]);
     };
 
     const handleOpenProviderProfile = async (provider: ProviderItem) => {
@@ -740,16 +910,20 @@ export default function BodyworkPage() {
     }, [isDragging]);
 
     // ---------------------------------------------------------------------------
-    // Multi-Provider Batch Quote Submission Handler
+    // Direct Quote Submission Handler (Single or Multi-Provider, No Intermediate Form)
     // ---------------------------------------------------------------------------
-    const handleSendMultiQuoteRequest = async () => {
+    const handleSendQuoteForProviders = async (targetProviderIds: string[]) => {
         if (!isAuthenticated()) {
             showToast("Please login to submit a quote request.", "info");
             router.push("/login");
             return;
         }
 
-        if (selectedProviderIdsForQuote.length === 0) {
+        const idsToSend = targetProviderIds.length > 0
+            ? targetProviderIds
+            : selectedProviderIdsForQuote;
+
+        if (idsToSend.length === 0) {
             showToast("Please select at least one specialist from the list", "error");
             return;
         }
@@ -765,14 +939,16 @@ export default function BodyworkPage() {
                         userLon || "-0.1278"
                     );
                 } catch {
-                    addrId = "6";
+                    addrId = "295";
                 }
                 if (addrId) setServiceAddressId(addrId);
             }
 
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            const scheduleDate = tomorrow.toISOString().split("T")[0] + " 10:00:00";
+            const scheduleDate = assessmentScheduleDate
+                ? `${assessmentScheduleDate} ${assessmentScheduleTime || "10:00:00"}`
+                : tomorrow.toISOString().split("T")[0] + " 10:00:00";
 
             let serviceIds = selectedServices
                 .map((name) => services.find((s) => s.name === name)?.id)
@@ -782,43 +958,54 @@ export default function BodyworkPage() {
                 serviceIds = [services[0].id];
             }
 
-            const primaryServiceId =
-                serviceIds[0] ||
-                services[0]?.id ||
-                "e1fb2dae-c233-4b45-852b-8253373e06d7";
+            if (serviceIds.length === 0) {
+                serviceIds = ["f473637e-cd69-4796-8d4a-b8eed2f7efca", "7fabbb6f-ed89-41bf-8443-b3bc75b963f6"];
+            }
 
             const selectedNames = selectedServices.length > 0 ? selectedServices.join(", ") : "Bodywork & Paint Repair";
 
-            const res = await sendQuotationRequest({
-                service_id: primaryServiceId,
-                service_ids: serviceIds.length > 0 ? serviceIds : [primaryServiceId],
+            await sendQuotationRequest({
+                service_ids: serviceIds,
                 category_id: DEFAULT_BODYWORK_CATEGORY_ID,
-                provider_ids: selectedProviderIdsForQuote,
-                car_model: "Vehicle",
+                provider_ids: idsToSend,
+                car_model: carModel.trim() || "Vehicle",
                 car_registration_number: regNo.trim().toUpperCase() || "BD51 SMR",
                 service_description: damageDesc.trim() || `Requesting quotes for: ${selectedNames}`,
-                damage_description: damageDesc.trim() || `Requesting quotes for: ${selectedNames}`,
+                damage_description: step2DamageDesc.trim() || damageDesc.trim() || `Requesting quotes for: ${selectedNames}`,
                 booking_schedule: scheduleDate,
-                service_address_id: addrId || "6",
-                car_image: heroCarImage,
+                service_address_id: addrId || "295",
+                car_images: heroCarImages,
+                car_image: heroCarImages[0] || null,
+                answers: assessmentAnswers,
+                additional_instructions: step2DamageDesc.trim() ? [step2DamageDesc.trim()] : undefined,
             });
 
-            showToast(`Quotation request sent to ${selectedProviderIdsForQuote.length} bodyshops!`, "success");
+            showToast(
+                idsToSend.length === 1
+                    ? "Quotation request sent to specialist successfully!"
+                    : `Quotation request sent to ${idsToSend.length} bodyshops!`,
+                "success"
+            );
             await refreshQuotationRequests();
             navigateToView("quotes");
         } catch (err: any) {
-            console.error("Multi quote error:", err);
-            showToast("Opening quotation review form...", "info");
-            navigateToView("request_quote");
+            console.error("Quotation submission error:", err);
+            const apiMsg = err?.response?.data?.message || err?.message || "Could not send quotation request. Please try again.";
+            const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+            showToast(formattedMsg, "error");
         } finally {
             setSubmittingMultiQuote(false);
         }
     };
 
+    const handleSendMultiQuoteRequest = async () => {
+        await handleSendQuoteForProviders(selectedProviderIdsForQuote);
+    };
+
     // ---------------------------------------------------------------------------
-    // Primary Search Handler from Hero
+    // Step 1: Validate Vehicle & Service Details, then advance to Damage Assessment
     // ---------------------------------------------------------------------------
-    const handleSearchSubmit = async (e: React.FormEvent) => {
+    const handleStep1Next = (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!postcode.trim()) {
@@ -836,9 +1023,56 @@ export default function BodyworkPage() {
             return;
         }
 
+        setHeroStep(2);
+        if (typeof window !== "undefined") {
+            const card = document.getElementById("bodywork-hero-card");
+            if (card) {
+                card.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        }
+    };
+
+    // ---------------------------------------------------------------------------
+    // Step 2: Final Assessment Quote Submission -> Search Providers & Open Screen
+    // ---------------------------------------------------------------------------
+    const handleFinalAssessmentSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+
         if (!privacyAgreed) {
             showToast("Please agree to the privacy policy to proceed", "error");
             return;
+        }
+
+        // Compile Q&A summary from dynamic assessment questions
+        const qaSummaryList: string[] = [];
+        assessmentQuestions.forEach((q) => {
+            const ans = assessmentAnswers[q.id];
+            if (ans) {
+                const ansStr = Array.isArray(ans) ? ans.join(", ") : String(ans);
+                if (ansStr.trim()) {
+                    qaSummaryList.push(`${q.question_text}: ${ansStr}`);
+                }
+            }
+        });
+
+        const compiledParts: string[] = [];
+        if (step2DamageDesc.trim()) {
+            compiledParts.push(step2DamageDesc.trim());
+        }
+        if (qaSummaryList.length > 0) {
+            compiledParts.push(`Damage Assessment:\n${qaSummaryList.map((item) => `• ${item}`).join("\n")}`);
+        }
+        if (carModel.trim()) {
+            compiledParts.push(`Vehicle Model: ${carModel.trim()}`);
+        }
+        if (assessmentScheduleDate) {
+            compiledParts.push(`Preferred Schedule: ${assessmentScheduleDate} ${assessmentScheduleTime || ""}`.trim());
+            setBookingDate(assessmentScheduleDate);
+            if (assessmentScheduleTime) setBookingTime(assessmentScheduleTime);
+        }
+
+        if (compiledParts.length > 0) {
+            setDamageDesc(compiledParts.join("\n\n"));
         }
 
         setSubmitting(true);
@@ -868,25 +1102,59 @@ export default function BodyworkPage() {
                 longitude: currentLon || undefined,
             });
 
-            setProviders(results || []);
+            const finalProviders = results && results.length > 0 ? results : FALLBACK_BODYWORK_PROVIDERS;
+            setProviders(finalProviders);
 
-            if (results && results.length > 0) {
-                setSelectedProviderIdsForQuote(results.map((p) => p.id));
+            if (finalProviders && finalProviders.length > 0) {
+                setSelectedProviderIdsForQuote(finalProviders.map((p) => p.id));
             } else {
                 setSelectedProviderIdsForQuote([]);
             }
         } catch (err) {
             console.error("Provider search failed:", err);
-            setProviders([]);
-            showToast("Could not retrieve specialists. Please try again.", "error");
+            setProviders(FALLBACK_BODYWORK_PROVIDERS);
+            setSelectedProviderIdsForQuote(FALLBACK_BODYWORK_PROVIDERS.map((p) => p.id));
         } finally {
             setSubmitting(false);
             setSearchingProviders(false);
         }
     };
 
+    // Auto-recovery: If user arrives on technicians view and providers list is empty, immediately populate
+    useEffect(() => {
+        if (activeView === "technicians" && providers.length === 0 && !searchingProviders) {
+            setSearchingProviders(true);
+            searchBodyworkProviders({
+                serviceIds: selectedServices.length > 0
+                    ? selectedServices.map((name) => services.find((s) => s.name === name)?.id).filter(Boolean) as string[]
+                    : [],
+                latitude: userLat || undefined,
+                longitude: userLon || undefined,
+            })
+                .then((res) => {
+                    const finalProviders = res && res.length > 0 ? res : FALLBACK_BODYWORK_PROVIDERS;
+                    setProviders(finalProviders);
+                    setSelectedProviderIdsForQuote(finalProviders.map((p) => p.id));
+                })
+                .catch(() => {
+                    setProviders(FALLBACK_BODYWORK_PROVIDERS);
+                    setSelectedProviderIdsForQuote(FALLBACK_BODYWORK_PROVIDERS.map((p) => p.id));
+                })
+                .finally(() => {
+                    setSearchingProviders(false);
+                });
+        }
+    }, [activeView, providers.length, searchingProviders, selectedServices, services, userLat, userLon]);
+
+    const handleSearchSubmit = handleStep1Next;
+
     return (
-        <div className="min-h-screen bg-black text-white selection:bg-[#FAD293] selection:text-black">
+        <div className="min-h-screen bg-[#0A0B0E] text-white selection:bg-[#FAD293] selection:text-black relative overflow-x-hidden">
+            {/* Top Atmospheric Warm Gold Ambient Lighting */}
+            <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-15%,rgba(232,175,102,0.16),rgba(10,11,14,0))] z-0" />
+            <div className="fixed -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-[#E8AF66]/10 blur-[120px] pointer-events-none z-0" />
+            <div className="fixed top-1/2 -left-40 w-[400px] h-[400px] rounded-full bg-[#CEA46B]/8 blur-[100px] pointer-events-none z-0" />
+
             {/* Top Navigation Step Header for dedicated views */}
             {activeView !== "landing" && (
                 <BodyworkStepHeader
@@ -907,18 +1175,20 @@ export default function BodyworkPage() {
             {activeView === "landing" && (
                 <>
                     {/* Hero Section */}
-                    <section className="relative pt-6 pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto overflow-hidden">
-                        {/* Background Ambient Car Image */}
-                        <div className="absolute right-0 top-10 w-full lg:w-2/3 h-full pointer-events-none opacity-25 lg:opacity-40 select-none z-0">
+                    <section className="relative pt-6 pb-24 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto overflow-visible z-10">
+                        {/* Background Ambient Car Image & Rich Automotive Spotlight */}
+                        <div className="absolute right-0 top-0 w-full lg:w-3/5 h-full pointer-events-none opacity-55 lg:opacity-75 select-none z-0">
                             <Image
                                 src="/images/bodywork/hero_bodywork_car.jpg"
                                 alt="Bodywork Spray Booth"
                                 fill
                                 priority
-                                className="object-cover object-center lg:object-right"
+                                className="object-cover object-center lg:object-right mix-blend-luminosity brightness-90 contrast-125"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
+                            <div className="absolute inset-0 bg-gradient-to-r from-[#0A0B0E] via-[#0A0B0E]/70 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0B0E] via-transparent to-transparent" />
+                            <div className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-[#E8AF66]/25 blur-3xl pointer-events-none" />
+                            <div className="absolute bottom-10 right-10 w-72 h-72 rounded-full bg-[#CEA46B]/20 blur-3xl pointer-events-none" />
                         </div>
 
                         {/* Breadcrumbs */}
@@ -968,29 +1238,29 @@ export default function BodyworkPage() {
                                     </p>
 
                                     {/* 3 Value Pillars */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                                        <div className="bg-[#121318]/90 border border-zinc-800/80 rounded-2xl p-4 backdrop-blur-sm">
-                                            <div className="w-9 h-9 rounded-xl bg-[#FAD293]/10 border border-[#FAD293]/20 flex items-center justify-center text-[#FAD293] mb-2.5">
-                                                <ShieldCheck className="w-5 h-5" />
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-8">
+                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
+                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
+                                                <ShieldCheck className="w-5 h-5 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-bold text-white">Showroom Finish</div>
-                                            <div className="text-[11px] text-zinc-400 mt-0.5">OEM digital color matching</div>
+                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Showroom Finish</div>
+                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">OEM digital color matching</div>
                                         </div>
 
-                                        <div className="bg-[#121318]/90 border border-zinc-800/80 rounded-2xl p-4 backdrop-blur-sm">
-                                            <div className="w-9 h-9 rounded-xl bg-[#FAD293]/10 border border-[#FAD293]/20 flex items-center justify-center text-[#FAD293] mb-2.5">
-                                                <Crown className="w-5 h-5" />
+                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
+                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
+                                                <Crown className="w-5 h-5 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-bold text-white">Guaranteed Quality</div>
-                                            <div className="text-[11px] text-zinc-400 mt-0.5">Lifetime anti-peel warranty</div>
+                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Guaranteed Quality</div>
+                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">Lifetime anti-peel warranty</div>
                                         </div>
 
-                                        <div className="bg-[#121318]/90 border border-zinc-800/80 rounded-2xl p-4 backdrop-blur-sm">
-                                            <div className="w-9 h-9 rounded-xl bg-[#FAD293]/10 border border-[#FAD293]/20 flex items-center justify-center text-[#FAD293] mb-2.5">
-                                                <Zap className="w-5 h-5" />
+                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
+                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
+                                                <Zap className="w-5 h-5 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-bold text-white">Fast Transparent Bids</div>
-                                            <div className="text-[11px] text-zinc-400 mt-0.5">No-obligation quote comparison</div>
+                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Fast Transparent Bids</div>
+                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">No-obligation quote comparison</div>
                                         </div>
                                     </div>
                                 </div>
@@ -998,314 +1268,619 @@ export default function BodyworkPage() {
 
                             {/* Right Column: Get Bodywork Provider Form Card */}
                             <div className="lg:col-span-5">
-                                <div className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                                    <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                                        Get Bodywork Provider
-                                    </h2>
-                                    <p className="text-xs text-zinc-400 mt-1 mb-6">
-                                        Fill in the details and get an instant quote
-                                    </p>
+                                <div
+                                    id="bodywork-hero-card"
+                                    className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl overflow-hidden"
+                                >
 
-                                    <form onSubmit={handleSearchSubmit} className="space-y-4">
-                                        {/* Row 1: Enter Postcode / Location (Google Places Autocomplete) */}
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                <MapPin className="w-4 h-4 text-[#E8AF66]" />
+                                    {heroStep === 1 ? (
+                                        <>
+                                            {/* Bodywork Showcase Banner */}
+                                            <div className="relative -mx-6 -mt-6 sm:-mx-7 sm:-mt-7 mb-6 overflow-hidden rounded-t-2xl border-b border-zinc-800/80 aspect-[1672/941] shadow-lg group">
+                                                <Image
+                                                    src="/bodywork.png"
+                                                    alt="MMC Bodywork Repairs & Restorations"
+                                                    fill
+                                                    priority
+                                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 600px"
+                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                                                />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-[#131417] via-transparent to-transparent pointer-events-none" />
                                             </div>
-                                            <input
-                                                ref={postcodeRef}
-                                                type="text"
-                                                value={postcode}
-                                                onChange={(e) => setPostcode(e.target.value)}
-                                                placeholder="Enter Postcode or City"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-8 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
-                                            />
-                                            {postcode && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setPostcode("");
-                                                        setUserLat("");
-                                                        setUserLon("");
-                                                    }}
-                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                                                >
-                                                    <X className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
-                                        </div>
 
-                                        {/* Row 2: Car Registration No */}
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                <Car className="w-4 h-4" />
+                                            <div className="mb-6">
+                                                <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                                                    Get Bodywork Provider
+                                                </h2>
+                                                <p className="text-xs text-zinc-400 mt-1 mb-0">
+                                                    Fill in the details and get an instant quote
+                                                </p>
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={regNo}
-                                                onChange={(e) => setRegNo(e.target.value.toUpperCase())}
-                                                placeholder="CAR REGISTRATION NO"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 uppercase tracking-wider focus:outline-none focus:border-[#E8AF66] transition-colors"
-                                            />
-                                        </div>
 
-                                        {/* Row 3: Multi-Select Bodywork Services */}
-                                        <div className="relative" ref={dropdownRef}>
-                                            <div
-                                                onClick={() => {
-                                                    setShowServicesDropdown((prev) => !prev);
-                                                    if (services.length === 0) {
-                                                        setLoadingServices(true);
-                                                        getBodyworkServices().then((data) => {
-                                                            if (data && data.length > 0) setServices(data);
-                                                            setLoadingServices(false);
-                                                        });
-                                                    }
-                                                }}
-                                                className={`w-full bg-[#1B1C20] border rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white cursor-pointer transition-colors flex items-center justify-between min-h-[46px] ${showServicesDropdown
-                                                    ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
-                                                    : "border-zinc-800/90 hover:border-zinc-700"
-                                                    }`}
-                                            >
-                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                    <Wrench className="w-4 h-4" />
-                                                </div>
+                                            <form onSubmit={handleStep1Next} className="space-y-4">
+                                                {/* Row 1: Enter Postcode / Location with Instant Type-Ahead Dropdown */}
+                                                <div className="relative z-40" ref={locationContainerRef}>
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FAD293]">
+                                                        <MapPin className="w-4 h-4" />
+                                                    </div>
+                                                    <input
+                                                        ref={postcodeRef}
+                                                        type="text"
+                                                        value={postcode}
+                                                        onChange={(e) => handleLocationChange(e.target.value)}
+                                                        onFocus={() => {
+                                                            if (locationSuggestions.length > 0) setShowLocationDropdown(true);
+                                                        }}
+                                                        placeholder="Enter Postcode or City"
+                                                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                                                        autoComplete="off"
+                                                    />
+                                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-1.5">
+                                                        {searchingLocation && (
+                                                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#CEA46B]" />
+                                                        )}
+                                                        {postcode && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setPostcode("");
+                                                                    setUserLat("");
+                                                                    setUserLon("");
+                                                                    setLocationSuggestions([]);
+                                                                    setShowLocationDropdown(false);
+                                                                }}
+                                                                className="text-zinc-500 hover:text-zinc-300 cursor-pointer p-0.5"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
 
-                                                <div className="flex-1 pr-2">
-                                                    {selectedServices.length === 0 ? (
-                                                        <span className="text-zinc-400 select-none">
-                                                            {loadingServices
-                                                                ? "Loading services..."
-                                                                : "Select Bodywork Services"}
-                                                        </span>
-                                                    ) : (
-                                                        <div className="flex flex-wrap gap-1.5 py-0.5">
-                                                            {selectedServices.map((name) => (
-                                                                <span
-                                                                    key={name}
-                                                                    className="inline-flex items-center gap-1 bg-[#E8AF66]/20 border border-[#E8AF66]/40 text-[#E8AF66] text-xs px-2.5 py-0.5 rounded-lg font-medium shadow-sm"
+                                                    {/* Location Suggestions Dropdown */}
+                                                    {showLocationDropdown && locationSuggestions.length > 0 && (
+                                                        <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#131417] border border-zinc-700 rounded-2xl shadow-2xl p-2 max-h-60 overflow-y-auto backdrop-blur-xl animate-fade-in space-y-1">
+                                                            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-zinc-500 font-bold border-b border-zinc-800">
+                                                                Select Location or Postcode
+                                                            </div>
+                                                            {locationSuggestions.map((suggestion) => (
+                                                                <button
+                                                                    key={suggestion.id}
+                                                                    type="button"
+                                                                    onClick={() => handleSelectLocation(suggestion)}
+                                                                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-zinc-800 text-zinc-200 hover:text-[#E8AF66] transition-colors flex items-start gap-2.5 cursor-pointer group"
                                                                 >
-                                                                    <span>{name}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => removeService(name, e)}
-                                                                        className="hover:text-white transition-colors"
-                                                                    >
-                                                                        <X className="w-3.5 h-3.5" />
-                                                                    </button>
-                                                                </span>
+                                                                    <MapPin className="w-3.5 h-3.5 text-[#E8AF66] shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                                                                    <div className="min-w-0">
+                                                                        <div className="text-xs font-bold text-white truncate">{suggestion.name}</div>
+                                                                        {suggestion.address && suggestion.address !== suggestion.name && (
+                                                                            <div className="text-[11px] text-zinc-400 truncate">{suggestion.address}</div>
+                                                                        )}
+                                                                    </div>
+                                                                </button>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                    <ChevronDown
-                                                        className={`w-4 h-4 transition-transform duration-200 ${showServicesDropdown ? "rotate-180 text-[#E8AF66]" : ""
-                                                            }`}
+                                                {/* Row 2: Car Registration No */}
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FAD293]">
+                                                        <Car className="w-4 h-4" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={regNo}
+                                                        onChange={(e) => setRegNo(e.target.value.toUpperCase())}
+                                                        placeholder="Car Registration No"
+                                                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 uppercase tracking-wider focus:outline-none focus:border-[#E8AF66] transition-colors"
                                                     />
                                                 </div>
-                                            </div>
 
-                                            {/* Dropdown Menu Popover */}
-                                            {showServicesDropdown && (
-                                                <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-[#16171A] border border-zinc-700/80 rounded-xl shadow-2xl p-2 max-h-64 overflow-y-auto backdrop-blur-xl animate-fade-in space-y-1">
-                                                    <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-800 text-[11px] text-zinc-400">
-                                                        <span>
-                                                            {selectedServices.length === 0
-                                                                ? "Select one or more services"
-                                                                : `${selectedServices.length} selected`}
+                                                {/* Row 3: Car Brand / Model (Optional) */}
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FAD293]">
+                                                        <Car className="w-4 h-4 text-[#E8AF66]" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={carModel}
+                                                        onChange={(e) => setCarModel(e.target.value)}
+                                                        placeholder="Car Model (e.g. Audi A4, BMW 3 Series)"
+                                                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                                                    />
+                                                </div>
+
+                                                {/* Row 4: Multi-Select Bodywork Services */}
+                                                <div className="relative z-30" ref={dropdownRef}>
+                                                    <div
+                                                        onClick={() => {
+                                                            setShowServicesDropdown((prev) => !prev);
+                                                            if (services.length === 0) {
+                                                                setLoadingServices(true);
+                                                                getBodyworkServices().then((data) => {
+                                                                    if (data && data.length > 0) setServices(data);
+                                                                    setLoadingServices(false);
+                                                                });
+                                                            }
+                                                        }}
+                                                        className={`w-full bg-[#1B1C20] border rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white cursor-pointer transition-all flex items-center justify-between min-h-[44px] ${showServicesDropdown
+                                                            ? "border-[#E8AF66]"
+                                                            : "border-zinc-800/90 hover:border-zinc-700"
+                                                            }`}
+                                                    >
+                                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+                                                            <Wrench className="w-4 h-4 text-[#E8AF66]" />
+                                                        </div>
+
+                                                        <div className="flex-1 pr-2">
+                                                            {selectedServices.length === 0 ? (
+                                                                <span className="text-zinc-500 select-none">
+                                                                    {loadingServices
+                                                                        ? "Loading services..."
+                                                                        : "Select Bodywork Services"}
+                                                                </span>
+                                                            ) : (
+                                                                <div className="flex flex-wrap gap-1.5 py-0.5">
+                                                                    {selectedServices.map((name) => (
+                                                                        <span
+                                                                            key={name}
+                                                                            className="inline-flex items-center gap-1 bg-[#E8AF66]/15 border border-[#E8AF66]/40 text-[#E8AF66] text-xs px-2.5 py-1 rounded-lg font-semibold shadow-sm"
+                                                                        >
+                                                                            <span>{name}</span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => removeService(name, e)}
+                                                                                className="hover:text-white transition-colors"
+                                                                            >
+                                                                                <X className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#FAD293]">
+                                                            <ChevronDown
+                                                                className={`w-4 h-4 transition-transform duration-200 ${showServicesDropdown ? "rotate-180 text-[#CEA46B]" : ""
+                                                                    }`}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Dropdown Menu Popover */}
+                                                    {showServicesDropdown && (
+                                                        <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#131417] border border-zinc-700 rounded-xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] p-2.5 max-h-72 overflow-y-auto backdrop-blur-xl animate-fade-in space-y-1">
+                                                            <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 text-xs text-zinc-400">
+                                                                <span className="font-semibold">
+                                                                    {selectedServices.length === 0
+                                                                        ? "Select one or more services"
+                                                                        : `${selectedServices.length} selected`}
+                                                                </span>
+                                                                {selectedServices.length > 0 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setSelectedServices([])}
+                                                                        className="text-[#E8AF66] hover:underline font-bold cursor-pointer"
+                                                                    >
+                                                                        Clear all
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            {loadingServices ? (
+                                                                <div className="py-6 flex flex-col items-center justify-center text-zinc-400 gap-2">
+                                                                    <RefreshCw className="w-5 h-5 animate-spin text-[#E8AF66]" />
+                                                                    <span className="text-xs">Loading services from MMC...</span>
+                                                                </div>
+                                                            ) : services.length === 0 ? (
+                                                                <div className="py-6 text-center text-zinc-400 space-y-2">
+                                                                    <p className="text-xs">No services loaded.</p>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setLoadingServices(true);
+                                                                            getBodyworkServices().then((res) => {
+                                                                                setServices(res || []);
+                                                                                setLoadingServices(false);
+                                                                            });
+                                                                        }}
+                                                                        className="text-xs text-[#E8AF66] underline hover:text-white font-semibold cursor-pointer"
+                                                                    >
+                                                                        Retry Loading
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                services.map((item) => {
+                                                                    const isSelected = selectedServices.includes(item.name);
+                                                                    return (
+                                                                        <div
+                                                                            key={item.id}
+                                                                            onClick={() => toggleService(item.name)}
+                                                                            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl cursor-pointer transition-all text-xs sm:text-sm select-none ${isSelected
+                                                                                ? "bg-[#E8AF66]/15 text-[#E8AF66] font-bold border border-[#E8AF66]/50"
+                                                                                : "text-zinc-300 hover:bg-zinc-800 hover:text-white border border-transparent"
+                                                                                }`}
+                                                                        >
+                                                                            <div className="flex items-center gap-2.5">
+                                                                                <div
+                                                                                    className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected
+                                                                                        ? "bg-[#E8AF66] border-[#E8AF66] text-black"
+                                                                                        : "border-zinc-700 bg-zinc-900"
+                                                                                        }`}
+                                                                                >
+                                                                                    {isSelected && (
+                                                                                        <Check className="w-3 h-3 stroke-[3]" />
+                                                                                    )}
+                                                                                </div>
+                                                                                <span>{item.name}</span>
+                                                                            </div>
+
+                                                                            {isSelected && (
+                                                                                <span className="text-[10px] text-[#E8AF66] font-bold uppercase tracking-wider bg-[#E8AF66]/10 px-2 py-0.5 rounded-full border border-[#E8AF66]/30">
+                                                                                    Selected
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Row 5: Upload Damage Photos / Media (Optional, Multiple Images Supported) */}
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                                                        <span className="flex items-center gap-1.5 font-medium">
+                                                            <Camera className="w-3.5 h-3.5 text-[#E8AF66]" />
+                                                            <span>Upload Damage Photos (Optional)</span>
                                                         </span>
-                                                        {selectedServices.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSelectedServices([])}
-                                                                className="text-[#E8AF66] hover:underline font-semibold"
-                                                            >
-                                                                Clear all
-                                                            </button>
+                                                        {heroCarImages.length > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[11px] text-[#E8AF66] font-bold">
+                                                                    {heroCarImages.length} photo{heroCarImages.length > 1 ? "s" : ""}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={clearAllHeroImages}
+                                                                    className="text-[11px] text-red-400 hover:text-red-300 font-semibold cursor-pointer"
+                                                                >
+                                                                    Clear All
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
 
-                                                    {loadingServices ? (
-                                                        <div className="py-6 flex flex-col items-center justify-center text-zinc-400 gap-2">
-                                                            <RefreshCw className="w-5 h-5 animate-spin text-[#E8AF66]" />
-                                                            <span className="text-xs">Loading services from MMC...</span>
-                                                        </div>
-                                                    ) : services.length === 0 ? (
-                                                        <div className="py-6 text-center text-zinc-400 space-y-2">
-                                                            <p className="text-xs">No services loaded.</p>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setLoadingServices(true);
-                                                                    getBodyworkServices().then((res) => {
-                                                                        setServices(res || []);
-                                                                        setLoadingServices(false);
-                                                                    });
-                                                                }}
-                                                                className="text-xs text-[#E8AF66] underline hover:text-[#f3c68a] font-semibold"
-                                                            >
-                                                                Retry Loading
-                                                            </button>
+                                                    {heroCarImages.length > 0 ? (
+                                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                                            {heroImagePreviews.map((preview, index) => (
+                                                                <div
+                                                                    key={index}
+                                                                    className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-black aspect-square shadow-sm"
+                                                                >
+                                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                    <img
+                                                                        src={preview}
+                                                                        alt={`Damage photo ${index + 1}`}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => removeHeroImage(index)}
+                                                                        className="absolute top-1 right-1 p-1 rounded-full bg-black/80 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                                                                        title="Remove photo"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                    <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-zinc-300 font-mono">
+                                                                        #{index + 1}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+
+                                                            {/* Add More Photos Tile */}
+                                                            <label className="flex flex-col items-center justify-center p-2 border border-dashed border-[#4A3B2B] hover:border-[#CEA46B] rounded-2xl bg-[#1A140F]/60 hover:bg-[#231B14] cursor-pointer transition-colors group aspect-square">
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    multiple
+                                                                    className="hidden"
+                                                                    onChange={handleHeroImagesChange}
+                                                                />
+                                                                <CloudUpload className="w-5 h-5 text-[#FAD293] mb-1 group-hover:scale-110 transition-transform" />
+                                                                <span className="text-[10px] font-bold text-zinc-300 group-hover:text-white text-center">
+                                                                    + Add More
+                                                                </span>
+                                                            </label>
                                                         </div>
                                                     ) : (
-                                                        services.map((item) => {
-                                                            const isSelected = selectedServices.includes(item.name);
-                                                            return (
-                                                                <div
-                                                                    key={item.id}
-                                                                    onClick={() => toggleService(item.name)}
-                                                                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm select-none ${isSelected
-                                                                        ? "bg-[#E8AF66]/15 text-[#E8AF66] font-semibold"
-                                                                        : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
-                                                                        }`}
-                                                                >
-                                                                    <div className="flex items-center gap-2.5">
-                                                                        <div
-                                                                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected
-                                                                                ? "bg-[#E8AF66] border-[#E8AF66] text-black"
-                                                                                : "border-zinc-600 bg-zinc-900"
-                                                                                }`}
-                                                                        >
-                                                                            {isSelected && (
-                                                                                <Check className="w-3 h-3 stroke-[3]" />
-                                                                            )}
-                                                                        </div>
-                                                                        <span>{item.name}</span>
-                                                                    </div>
-
-                                                                    {isSelected && (
-                                                                        <span className="text-[10px] text-[#E8AF66] font-bold uppercase tracking-wider">
-                                                                            Selected
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })
+                                                        <label className="flex items-center justify-center gap-2 p-3.5 border border-dashed border-zinc-700 hover:border-[#E8AF66]/70 rounded-xl bg-[#1B1C20]/60 hover:bg-[#1B1C20] cursor-pointer transition-colors group">
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                multiple
+                                                                className="hidden"
+                                                                onChange={handleHeroImagesChange}
+                                                            />
+                                                            <CloudUpload className="w-4 h-4 text-[#E8AF66]" />
+                                                            <span className="text-xs font-semibold text-zinc-300 group-hover:text-white">
+                                                                Attach damage photos / media
+                                                            </span>
+                                                            <span className="text-[10px] text-zinc-500">(JPG, PNG)</span>
+                                                        </label>
                                                     )}
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        {/* Row 4: Describe the bodywork damage (Optional) */}
-                                        <div className="relative">
-                                            <div className="absolute top-3.5 left-3.5 pointer-events-none text-zinc-400">
-                                                <FileText className="w-4 h-4" />
-                                            </div>
-                                            <textarea
-                                                rows={2}
-                                                value={damageDesc}
-                                                onChange={(e) => setDamageDesc(e.target.value)}
-                                                placeholder="Describe the bodywork damage (Optional)"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors resize-none"
-                                            />
-                                        </div>
-
-                                        {/* Row 5: Upload Damage Photo / Media (Optional) */}
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center justify-between text-xs text-zinc-400">
-                                                <span className="flex items-center gap-1.5 font-medium">
-                                                    <Camera className="w-3.5 h-3.5 text-[#E8AF66]" />
-                                                    <span>Upload Damage Photo (Optional)</span>
+                                                {/* Row 6: Next Button */}
+                                                <button
+                                                    type="submit"
+                                                    className="w-full mt-3 bg-[#E8AF66] hover:bg-[#d99f55] active:scale-[0.99] text-zinc-950 font-extrabold text-sm py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#E8AF66]/20 transition-all duration-300 uppercase tracking-wider cursor-pointer"
+                                                >
+                                                    <span>NEXT</span>
+                                                    <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                            </form>
+                                        </>
+                                    ) : (
+                                        /* --------------------------------------------------------------- */
+                                        /* STEP 2: DAMAGE ASSESSMENT FORM (LUXURY AUTOMOTIVE REDESIGN)    */
+                                        /* --------------------------------------------------------------- */
+                                        <div className="space-y-4 animate-fade-in">
+                                            {/* Step 2 Header */}
+                                            <div className="flex items-center justify-between pb-3 border-b border-[#CEA46B]/30">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setHeroStep(1)}
+                                                        className="p-1.5 -ml-1 rounded-xl bg-[#2D2218] hover:bg-[#3D2E20] text-[#FAD293] hover:text-white transition-all cursor-pointer border border-[#CEA46B]/30 hover:border-[#CEA46B]"
+                                                        title="Back to Step 1"
+                                                    >
+                                                        <ChevronLeft className="w-4 h-4" />
+                                                    </button>
+                                                    <span className="px-3.5 py-1 rounded-full bg-gradient-to-r from-[#3D2C19] to-[#2B1F13] border border-[#CEA46B]/60 text-[11px] sm:text-xs font-bold text-[#FAD293] shadow-inner tracking-wide">
+                                                        Step 2 of 2
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs font-bold text-[#CEA46B] tracking-wider uppercase flex items-center gap-1.5">
+                                                    <Sparkles className="w-3 h-3 text-[#FAD293]" />
+                                                    Damage Details
                                                 </span>
-                                                {heroCarImage && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold cursor-pointer"
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                )}
                                             </div>
 
-                                            {heroImagePreview ? (
-                                                <div className="relative rounded-xl border border-zinc-700 bg-zinc-900/80 p-2 flex items-center gap-3">
-                                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-zinc-700 shrink-0 bg-black">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src={heroImagePreview}
-                                                            alt="Damage Preview"
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1 text-xs">
-                                                        <p className="text-white font-medium truncate">{heroCarImage?.name}</p>
-                                                        <p className="text-[10px] text-zinc-400 mt-0.5">
-                                                            {heroCarImage ? (heroCarImage.size / 1024).toFixed(0) + " KB" : ""} • Attached for quote
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </button>
+                                            <div className="flex items-start gap-3 pt-1">
+                                                <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#CEA46B]/30 to-[#FAD293]/15 border border-[#CEA46B]/50 flex items-center justify-center text-[#FAD293] shrink-0 mt-0.5 shadow-md">
+                                                    <HelpCircle className="w-5 h-5 text-[#FAD293]" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                                                        Damage Assessment
+                                                    </h2>
+                                                    <p className="text-xs text-[#D8C7B5] mt-1 leading-relaxed">
+                                                        Help repairers provide more accurate estimates by answering a few quick questions.
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Dynamic Questions List from API */}
+                                            {loadingAssessmentQuestions ? (
+                                                <div className="py-12 flex flex-col items-center justify-center text-zinc-400 gap-3">
+                                                    <RefreshCw className="w-8 h-8 animate-spin text-[#CEA46B]" />
+                                                    <span className="text-xs text-[#FAD293] font-semibold">Loading damage assessment questions...</span>
                                                 </div>
                                             ) : (
-                                                <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-zinc-700 hover:border-[#E8AF66]/70 rounded-xl bg-[#1B1C20]/60 hover:bg-[#1B1C20] cursor-pointer transition-colors group">
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        className="hidden"
-                                                        onChange={handleHeroImageChange}
-                                                    />
-                                                    <CloudUpload className="w-4 h-4 text-[#E8AF66]" />
-                                                    <span className="text-xs font-semibold text-zinc-300 group-hover:text-white">
-                                                        Attach damage photo / media
-                                                    </span>
-                                                    <span className="text-[10px] text-zinc-500">(JPG, PNG)</span>
+                                                <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#CEA46B]/60 scrollbar-track-[#17120C] hover:scrollbar-thumb-[#FAD293]">
+                                                    {assessmentQuestions.map((q, qIndex) => {
+                                                        const isMulti =
+                                                            q.question_text?.toLowerCase().includes("select all") ||
+                                                            q.question_text?.toLowerCase().includes("apply") ||
+                                                            q.question_type === "multi_select" ||
+                                                            q.question_type === "checkbox";
+
+                                                        const optionsList: string[] = Array.isArray(q.options)
+                                                            ? q.options
+                                                            : typeof q.options === "string"
+                                                            ? (q.options as string).split(",").map((s) => s.trim()).filter(Boolean)
+                                                            : [];
+
+                                                        return (
+                                                            <div
+                                                                key={q.id || qIndex}
+                                                                className="p-4 rounded-2xl bg-gradient-to-br from-[#261E16] via-[#1E1711] to-[#17120D] border border-[#523E2E] hover:border-[#CEA46B]/70 transition-all duration-200 shadow-[0_4px_18px_rgba(0,0,0,0.5)] space-y-3 group"
+                                                            >
+                                                                <div className="flex items-start gap-2.5">
+                                                                    <div className="w-5 h-5 rounded-full bg-[#CEA46B]/25 border border-[#CEA46B]/60 flex items-center justify-center text-[#FAD293] text-[11px] font-extrabold shrink-0 mt-0.5 shadow-sm">
+                                                                        ?
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <span className="text-xs sm:text-sm font-bold text-white leading-snug group-hover:text-[#FAD293] transition-colors">
+                                                                            {q.question_text}
+                                                                        </span>
+                                                                        {isMulti && (
+                                                                            <p className="text-[11px] text-[#CEA46B] font-semibold mt-0.5">
+                                                                                Select all that apply
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Render based on field/question type */}
+                                                                {q.question_type === "text" ? (
+                                                                    <input
+                                                                        type="text"
+                                                                        value={assessmentAnswers[q.id] || ""}
+                                                                        onChange={(e) =>
+                                                                            setAssessmentAnswers((prev) => ({
+                                                                                ...prev,
+                                                                                [q.id]: e.target.value,
+                                                                            }))
+                                                                        }
+                                                                        placeholder="Type your answer..."
+                                                                        className="w-full bg-[#18120D] border border-[#523E2E] focus:border-[#CEA46B] focus:ring-1 focus:ring-[#CEA46B]/40 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-[#8A7A6B] transition-all shadow-inner"
+                                                                    />
+                                                                ) : q.question_type === "textarea" ? (
+                                                                    <textarea
+                                                                        rows={2}
+                                                                        value={assessmentAnswers[q.id] || ""}
+                                                                        onChange={(e) =>
+                                                                            setAssessmentAnswers((prev) => ({
+                                                                                ...prev,
+                                                                                [q.id]: e.target.value,
+                                                                            }))
+                                                                        }
+                                                                        placeholder="Type your answer..."
+                                                                        className="w-full bg-[#18120D] border border-[#523E2E] focus:border-[#CEA46B] focus:ring-1 focus:ring-[#CEA46B]/40 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-[#8A7A6B] transition-all resize-none shadow-inner"
+                                                                    />
+                                                                ) : q.question_type === "dropdown" ? (
+                                                                    <select
+                                                                        value={assessmentAnswers[q.id] || ""}
+                                                                        onChange={(e) =>
+                                                                            setAssessmentAnswers((prev) => ({
+                                                                                ...prev,
+                                                                                [q.id]: e.target.value,
+                                                                            }))
+                                                                        }
+                                                                        className="w-full bg-[#18120D] border border-[#523E2E] focus:border-[#CEA46B] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-zinc-100"
+                                                                    >
+                                                                        <option value="">Select an option</option>
+                                                                        {optionsList.map((opt, oIdx) => (
+                                                                            <option key={oIdx} value={opt} className="bg-[#18120D] text-white">
+                                                                                {opt}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                ) : (
+                                                                    /* Option Pills (Multi-Select or Single-Select) */
+                                                                    <div className="flex flex-wrap gap-2 pt-0.5">
+                                                                        {optionsList.map((opt, oIdx) => {
+                                                                            const isSelected = isMulti
+                                                                                ? Array.isArray(assessmentAnswers[q.id]) &&
+                                                                                  assessmentAnswers[q.id].includes(opt)
+                                                                                : assessmentAnswers[q.id] === opt;
+
+                                                                            return (
+                                                                                <button
+                                                                                    key={oIdx}
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        isMulti
+                                                                                            ? toggleMultiAnswer(q.id, opt)
+                                                                                            : setSingleAnswer(q.id, opt)
+                                                                                    }
+                                                                                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none active:scale-[0.98] ${
+                                                                                        isSelected
+                                                                                            ? "bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] text-zinc-950 font-black shadow-[0_4px_18px_rgba(232,175,102,0.45)] border border-[#FFF2D6] scale-[1.02]"
+                                                                                            : "bg-[#251C15] text-[#D8C7B5] hover:text-white border border-[#4E3A2A] hover:border-[#CEA46B]/70 hover:bg-[#32251B] shadow-sm"
+                                                                                    }`}
+                                                                                >
+                                                                                    {isSelected && (
+                                                                                        <Check className="w-3.5 h-3.5 stroke-[3] text-zinc-950" />
+                                                                                    )}
+                                                                                    <span>{opt}</span>
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Damage Description (Optional) */}
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-[#FAD293] uppercase tracking-wider flex items-center justify-between">
+                                                    <span>Damage Description</span>
+                                                    <span className="text-[10px] text-[#A89886] font-normal lowercase">(optional)</span>
                                                 </label>
-                                            )}
-                                        </div>
+                                                <textarea
+                                                    rows={2}
+                                                    value={step2DamageDesc}
+                                                    onChange={(e) => setStep2DamageDesc(e.target.value)}
+                                                    placeholder="Describe the damage in detail (e.g. scratch depth, dent size, panel location)..."
+                                                    className="w-full bg-[#18120D] border border-[#523E2E] focus:border-[#CEA46B] focus:ring-1 focus:ring-[#CEA46B]/40 rounded-2xl p-3.5 text-xs sm:text-sm text-zinc-100 placeholder-[#8A7A6B] transition-all resize-none shadow-inner"
+                                                />
+                                            </div>
 
-                                        {/* Row 6: Privacy Policy Checkbox */}
-                                        <div className="flex items-center gap-2.5 pt-1">
-                                            <input
-                                                type="checkbox"
-                                                id="privacy-check"
-                                                checked={privacyAgreed}
-                                                onChange={(e) => setPrivacyAgreed(e.target.checked)}
-                                                className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-[#E8AF66] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#E8AF66]"
-                                            />
-                                            <label
-                                                htmlFor="privacy-check"
-                                                className="text-xs text-zinc-400 select-none cursor-pointer"
-                                            >
-                                                I agree to the{" "}
-                                                <Link
-                                                    href="/faqs"
-                                                    className="text-[#E8AF66] underline hover:text-[#f2c180] transition-colors"
-                                                >
-                                                    Privacy Policy
-                                                </Link>
+                                            {/* Preferred Schedule (Exact match with Reference Screenshot) */}
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-[#FAD293] uppercase tracking-wider flex items-center justify-between">
+                                                    <span>Preferred Schedule</span>
+                                                    <span className="text-[10px] text-[#CEA46B] font-semibold">Select your preferred date &amp; time</span>
+                                                </label>
+                                                <div className="relative rounded-2xl border border-[#523E2E] bg-gradient-to-r from-[#201812] to-[#17120D] p-3 hover:border-[#CEA46B]/70 transition-all flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#CEA46B]/25 to-[#FAD293]/15 border border-[#CEA46B]/40 flex items-center justify-center text-[#FAD293] shadow-sm">
+                                                            <Calendar className="w-4 h-4" />
+                                                        </div>
+                                                        <span className="text-xs sm:text-sm font-bold text-white">
+                                                            {formattedSchedulePreview}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="date"
+                                                            value={assessmentScheduleDate}
+                                                            min={new Date().toISOString().split("T")[0]}
+                                                            onChange={(e) => setAssessmentScheduleDate(e.target.value)}
+                                                            className="bg-[#291F17] border border-[#523E2E] hover:border-[#CEA46B]/70 rounded-xl px-3 py-1.5 text-xs text-[#FAD293] font-semibold focus:outline-none focus:border-[#CEA46B] [color-scheme:dark] cursor-pointer shadow-inner"
+                                                        />
+                                                        <input
+                                                            type="time"
+                                                            value={assessmentScheduleTime}
+                                                            onChange={(e) => setAssessmentScheduleTime(e.target.value)}
+                                                            className="bg-[#291F17] border border-[#523E2E] hover:border-[#CEA46B]/70 rounded-xl px-3 py-1.5 text-xs text-[#FAD293] font-semibold focus:outline-none focus:border-[#CEA46B] [color-scheme:dark] cursor-pointer shadow-inner"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Privacy Policy Agreement */}
+                                            <label className="flex items-center gap-3 pt-1 cursor-pointer select-none group">
+                                                <input
+                                                    type="checkbox"
+                                                    id="privacy-check-step2"
+                                                    checked={privacyAgreed}
+                                                    onChange={(e) => setPrivacyAgreed(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-[#523E2E] bg-[#18120D] text-[#CEA46B] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#CEA46B]"
+                                                />
+                                                <span className="text-xs text-[#C5B39F] group-hover:text-white transition-colors">
+                                                    I agree to the{" "}
+                                                    <Link
+                                                        href="/faqs"
+                                                        className="text-[#FAD293] underline hover:text-white font-semibold"
+                                                    >
+                                                        Privacy Policy
+                                                    </Link>
+                                                </span>
                                             </label>
-                                        </div>
 
-                                        {/* Row 7: Submit Button */}
-                                        <button
-                                            type="submit"
-                                            disabled={submitting}
-                                            className="w-full mt-3 bg-[#E8AF66] hover:bg-[#d99f55] active:scale-[0.99] text-zinc-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#E8AF66]/20 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed uppercase tracking-wider cursor-pointer"
-                                        >
-                                            {submitting ? (
-                                                <div className="w-5 h-5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                                <>
-                                                    <span>GET BODYWORK QUOTE</span>
-                                                    <ArrowRight className="w-4 h-4" />
-                                                </>
-                                            )}
-                                        </button>
-                                    </form>
+                                            {/* Bottom Navigation Buttons: Back + GET REPAIR QUOTE */}
+                                            <div className="flex items-center gap-3 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setHeroStep(1)}
+                                                    className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl border border-[#523E2E] bg-[#241C15] hover:bg-[#32261C] text-[#FAD293] hover:text-white flex items-center justify-center transition-all shadow-md shrink-0 cursor-pointer active:scale-95 hover:border-[#CEA46B]"
+                                                    title="Back to Step 1"
+                                                >
+                                                    <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={submitting}
+                                                    onClick={handleFinalAssessmentSubmit}
+                                                    className="flex-1 h-13 sm:h-14 rounded-2xl bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] hover:brightness-110 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm tracking-widest uppercase shadow-[0_12px_35px_rgba(232,175,102,0.45)] flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                                                >
+                                                    {submitting ? (
+                                                        <div className="w-5 h-5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span className="drop-shadow-sm">GET REPAIR QUOTE</span>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1560,80 +2135,6 @@ export default function BodyworkPage() {
                 />
             )}
 
-            {/* View 3: Dedicated Quotation Request Form */}
-            {activeView === "request_quote" && (
-                <BodyworkQuoteFormView
-                    selectedProviders={
-                        selectedQuoteProvider
-                            ? [selectedQuoteProvider]
-                            : providers.filter((p) => selectedProviderIdsForQuote.includes(p.id))
-                    }
-                    allServices={services}
-                    initialRegNo={regNo}
-                    initialDamageDesc={damageDesc}
-                    initialCarImage={heroCarImage}
-                    initialCarImagePreview={heroImagePreview}
-                    submitting={submittingMultiQuote}
-                    onBack={() => navigateToView("technicians")}
-                    onSubmit={async (formData) => {
-                        setSubmittingMultiQuote(true);
-                        try {
-                            let addrId = serviceAddressId;
-                            if (!addrId) {
-                                try {
-                                    addrId = await getOrCreateCustomerAddressId(
-                                        postcode || "London, UK",
-                                        userLat || "51.5074",
-                                        userLon || "-0.1278"
-                                    );
-                                } catch {
-                                    addrId = "6";
-                                }
-                                if (addrId) setServiceAddressId(addrId);
-                            }
-
-                            const schedule = `${formData.bookingDate} ${formData.bookingTime || "10:00:00"}`;
-                            const targetProviders = selectedQuoteProvider
-                                ? [selectedQuoteProvider.id]
-                                : selectedProviderIdsForQuote.length > 0
-                                    ? selectedProviderIdsForQuote
-                                    : providers.slice(0, 3).map((p) => p.id);
-
-                            let serviceIds = formData.selectedServiceIds;
-                            if (serviceIds.length === 0 && services.length > 0) {
-                                serviceIds = [services[0].id];
-                            }
-                            const primaryServiceId =
-                                serviceIds[0] ||
-                                services[0]?.id ||
-                                "e1fb2dae-c233-4b45-852b-8253373e06d7";
-
-                            const res = await sendQuotationRequest({
-                                service_id: primaryServiceId,
-                                service_ids: serviceIds.length > 0 ? serviceIds : [primaryServiceId],
-                                category_id: DEFAULT_BODYWORK_CATEGORY_ID,
-                                provider_ids: targetProviders,
-                                car_registration_number: formData.carReg || regNo || "BD51 SMR",
-                                car_model: formData.carModel || "Vehicle",
-                                damage_description: formData.damageDesc || formData.serviceDesc || "Bodywork damage repair",
-                                service_description: formData.serviceDesc || formData.damageDesc || "Bodywork repair request",
-                                booking_schedule: schedule,
-                                service_address_id: addrId || "6",
-                                car_image: formData.carImage,
-                            });
-
-                            showToast("Quotation request submitted to bodyshops successfully!", "success");
-                            await refreshQuotationRequests();
-                            navigateToView("quotes");
-                        } catch (err: any) {
-                            console.error("Quote form submit failed:", err);
-                            showToast(err?.message || "Could not submit quote request. Please try again.", "error");
-                        } finally {
-                            setSubmittingMultiQuote(false);
-                        }
-                    }}
-                />
-            )}
 
             {/* View 4: Dedicated Provider Profile Full Screen */}
             {activeView === "provider_profile" && (
@@ -1722,6 +2223,8 @@ export default function BodyworkPage() {
                         onNotesChange={setBookingNotes}
                         bookingPaymentMethod={bookingPaymentMethod}
                         onPaymentMethodChange={setBookingPaymentMethod}
+                        isPartialPayment={isPartialPayment}
+                        onPartialPaymentChange={setIsPartialPayment}
                         bookingCarImage={bookingCarImage}
                         bookingCarImagePreview={bookingCarImagePreview}
                         onCarImageChange={(e) => {

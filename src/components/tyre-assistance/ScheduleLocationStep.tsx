@@ -265,21 +265,13 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
 
       {/* Desktop Header */}
       <div className="hidden lg:block space-y-1.5 pb-2 border-b border-white/10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              Schedule, Location & Vehicle Details
-            </h2>
-            <p className="text-xs text-white/60">
-              Provide your location and vehicle specs so our dispatch system matches the nearest certified technician.
-            </p>
-          </div>
-          {detectedZoneId && (
-            <div className="text-[11px] text-[#FAD293] bg-[#FAD293]/10 border border-[#FAD293]/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 font-mono">
-              <MapPin size={12} />
-              <span>Zone ID: {detectedZoneId.slice(0, 8)}...</span>
-            </div>
-          )}
+        <div>
+          <h2 className="text-2xl font-bold text-white tracking-tight">
+            Schedule, Location & Vehicle Details
+          </h2>
+          <p className="text-xs text-white/60">
+            Provide your location and vehicle specs so our dispatch system matches the nearest certified technician.
+          </p>
         </div>
       </div>
 
@@ -488,7 +480,7 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-white/60 block mb-1">
+              <label className="text-[12px] text-white/60 block mb-1">
                 Registration Number
               </label>
               <input
@@ -496,12 +488,12 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                 value={vehicleRegistration}
                 onChange={(e) => setVehicleRegistration(e.target.value.toUpperCase())}
                 placeholder="UK22-ABC-1234"
-                className="w-full bg-[#f6be00] text-black font-extrabold uppercase tracking-widest text-center text-xs py-2.5 px-3 rounded-xl border border-black/30 font-mono shadow-inner"
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
               />
-            </div>
+            </div> 
 
             <div>
-              <label className="text-[11px] text-white/60 block mb-1">
+              <label className="text-[12px] text-white/60 block mb-1">
                 Vehicle Model & Year
               </label>
               <input

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import {
     FileText,
@@ -22,6 +22,25 @@ import {
     Sparkles,
 } from "lucide-react";
 import type { CustomerQuotationPostItem, PostBidItem } from "@/lib/service/bodywork.api";
+
+function detectPostCategory(post: CustomerQuotationPostItem): "bodywork" | "alloy" | "modification" | "other" {
+    const text = [
+        post.service_description,
+        post.damage_description,
+        post.car_model,
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    if (text.includes("alloy") || text.includes("rim") || text.includes("wheel") || text.includes("diamond")) {
+        return "alloy";
+    }
+    if (text.includes("mod") || text.includes("exhaust") || text.includes("wrap") || text.includes("tune") || text.includes("remap") || text.includes("tint") || text.includes("body kit")) {
+        return "modification";
+    }
+    if (text.includes("dent") || text.includes("paint") || text.includes("scratch") || text.includes("bodywork") || text.includes("bumper") || text.includes("panel") || text.includes("respray")) {
+        return "bodywork";
+    }
+    return "other";
+}
 
 interface BodyworkQuotesViewProps {
     quotationRequests: CustomerQuotationPostItem[];
@@ -54,19 +73,39 @@ export default function BodyworkQuotesView({
     onCopyPostId,
     copiedId,
 }: BodyworkQuotesViewProps) {
-    // Sort so items with bids_count > 0 appear first
-    const sortedRequests = [...quotationRequests].sort((a, b) => {
-        const aCount = a.bids_count || 0;
-        const bCount = b.bids_count || 0;
-        if (aCount > 0 && bCount === 0) return -1;
-        if (aCount === 0 && bCount > 0) return 1;
-        if (aCount !== bCount) return bCount - aCount;
-        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return timeB - timeA;
-    });
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
 
-    const totalBidsCount = sortedRequests.reduce((acc, r) => acc + (r.bids_count || 0), 0);
+    // Count by category
+    const categoryCounts = useMemo(() => {
+        const counts = { all: quotationRequests.length, bodywork: 0, alloy: 0, modification: 0, other: 0 };
+        quotationRequests.forEach((r) => {
+            const cat = detectPostCategory(r);
+            counts[cat]++;
+        });
+        return counts;
+    }, [quotationRequests]);
+
+    // Filter requests
+    const filteredRequests = useMemo(() => {
+        if (selectedCategoryFilter === "all") return quotationRequests;
+        return quotationRequests.filter((r) => detectPostCategory(r) === selectedCategoryFilter);
+    }, [quotationRequests, selectedCategoryFilter]);
+
+    // Sort so items with bids_count > 0 appear first
+    const sortedRequests = useMemo(() => {
+        return [...filteredRequests].sort((a, b) => {
+            const aCount = a.bids_count || 0;
+            const bCount = b.bids_count || 0;
+            if (aCount > 0 && bCount === 0) return -1;
+            if (aCount === 0 && bCount > 0) return 1;
+            if (aCount !== bCount) return bCount - aCount;
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return timeB - timeA;
+        });
+    }, [filteredRequests]);
+
+    const totalBidsCount = quotationRequests.reduce((acc, r) => acc + (r.bids_count || 0), 0);
 
     return (
         <div className="max-w-6xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8 animate-fade-in space-y-6">
@@ -84,12 +123,12 @@ export default function BodyworkQuotesView({
                         )}
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                        {selectedPostForBids ? "Bodyshop Offers for Request" : "My Bodywork Quotation Requests"}
+                        {selectedPostForBids ? "Specialist Offers for Request" : "My Quotation Requests & Offers"}
                     </h2>
                     <p className="text-xs sm:text-sm text-zinc-400">
                         {selectedPostForBids
-                            ? "Compare custom prices and notes sent by verified bodywork & paint specialists."
-                            : "Track real-time bids from accredited bodyshops and book the best repair offer."}
+                            ? "Compare custom prices and notes sent by verified repair & service specialists."
+                            : "Track real-time bids from bodyshops, alloy specialists & modification customizers."}
                     </p>
                 </div>
 
@@ -136,6 +175,37 @@ export default function BodyworkQuotesView({
                     )}
                 </div>
             </div>
+
+            {/* Category Filter Tabs */}
+            {!selectedPostForBids && quotationRequests.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {[
+                        { key: "all", label: "All Quotes", count: categoryCounts.all },
+                        { key: "bodywork", label: "Bodywork & Paint", count: categoryCounts.bodywork },
+                        { key: "alloy", label: "Alloy Wheels", count: categoryCounts.alloy },
+                        { key: "modification", label: "Modifications", count: categoryCounts.modification },
+                        { key: "other", label: "Other Services", count: categoryCounts.other },
+                    ].filter((t) => t.key === "all" || t.count > 0).map((tab) => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => setSelectedCategoryFilter(tab.key)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                                selectedCategoryFilter === tab.key
+                                    ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md shadow-[#D5A054]/20"
+                                    : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                            }`}
+                        >
+                            <span>{tab.label}</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                                selectedCategoryFilter === tab.key ? "bg-black/25 text-zinc-950" : "bg-zinc-800 text-zinc-400"
+                            }`}>
+                                {tab.count}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* View A: Detail of Bids for Selected Request */}
             {selectedPostForBids ? (
@@ -291,17 +361,17 @@ export default function BodyworkQuotesView({
                     {loadingRequests && sortedRequests.length === 0 ? (
                         <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-16 text-center space-y-3 shadow-2xl">
                             <div className="w-10 h-10 border-2 border-[#E8AF66] border-t-transparent rounded-full animate-spin mx-auto" />
-                            <p className="text-xs text-zinc-400">Loading your bodywork quotation requests...</p>
+                            <p className="text-xs text-zinc-400">Loading your quotation requests...</p>
                         </div>
                     ) : sortedRequests.length === 0 ? (
                         <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-12 sm:p-16 text-center space-y-4 shadow-2xl">
                             <FileText className="w-12 h-12 text-zinc-600 mx-auto" />
                             <div className="space-y-1">
                                 <h3 className="text-base sm:text-lg font-bold text-white">
-                                    No Repair Quotation Requests Yet
+                                    No Quotation Requests Found
                                 </h3>
                                 <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto">
-                                    You have not sent any bodywork quotation requests yet. Search bodyshops with your vehicle reg to request competitive repair quotes.
+                                    You have not sent any quotation requests yet or no requests match this category filter.
                                 </p>
                             </div>
                             <button
@@ -309,12 +379,22 @@ export default function BodyworkQuotesView({
                                 onClick={onBackToSearch}
                                 className="bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black text-xs sm:text-sm px-6 py-3 rounded-2xl shadow-md cursor-pointer active:scale-95 uppercase tracking-wider"
                             >
-                                Start Bodywork Quote Search
+                                Start New Quote Request
                             </button>
                         </div>
                     ) : (
                         sortedRequests.map((item, idx) => {
                             const hasBids = (item.bids_count ?? 0) > 0;
+                            const itemCat = detectPostCategory(item);
+                            const itemCatLabel =
+                                itemCat === "alloy"
+                                    ? "Alloy Wheels"
+                                    : itemCat === "modification"
+                                    ? "Modifications"
+                                    : itemCat === "bodywork"
+                                    ? "Bodywork & Paint"
+                                    : "Service Request";
+
                             const createdDate = item.created_at
                                 ? new Date(item.created_at).toLocaleDateString("en-GB", {
                                       day: "2-digit",
@@ -336,6 +416,9 @@ export default function BodyworkQuotesView({
                                         <div className="flex items-center gap-2.5 flex-wrap">
                                             <span className="font-extrabold text-xs text-[#E8AF66] bg-[#E8AF66]/10 px-3 py-1 rounded-full border border-[#E8AF66]/20 uppercase tracking-wider">
                                                 {item.car_registration_number || "REG: N/A"}
+                                            </span>
+                                            <span className="font-extrabold text-[10px] text-zinc-300 bg-zinc-800/90 px-2.5 py-0.5 rounded-full border border-zinc-700 uppercase tracking-wider">
+                                                {itemCatLabel}
                                             </span>
                                             <span className="font-bold text-xs text-white">
                                                 {item.car_model || "Vehicle Repair"}
@@ -365,7 +448,7 @@ export default function BodyworkQuotesView({
                                         <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800/80 space-y-0.5">
                                             <div className="text-zinc-500 uppercase font-bold text-[10px]">Service Request</div>
                                             <div className="text-zinc-200 font-semibold truncate">
-                                                {item.service_description || item.damage_description || "Bodywork & Paint Repair"}
+                                                {item.service_description || item.damage_description || "Repair & Customization Request"}
                                             </div>
                                         </div>
                                         <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800/80 space-y-0.5">

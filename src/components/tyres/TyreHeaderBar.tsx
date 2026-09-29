@@ -178,12 +178,6 @@ export const TyreHeaderBar: React.FC<TyreHeaderBarProps> = ({
             </span>
           </h1>
         </div>
-
-        {/* GPS Zone Badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium self-start sm:self-auto backdrop-blur-md">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Zone: <strong className="text-white font-mono">London Central (a1614dbe)</strong></span>
-        </div>
       </div>
 
       {/* 2. Unified Compact Search & Service Bar */}

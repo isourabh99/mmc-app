@@ -42,6 +42,7 @@ import {
   addValetToCart,
   sendValetBookingRequest,
 } from "@/lib/service/valet.api";
+import { saveBookingMeta } from "@/lib/service/bookings.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 
@@ -81,6 +82,12 @@ export default function VehicleWashValetPage() {
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState("");
+  const [bookingLocationType, setBookingLocationType] = useState<"customer" | "provider">("customer");
+  const [bookingVehicleModel, setBookingVehicleModel] = useState<string>("Audi A4");
+  const [bookingVehicleColor, setBookingVehicleColor] = useState<string>("Black");
+  const [bookingSpecialConditions, setBookingSpecialConditions] = useState<string>("");
+  const [bookingAdditionalNotes, setBookingAdditionalNotes] = useState<string>("");
+  const [selectedSlot, setSelectedSlot] = useState<string>("11:00 AM - 01:00 PM");
 
   // Active Service and Variation Memos
   const activeServiceItem = useMemo(() => {
@@ -323,13 +330,17 @@ export default function VehicleWashValetPage() {
       const chosenVarName = activeVariation?.variant || chosenVarKey;
 
       // Step 1: Add to cart API with selected variation
-      await addValetToCart({
-        service_id: selectedServiceId,
-        provider_id: selectedProviderForBooking.id,
-        variant_key: chosenVarKey,
-        quantity: 1,
-        is_terms_accepted: 1,
-      });
+      try {
+        await addValetToCart({
+          service_id: selectedServiceId,
+          provider_id: selectedProviderForBooking.id,
+          variant_key: chosenVarKey,
+          quantity: 1,
+          is_terms_accepted: 1,
+        });
+      } catch (cartErr) {
+        console.warn("Cart add warning (proceeding to booking request):", cartErr);
+      }
 
       // Step 2: Format schedule & send booking request API
       const scheduleTime =
@@ -339,16 +350,22 @@ export default function VehicleWashValetPage() {
       const formattedSchedule = `${bookingDate} ${scheduleTime}`;
 
       const bookingRes = await sendValetBookingRequest({
+        service_id: selectedServiceId,
+        provider_id: selectedProviderForBooking.id,
+        variant_key: chosenVarKey,
         payment_method: bookingPaymentMethod,
         service_schedule: formattedSchedule,
         service_address_id: "2",
-        service_location: "customer",
+        service_location: bookingLocationType,
+        service_address: locationAddress,
         selected_slot_id: "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-        car_registration_number: registrationNo,
-        car_model: "Standard Vehicle",
-        car_color: "Silver",
-        special_conditions: `${currentServiceName} (${chosenVarName}) - Valet Booking`,
-        notes: `Customer service location: ${locationAddress}. Selected Package: ${chosenVarName}`,
+        car_registration_number: registrationNo || "AB24 MMC",
+        car_model: bookingVehicleModel.trim() || "Audi A4",
+        car_color: bookingVehicleColor.trim() || "Black",
+        special_conditions: bookingSpecialConditions.trim()
+          ? `[Valet: ${currentServiceName} (${chosenVarName})] ${bookingSpecialConditions.trim()}`
+          : `[Valet: ${currentServiceName} (${chosenVarName})] Doorstep vehicle valet service`,
+        notes: `[Valet: ${currentServiceName} (${chosenVarName})] ${bookingAdditionalNotes.trim() || `Location: ${locationAddress}. Slot: ${selectedSlot}`}`,
       });
 
       const ref =
@@ -361,7 +378,21 @@ export default function VehicleWashValetPage() {
         throw new Error(bookingRes?.message || "Failed to confirm booking.");
       }
 
-      setConfirmedBookingRef(ref || "MMC-VAL-BOOKING");
+      const confirmedId = String(ref || "MMC-VAL-BOOKING");
+      setConfirmedBookingRef(confirmedId);
+
+      // Save exact booking metadata so Account Bookings shows the real service title
+      saveBookingMeta(confirmedId, {
+        serviceTitle: `${currentServiceName} (${chosenVarName})`,
+        serviceCategoryName: "Valet & Detailing",
+        serviceType: "valet",
+        variant: chosenVarName,
+        vehicleModel: bookingVehicleModel.trim() || "Audi A4",
+        vehicleReg: registrationNo || "AB24 MMC",
+        providerName: selectedProviderForBooking.company_name,
+        price: dynamicBookingPrice,
+      });
+
       setIsBookingSuccess(true);
       showToast("Valet Booking Confirmed Successfully!", "success");
 
@@ -1148,6 +1179,123 @@ export default function VehicleWashValetPage() {
                       value={bookingTime}
                       onChange={(e) => setBookingTime(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
+                    />
+                  </div>
+                </div>
+
+                {/* Available Slots */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
+                    <Clock size={12} className="text-[#FAD293]" />
+                    <span>Available Slots</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { slot: "11:00 AM - 01:00 PM", time: "11:00" },
+                      { slot: "02:48 PM - 03:48 PM", time: "14:48" },
+                    ].map((s) => (
+                      <button
+                        key={s.slot}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSlot(s.slot);
+                          setBookingTime(s.time);
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition text-center ${
+                          selectedSlot === s.slot
+                            ? "bg-[#FAD293]/15 border-[#FAD293] text-[#FAD293] ring-1 ring-[#FAD293]"
+                            : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                        }`}
+                      >
+                        {s.slot}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Service Location Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
+                    <MapPin size={12} className="text-[#FAD293]" />
+                    <span>Service Location</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingLocationType("customer")}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                        bookingLocationType === "customer"
+                          ? "bg-[#FAD293] text-black shadow-md font-extrabold"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      <Smartphone size={13} />
+                      <span>Mobile Wash</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookingLocationType("provider")}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                        bookingLocationType === "provider"
+                          ? "bg-[#FAD293] text-black shadow-md font-extrabold"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      <Building size={13} />
+                      <span>Workshop</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Add Vehicle Details */}
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#FAD293]">
+                    <Car size={13} />
+                    <span>Add Vehicle Details</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-white/50 block">Car Brand / Model</label>
+                      <input
+                        type="text"
+                        value={bookingVehicleModel}
+                        onChange={(e) => setBookingVehicleModel(e.target.value)}
+                        placeholder="Eg Audi A4"
+                        className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-white/50 block">Color (Optional)</label>
+                      <input
+                        type="text"
+                        value={bookingVehicleColor}
+                        onChange={(e) => setBookingVehicleColor(e.target.value)}
+                        placeholder="Eg Black"
+                        className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-white/50 block">Special Conditions</label>
+                    <input
+                      type="text"
+                      value={bookingSpecialConditions}
+                      onChange={(e) => setBookingSpecialConditions(e.target.value)}
+                      placeholder='Eg "Bird Droppings, Pet Hair"'
+                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-white/50 block">Additional Notes</label>
+                    <textarea
+                      rows={2}
+                      value={bookingAdditionalNotes}
+                      onChange={(e) => setBookingAdditionalNotes(e.target.value)}
+                      placeholder='Eg "Focus on dashboard and windows, remove pet hair, polish rims..."'
+                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] resize-none"
                     />
                   </div>
                 </div>

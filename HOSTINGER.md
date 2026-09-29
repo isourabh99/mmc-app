@@ -9,15 +9,15 @@ npm install
 npm run build
 ```
 
-The production server is generated in `.next/standalone/`.
+The production server is generated in `out/standalone/`.
 
 ## Upload files
 
 Upload these items from the project to the Hostinger application root:
 
-- `.next/standalone/` contents, including `server.js`, `.next/`, `node_modules/`, and `package.json`
-- `.next/static/` to `.next/standalone/.next/static/`
-- `public/` to `.next/standalone/public/`
+- `out/standalone/` contents, including `server.js`, `out/`, `node_modules/`, and `package.json`
+- `out/static/` to `out/standalone/out/static/`
+- `public/` to `out/standalone/public/`
 
 Do not upload `.env` or expose the Google key in client-side variables.
 

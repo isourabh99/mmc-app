@@ -5,7 +5,7 @@ import {
   Calendar,
   UserRound,
   MapPin,
-  Shield,
+  FileText,
   LogOut,
 } from "lucide-react";
 
@@ -27,7 +27,7 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
   const userName =
     user?.first_name || user?.last_name
       ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-      : "VIP Member";
+      : "Member";
 
   const userInitials =
     (user?.first_name?.[0] || "") + (user?.last_name?.[0] || "") || "V";
@@ -50,9 +50,9 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
       icon: MapPin,
     },
     {
-      id: "security",
-      label: "Security",
-      icon: Shield,
+      id: "quotes",
+      label: "Quotes",
+      icon: FileText,
     },
   ];
 

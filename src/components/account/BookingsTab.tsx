@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -30,12 +30,15 @@ import {
   Eye,
   RotateCcw,
 } from "lucide-react";
+import apiClient from "@/lib/http/apiClient";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
   UnifiedBookingItem,
   BookingServiceType,
   getServiceCategoryLabel,
   extractReadableAddress,
   cleanReadableText,
+  saveBookingMeta,
 } from "@/lib/service/bookings.api";
 
 interface BookingsTabProps {
@@ -43,6 +46,8 @@ interface BookingsTabProps {
   loading: boolean;
   error: string;
   onRefresh: () => void;
+  initialBookingId?: string | null;
+  initialStatus?: string | null;
 }
 
 export const BookingsTab: React.FC<BookingsTabProps> = ({
@@ -50,6 +55,8 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
   loading,
   error,
   onRefresh,
+  initialBookingId,
+  initialStatus,
 }) => {
   // Filters State
   const [selectedServiceType, setSelectedServiceType] = useState<BookingServiceType>("all");
@@ -61,6 +68,129 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
   // Interaction State
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedBookingForModal, setSelectedBookingForModal] = useState<UnifiedBookingItem | null>(null);
+  const [highlightedBookingId, setHighlightedBookingId] = useState<string | null>(null);
+  const [bookingForPayment, setBookingForPayment] = useState<UnifiedBookingItem | null>(null);
+  const [payingRemaining, setPayingRemaining] = useState<boolean>(false);
+  const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
+  const [pendingBookingIdToOpen, setPendingBookingIdToOpen] = useState<string | null>(
+    initialBookingId ? String(initialBookingId) : null
+  );
+
+  // Sync initialStatus when provided (e.g. from notification clicks or url query)
+  useEffect(() => {
+    if (initialStatus) {
+      const clean = String(initialStatus).toLowerCase();
+      if (["pending", "ongoing", "completed", "canceled", "all"].includes(clean)) {
+        setSelectedStatus(clean);
+      }
+    }
+  }, [initialStatus]);
+
+  // Check if returning from a successful payment callback or with bookingId query
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSuccess = urlParams.get("payment_success") === "true";
+      const paidBookingId = urlParams.get("bookingId") || urlParams.get("booking_id");
+      const targetBookingId = paidBookingId || urlParams.get("id");
+
+      if (targetBookingId) {
+        setPendingBookingIdToOpen(String(targetBookingId));
+      }
+
+      if (isSuccess && paidBookingId) {
+        saveBookingMeta(paidBookingId, { isPaid: true, paymentStatus: "paid" });
+        onRefresh();
+        try {
+          triggerDevicePushNotification(
+            "Payment Successful! 🎉",
+            `Payment for booking #${paidBookingId} has been confirmed.`,
+            window.location.href
+          );
+        } catch {}
+      }
+    }
+  }, [onRefresh]);
+
+  // Robust function to find and open any booking in the modal
+  const openBookingById = useCallback(
+    (rawTargetId: string | number, preferredStatus?: string) => {
+      if (!rawTargetId || bookings.length === 0) return;
+      const cleanId = String(rawTargetId).trim().toLowerCase().replace(/^#/, "");
+
+      const targetBooking = bookings.find((b) => {
+        const bId = String(b.id || "").toLowerCase().replace(/^#/, "");
+        const rawId = String(b.rawId || "").toLowerCase().replace(/^#/, "");
+        const readableId = String(b.readableId || "").toLowerCase().replace(/^#/, "");
+        const bBookingId = String(b.raw?.booking_id || b.raw?.id || "").toLowerCase().replace(/^#/, "");
+        const bReadable = String(b.raw?.readable_id || "").toLowerCase().replace(/^#/, "");
+
+        return (
+          bId === cleanId ||
+          rawId === cleanId ||
+          readableId === cleanId ||
+          bBookingId === cleanId ||
+          bReadable === cleanId ||
+          (cleanId.length >= 4 && (
+            bId.includes(cleanId) ||
+            rawId.includes(cleanId) ||
+            readableId.includes(cleanId) ||
+            bBookingId.includes(cleanId) ||
+            cleanId.includes(bId) ||
+            cleanId.includes(rawId) ||
+            cleanId.includes(readableId)
+          ))
+        );
+      });
+
+      if (targetBooking) {
+        setSelectedServiceType("all");
+        if (preferredStatus && ["pending", "ongoing", "completed", "canceled"].includes(preferredStatus)) {
+          setSelectedStatus(preferredStatus);
+        } else if (targetBooking.status) {
+          setSelectedStatus(targetBooking.status);
+        }
+        setSelectedBookingForModal(targetBooking);
+        setHighlightedBookingId(targetBooking.id);
+        setPendingBookingIdToOpen(null);
+
+        setTimeout(() => {
+          const el = document.getElementById(`booking-card-${targetBooking.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 350);
+      }
+    },
+    [bookings]
+  );
+
+  // Listen for global custom event to open booking detail instantly from notifications
+  useEffect(() => {
+    const handleOpenEvent = (e: any) => {
+      const targetId = e?.detail?.bookingId || e?.detail?.readableId;
+      if (targetId) {
+        setPendingBookingIdToOpen(String(targetId));
+        openBookingById(targetId, e?.detail?.status);
+      }
+    };
+    const handleUpdateEvent = () => {
+      onRefresh();
+    };
+    window.addEventListener("mmc-open-booking-modal", handleOpenEvent);
+    window.addEventListener("mmc-bookings-updated", handleUpdateEvent);
+    return () => {
+      window.removeEventListener("mmc-open-booking-modal", handleOpenEvent);
+      window.removeEventListener("mmc-bookings-updated", handleUpdateEvent);
+    };
+  }, [openBookingById, onRefresh]);
+
+  // When pending booking ID exists and bookings load/update, auto open modal
+  useEffect(() => {
+    if (pendingBookingIdToOpen && bookings.length > 0) {
+      openBookingById(pendingBookingIdToOpen, initialStatus || undefined);
+    }
+  }, [pendingBookingIdToOpen, bookings, initialStatus, openBookingById]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -296,66 +426,11 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. MULTI-DIMENSIONAL FILTERS & SEARCH TOOLBAR                              */}
+      {/* 3. SEARCH & STATUS FILTERS TOOLBAR                                         */}
       {/* ========================================================================= */}
-      <div className="space-y-3.5 p-4 rounded-2xl bg-[#17120e] border border-white/10">
-        {/* Service Type Pills (Scrollable) */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] font-bold text-zinc-400">
-            <span>Filter by Service Category:</span>
-            {selectedServiceType !== "all" && (
-              <button
-                type="button"
-                onClick={() => setSelectedServiceType("all")}
-                className="text-[#FAD293] hover:underline cursor-pointer"
-              >
-                Reset Service Filter
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {[
-              { id: "all", label: "🌟 All Services", count: serviceCounts.all },
-              { id: "chauffeur", label: "🚘 Chauffeur Fleet", count: serviceCounts.chauffeur },
-              { id: "tyre", label: "🛞 Tyre Fitting & Repair", count: serviceCounts.tyre },
-              { id: "emergency", label: "🚨 Emergency Roadside", count: serviceCounts.emergency },
-              { id: "valet", label: "🧼 Valet & Detailing", count: serviceCounts.valet },
-              { id: "bodywork", label: "🛠️ Bodywork & Paint", count: serviceCounts.bodywork },
-              { id: "modification", label: "⚡ Modifications", count: serviceCounts.modification },
-            ].map((tab) => {
-              const isSelected = selectedServiceType === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setSelectedServiceType(tab.id as BookingServiceType)}
-                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                    isSelected
-                      ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-black shadow-md"
-                      : "border border-white/10 bg-black/40 text-zinc-300 hover:bg-black/70 hover:text-white"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  {tab.count > 0 && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                        isSelected
-                          ? "bg-black text-[#FAD293]"
-                          : "bg-white/10 text-zinc-300"
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
+      <div className="p-4 rounded-2xl bg-[#17120e] border border-white/10">
         {/* Status, Search and Sort Row */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-white/10">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Search Box (6 Cols) */}
           <div className="md:col-span-6 relative flex items-center bg-black/60 border border-zinc-700 focus-within:border-[#FAD293] rounded-xl px-3 py-2 text-xs">
             <Search size={14} className="text-zinc-400 mr-2 shrink-0" />
@@ -519,10 +594,26 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
             const isOngoing = item.status === "ongoing";
             const isCanceled = item.status === "canceled";
 
+            // Payment completion and remaining balance calculation
+            const isFullyPaid = item.isPaid || item.raw?.is_paid === 1 || item.raw?.payment_status === "paid";
+            const isOngoingOrPending = isOngoing || item.status === "accepted" || isPending;
+            const isPartial =
+              item.raw?.is_partial === 1 ||
+              item.raw?.is_partial === "1" ||
+              (Array.isArray(item.raw?.partial_payments) && item.raw.partial_payments.length > 0);
+            const remainingBalance = isPartial
+              ? Number(item.raw?.additional_charge ?? item.raw?.due_amount ?? (item.totalAmount * 0.75))
+              : Number(item.totalAmount);
+
             return (
               <div
                 key={item.id}
-                className="rounded-3xl border border-[#33271d] bg-[#17120e] hover:border-[#FAD293]/60 p-4 sm:p-5 space-y-4 shadow-xl transition-all duration-200"
+                id={`booking-card-${item.id}`}
+                className={`rounded-3xl border p-4 sm:p-5 space-y-4 shadow-xl transition-all duration-300 ${
+                  highlightedBookingId === item.id
+                    ? "border-[#FAD293] bg-[#22170d] ring-2 ring-[#FAD293]/70 shadow-[0_0_35px_rgba(250,210,147,0.35)]"
+                    : "border-[#33271d] bg-[#17120e] hover:border-[#FAD293]/60"
+                }`}
               >
                 {/* Top Row: Service Category Badge, Title, Status & Paid Badges */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-white/10 pb-3.5">
@@ -544,14 +635,24 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
 
                     <div className="min-w-0 flex-1">
                       {/* Service Category Tag */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getServiceColor(item.serviceType)}`}>
                           {getServiceIcon(item.serviceType)}
                           <span>{item.serviceCategoryName}</span>
                         </span>
+                        {highlightedBookingId === item.id && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-black font-extrabold text-[10px] uppercase tracking-wider animate-pulse shadow-md">
+                            Just Placed
+                          </span>
+                        )}
                         {item.vehicleReg && (
                           <span className="rounded bg-[#251b13] px-2 py-0.5 font-mono font-bold text-[10px] text-[#FAD293] border border-[#3a2d21]">
                             {item.vehicleReg}
+                          </span>
+                        )}
+                        {item.vehicleModel && (
+                          <span className="rounded bg-white/5 px-2 py-0.5 font-semibold text-[10px] text-zinc-300 border border-white/10">
+                            {item.vehicleModel}
                           </span>
                         )}
                       </div>
@@ -749,7 +850,19 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+                    {/* Pay Now Button for In-Progress / Pending bookings with remaining unpaid balance */}
+                    {!isFullyPaid && isOngoingOrPending && (
+                      <button
+                        type="button"
+                        onClick={() => setBookingForPayment(item)}
+                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
+                      >
+                        <CreditCard size={13} className="text-zinc-950" />
+                        <span>Pay Remaining (£{remainingBalance.toFixed(2)})</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => setSelectedBookingForModal(item)}
@@ -761,7 +874,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
 
                     <Link
                       href="/services"
-                      className="px-3.5 py-1.5 rounded-xl bg-[#FAD293] hover:brightness-110 text-black text-xs font-black uppercase tracking-wider transition flex items-center gap-1 shadow-sm"
+                      className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-bold transition flex items-center gap-1 border border-white/10"
                     >
                       <span>Rebook</span>
                       <ArrowRight size={12} />
@@ -898,7 +1011,34 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {!(
+                  selectedBookingForModal.isPaid ||
+                  selectedBookingForModal.raw?.is_paid === 1 ||
+                  selectedBookingForModal.raw?.payment_status === "paid"
+                ) &&
+                  (selectedBookingForModal.status === "ongoing" ||
+                    selectedBookingForModal.status === "accepted" ||
+                    selectedBookingForModal.status === "pending") && (
+                    <button
+                      type="button"
+                      onClick={() => setBookingForPayment(selectedBookingForModal)}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
+                    >
+                      <CreditCard size={13} className="text-zinc-950" />
+                      <span>
+                        Pay Remaining (£
+                        {(
+                          selectedBookingForModal.raw?.is_partial === 1 ||
+                          selectedBookingForModal.raw?.is_partial === "1"
+                            ? selectedBookingForModal.totalAmount * 0.75
+                            : selectedBookingForModal.totalAmount
+                        ).toFixed(2)}
+                        )
+                      </span>
+                    </button>
+                  )}
+
                 <button
                   type="button"
                   onClick={() => setSelectedBookingForModal(null)}
@@ -906,14 +1046,144 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 >
                   Close
                 </button>
-                <Link
-                  href="/services"
-                  className="px-5 py-2.5 rounded-xl bg-[#FAD293] hover:brightness-110 text-black font-black text-xs uppercase tracking-wider transition cursor-pointer"
-                >
-                  Book Another
-                </Link>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. PAY REMAINING BALANCE MODAL                                            */}
+      {/* ========================================================================= */}
+      {bookingForPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-md bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl animate-scale-up text-left">
+            <button
+              type="button"
+              onClick={() => {
+                setBookingForPayment(null);
+                setPaymentSuccess(false);
+              }}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#FAD293] block">
+                Outstanding Balance Payment
+              </span>
+              <h3 className="text-xl font-black text-white mt-1">
+                {bookingForPayment.serviceTitle}
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5 font-mono">
+                Booking #{bookingForPayment.id} • {bookingForPayment.statusDisplay}
+              </p>
+            </div>
+
+            {/* Price breakdown */}
+            <div className="rounded-2xl border border-white/10 bg-black/50 p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between text-zinc-400">
+                <span>Total Agreed Price:</span>
+                <span className="font-bold text-white">£{bookingForPayment.totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-zinc-400">
+                <span>Advance Deposit (25% Paid):</span>
+                <span className="font-semibold text-emerald-400">
+                  -£{(bookingForPayment.totalAmount * 0.25).toFixed(2)}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
+                <span className="text-[#FAD293]">Remaining Amount Due:</span>
+                <span className="text-base font-extrabold text-[#FAD293]">
+                  £{(bookingForPayment.totalAmount * 0.75).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Payment method selector */}
+            <div className="p-4 rounded-2xl border border-[#D5A054]/40 bg-[#1C1A16] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FAD293]/20 border border-[#FAD293]/40 flex items-center justify-center text-[#FAD293]">
+                  <CreditCard size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Online Payment (Stripe)</span>
+                  <span className="text-[11px] text-zinc-400">Debit / Credit Card, Apple Pay, Google Pay</span>
+                </div>
+              </div>
+              <Check className="w-4 h-4 text-[#FAD293]" />
+            </div>
+
+            {paymentSuccess ? (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center space-y-1">
+                <Check className="w-6 h-6 mx-auto stroke-[3]" />
+                <p>Payment Received Successfully!</p>
+                <p className="text-[11px] text-zinc-400 font-normal">Updating your booking records...</p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={payingRemaining}
+                onClick={async () => {
+                  setPayingRemaining(true);
+                  try {
+                    const bookingId = bookingForPayment.rawId || bookingForPayment.id;
+                    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+                    const userObj = userStr ? JSON.parse(userStr) : null;
+                    const userId = userObj?.id || "";
+
+                    const callbackUrl = `${window.location.origin}/account?tab=bookings&status=ongoing&bookingId=${bookingId}&payment_success=true`;
+
+                    let redirectUrl = "";
+
+                    // 1. Try calling Demandium customer payment API endpoint
+                    try {
+                      const res = await apiClient.post("/customer/booking/payment", {
+                        booking_id: bookingId,
+                        payment_method: "stripe",
+                        payment_platform: "app",
+                        callback: callbackUrl,
+                      });
+
+                      redirectUrl =
+                        res.data?.content?.redirect_url ||
+                        res.data?.content?.redirect_link ||
+                        res.data?.content?.payment_url ||
+                        res.data?.content?.url;
+                    } catch (e: any) {
+                      // Fallback to direct gateway URL
+                    }
+
+                    // 2. Direct Demandium Stripe checkout gateway link
+                    if (!redirectUrl) {
+                      redirectUrl = `https://mmcclub.co.uk/payment/stripe?booking_id=${encodeURIComponent(String(bookingId))}&user_id=${encodeURIComponent(String(userId))}&callback=${encodeURIComponent(callbackUrl)}`;
+                    }
+
+                    // Redirect to live Stripe payment portal
+                    window.location.href = redirectUrl;
+                  } catch (err: any) {
+                    console.error("Payment initiation failed:", err);
+                    setPayingRemaining(false);
+                  }
+                }}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
+              >
+                {payingRemaining ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>Connecting to Stripe Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      Pay Remaining £{(bookingForPayment.totalAmount * 0.75).toFixed(2)} Now
+                    </span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}

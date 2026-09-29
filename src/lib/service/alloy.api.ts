@@ -8,6 +8,12 @@ export interface AlloyServiceItem {
   price?: number;
   category_id?: string;
   is_active?: number;
+  thumbnail?: string | null;
+  thumbnail_full_path?: string | null;
+  cover_image?: string | null;
+  cover_image_full_path?: string | null;
+  image?: string | null;
+  image_full_path?: string | null;
 }
 
 export interface AlloyServicesResponse {
@@ -22,7 +28,7 @@ export interface AlloyServicesResponse {
 }
 
 export const ALLOY_CATEGORY_ID = "e1fb2dae-c233-4b45-852b-8253373e06d7";
-export const BOOKING_QUESTIONS_CATEGORY_ID = "675fb918-9d0c-4ee5-9a0a-904b42651033";
+export const BOOKING_QUESTIONS_CATEGORY_ID = ALLOY_CATEGORY_ID;
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 /**
@@ -37,7 +43,7 @@ export const getAlloyServices = async (
   try {
     const zoneId = DEFAULT_ZONE_ID;
 
-    const response = await apiClient.get<AlloyServicesResponse>(
+    const response = await apiClient.get<any>(
       `/customer/service/category/${categoryId}`,
       {
         params: { limit, offset },
@@ -47,8 +53,36 @@ export const getAlloyServices = async (
       }
     );
 
-    if (response.data?.content?.data && Array.isArray(response.data.content.data)) {
-      return response.data.content.data;
+    const content = response.data?.content;
+    const rawList = Array.isArray(content)
+      ? content
+      : content?.data && Array.isArray(content.data)
+      ? content.data
+      : [];
+
+    if (rawList.length > 0) {
+      return rawList.map((item: any) => ({
+        ...item,
+        id: String(item.id),
+        name: item.name || "Alloy Wheel Service",
+        short_description: item.short_description || item.description || "",
+        description: item.description || item.short_description || "",
+        thumbnail: item.thumbnail || null,
+        thumbnail_full_path:
+          item.thumbnail_full_path ||
+          item.cover_image_full_path ||
+          item.image_full_path ||
+          item.thumbnail ||
+          item.cover_image ||
+          item.image ||
+          null,
+        cover_image_full_path:
+          item.cover_image_full_path ||
+          item.thumbnail_full_path ||
+          item.image_full_path ||
+          item.cover_image ||
+          null,
+      }));
     }
     return [];
   } catch (error) {
@@ -669,6 +703,7 @@ export interface SendBookingRequestParams {
   answers?: BookingAnswerItem[] | Record<string, any>;
   payment_platform?: string;
   callback?: string;
+  is_partial?: number | 0 | 1;
 }
 
 export interface SendBookingRequestResponse {
@@ -758,7 +793,7 @@ export const getProviderSlots = async (
  */
 export const getProviderQuestions = async (
   providerId?: string,
-  categoryId: string = BOOKING_QUESTIONS_CATEGORY_ID
+  categoryId: string = ALLOY_CATEGORY_ID
 ): Promise<BookingQuestionItem[]> => {
   try {
     const zoneId =
@@ -768,50 +803,117 @@ export const getProviderQuestions = async (
           localStorage.getItem("zoneId"))) ||
       DEFAULT_ZONE_ID;
 
-    const params: Record<string, any> = {
-      category_id: categoryId,
-    };
-    if (providerId) {
-      params.provider_id = providerId;
-    }
+    const response = await apiClient
+      .get<any>("/customer/booking/provider/questions", {
+        params: { category_id: categoryId || ALLOY_CATEGORY_ID },
+        headers: { zoneid: zoneId },
+      })
+      .catch(() => null);
 
-    let response = await apiClient.get<any>(
-      "/customer/booking/provider/questions",
-      {
-        params,
-        headers: {
-          zoneid: zoneId,
-        },
-      }
-    );
-
-    let rawData = response.data?.content || response.data?.data || response.data;
+    let rawData = response?.data?.content || response?.data?.data || response?.data;
+    let list: any[] = [];
     if (Array.isArray(rawData) && rawData.length > 0) {
-      return rawData;
+      list = rawData;
+    } else if (rawData && typeof rawData === "object") {
+      list = rawData.questions || rawData.data || [];
     }
 
-    // If query with provider_id returned empty, query with just category_id
-    if (providerId) {
-      response = await apiClient.get<any>(
-        "/customer/booking/provider/questions",
-        {
-          params: { category_id: categoryId },
-          headers: { zoneid: zoneId },
-        }
-      );
-      rawData = response.data?.content || response.data?.data || response.data;
-      if (Array.isArray(rawData) && rawData.length > 0) {
-        return rawData;
+    const unwantedKeywords = [
+      "fitted to the vehicle",
+      "locking wheel nut",
+      "structural damage",
+      "immediately after repair",
+    ];
+
+    if (Array.isArray(list) && list.length > 0) {
+      const filtered = list.filter((q) => {
+        const txt = (q.question_text || q.question || "").toLowerCase();
+        return !unwantedKeywords.some((kw) => txt.includes(kw));
+      });
+
+      if (filtered.length > 0) {
+        return filtered.map((q) => {
+          let parsedOptions: string[] = [];
+          if (Array.isArray(q.options)) {
+            parsedOptions = q.options;
+          } else if (typeof q.options === "string" && q.options.trim()) {
+            parsedOptions = q.options
+              .split(",")
+              .map((o: string) => o.trim())
+              .filter(Boolean);
+          }
+          return {
+            ...q,
+            question_text: q.question_text || q.question || "",
+            question_type: q.question_type || (parsedOptions.length > 0 ? "select" : "text"),
+            options: parsedOptions,
+          };
+        });
       }
     }
 
-    if (rawData && typeof rawData === "object") {
-      const list = rawData.questions || rawData.data || [];
-      if (Array.isArray(list)) {
-        return list;
-      }
-    }
-    return [];
+    // Default Alloy Wheel Specific Questions matching MMC design
+    return [
+      {
+        id: "alloy-num-wheels",
+        question_text: "Number of wheels",
+        question_type: "select",
+        options: ["1", "2", "3", "4"],
+        is_required: true,
+      },
+      {
+        id: "alloy-wheel-size",
+        question_text: "Wheel size",
+        question_type: "select",
+        options: ["15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "26", "28", "30", "32"],
+        is_required: true,
+      },
+      {
+        id: "alloy-wheel-finish",
+        question_text: "Wheel finish",
+        question_type: "select",
+        options: ["Painted", "Diamond Cut", "Polished", "Powder Coated", "Chrome / Shadow Chrome", "Not sure"],
+        is_required: true,
+      },
+      {
+        id: "alloy-current-colour",
+        question_text: "Current colour",
+        question_type: "select",
+        options: [
+          "Silver",
+          "Gloss black",
+          "Satin black",
+          "Matte black",
+          "Hyper silver",
+          "Gunmetal grey",
+          "Anthracite",
+          "Bronze",
+          "Gold",
+          "Diamond Cut Lip",
+          "Factory Original",
+        ],
+        is_required: true,
+      },
+      {
+        id: "alloy-change-colour",
+        question_text: "Change Colour",
+        question_type: "select",
+        options: [
+          "Keep Same Colour",
+          "Gloss black",
+          "Satin black",
+          "Matte black",
+          "Silver",
+          "Hyper silver",
+          "Gunmetal grey",
+          "Anthracite",
+          "Bronze",
+          "Gold",
+          "Custom shade",
+        ],
+        is_required: true,
+      },
+    ];
   } catch (error) {
     console.error("Failed to load provider questions from API:", error);
     return [];
@@ -904,6 +1006,9 @@ export const sendBookingRequest = async (
     formData.append("latitude", String(params.latitude || "22.66215"));
     formData.append("longitude", String(params.longitude || "75.9035"));
 
+    if (formattedAnswers) {
+      formData.append("answers", JSON.stringify(formattedAnswers));
+    }
     if (params.selected_slot_id) {
       formData.append("selected_slot_id", params.selected_slot_id);
     }
@@ -911,11 +1016,17 @@ export const sendBookingRequest = async (
       formData.append("notes", effectiveNotes);
     }
     if (isOnline || params.payment_platform) {
-      formData.append("payment_platform", params.payment_platform || "web");
+      formData.append("payment_platform", params.payment_platform || "app");
       formData.append(
         "callback",
-        params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
+        params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success")
       );
+    }
+    if (params.is_partial !== undefined) {
+      formData.append("is_partial", String(params.is_partial));
     }
     formData.append("is_terms_accepted", "1");
     formData.append("is_provider_terms_accepted", "1");
@@ -954,6 +1065,12 @@ export const sendBookingRequest = async (
       latitude: String(params.latitude || "22.66215"),
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
+      is_partial: params.is_partial !== undefined ? Number(params.is_partial) : 0,
+      is_terms_accepted: 1,
+      is_provider_terms_accepted: 1,
+      terms_and_conditions: 1,
+      terms_accepted: 1,
+      ...(formattedAnswers ? { answers: formattedAnswers } : {}),
       ...(fcmToken ? { fcm_token: fcmToken } : {}),
     };
 
@@ -961,9 +1078,12 @@ export const sendBookingRequest = async (
       payload.selected_slot_id = params.selected_slot_id;
     }
     if (isOnline || params.payment_platform) {
-      payload.payment_platform = params.payment_platform || "web";
+      payload.payment_platform = params.payment_platform || "app";
       payload.callback =
-        params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response";
+        params.callback ||
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/booking-success");
     }
 
     const response = await apiClient.post<SendBookingRequestResponse>(

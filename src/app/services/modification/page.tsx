@@ -57,6 +57,7 @@ import {
     Gauge,
 } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
     getModificationServices,
     type ModificationServiceItem,
@@ -81,6 +82,7 @@ import {
     type BookingSlotItem,
     type BookingQuestionItem,
 } from "@/lib/service/modification.api";
+import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 import ModificationStepHeader, { type ActiveView } from "./components/ModificationStepHeader";
 import ModificationTechniciansView from "./components/ModificationTechniciansView";
 import ModificationQuoteFormView from "./components/ModificationQuoteFormView";
@@ -500,7 +502,8 @@ export default function ModificationPage() {
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, any>>({});
     const [serviceAddressId, setServiceAddressId] = useState<string>("");
     const [bookingNotes, setBookingNotes] = useState<string>("");
-    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("cash_after_service");
+    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+    const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
     const [bookingCarImagePreview, setBookingCarImagePreview] = useState<string | null>(null);
     const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
@@ -788,6 +791,7 @@ export default function ModificationPage() {
                 provider_id: bookingProviderModal.id,
                 date: bookingDate,
                 payment_method: bookingPaymentMethod,
+                is_partial: isPartialPayment ? 1 : 0,
                 service_location: serviceLocation,
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
@@ -795,24 +799,51 @@ export default function ModificationPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                payment_platform: bookingPaymentMethod === "stripe" ? "web" : undefined,
+                payment_platform: bookingPaymentMethod === "stripe" ? "app" : undefined,
                 callback:
                     bookingPaymentMethod === "stripe"
-                        ? "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
+                        ? (typeof window !== "undefined"
+                            ? `${window.location.origin}/booking-success`
+                            : "https://mmcclub.co.uk/booking-success")
                         : undefined,
             });
 
             // Extract redirect URL for Stripe if returned
             const redirectUrl =
+                res.content?.redirect_link ||
                 res.content?.redirect_url ||
                 res.content?.payment_url ||
                 res.content?.url ||
                 res.content?.link ||
                 res.content?.payment_link ||
+                (res as any).redirect_link ||
                 (res as any).redirect_url ||
                 (res as any).payment_url ||
                 (res as any).url ||
                 (typeof res.content === "string" && res.content.startsWith("http") ? res.content : null);
+
+            const confirmedRefId = res.content?.readable_id || res.content?.booking_id;
+            if (confirmedRefId && bookingPaymentMethod !== "stripe") {
+                saveConfirmedBooking({
+                    id: String(confirmedRefId),
+                    rawId: confirmedRefId,
+                    serviceType: "modification",
+                    serviceCategoryName: "Vehicle Modification & Tuning",
+                    serviceTitle: "Vehicle Modification & Performance",
+                    providerName: bookingProviderModal?.company_name || "Specialist Garage",
+                    providerPhone: bookingProviderModal?.company_phone,
+                    totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
+                    isPaid: false,
+                    paymentStatus: "Pending Payment",
+                    paymentMethod: bookingPaymentMethod,
+                    status: "accepted",
+                    statusDisplay: "Accepted",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    fullScheduleDisplay: formattedSchedule || "Confirmed",
+                    createdAt: new Date().toISOString(),
+                });
+            }
 
             // Online Payment (Stripe) -> Redirect to Stripe Checkout page
             if (bookingPaymentMethod === "stripe") {
@@ -821,8 +852,8 @@ export default function ModificationPage() {
                         sessionStorage.setItem(
                             "mmc_pending_booking",
                             JSON.stringify({
-                                booking_id: res.content?.booking_id,
-                                readable_id: res.content?.readable_id,
+                                booking_id: res.content?.booking_id || confirmedRefId,
+                                readable_id: res.content?.readable_id || confirmedRefId,
                                 provider: bookingProviderModal,
                                 schedule: formattedSchedule,
                                 price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
@@ -866,6 +897,13 @@ export default function ModificationPage() {
                 setBookingConfirmed(true);
                 const refId = res.content?.readable_id || res.content?.booking_id || "";
                 showToast(`Modification Appointment Placed! ${refId ? `Ref: #${refId}` : ""}`, "success");
+                try {
+                    triggerDevicePushNotification(
+                        "Booking Confirmed! 🎉",
+                        `Your vehicle modification booking #${refId} has been confirmed.`,
+                        "/account?tab=bookings"
+                    );
+                } catch { }
             } else if (res.errors) {
                 let errMsg = "Failed to confirm booking";
                 if (Array.isArray(res.errors)) {
@@ -1588,6 +1626,8 @@ export default function ModificationPage() {
                         onNotesChange={setBookingNotes}
                         bookingPaymentMethod={bookingPaymentMethod}
                         onPaymentMethodChange={setBookingPaymentMethod}
+                        isPartialPayment={isPartialPayment}
+                        onPartialPaymentChange={setIsPartialPayment}
                         bookingCarImage={bookingCarImage}
                         bookingCarImagePreview={bookingCarImagePreview}
                         onCarImageChange={(e) => {

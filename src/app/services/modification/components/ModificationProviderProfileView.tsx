@@ -194,7 +194,7 @@ export default function ModificationProviderProfileView({
                     <div className="space-y-2">
                         <h3 className="text-base font-extrabold text-white">About the Workshop</h3>
                         <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                            {profileDetails?.company_name || provider.company_name} is an approved specialist automotive tuning garage equipped with performance diagnostic bays, precision fabrication tools, and experienced vehicle modification technicians. All installations and tuning programs adhere to strict safety and road legal compliance guidelines.
+                            {profileDetails?.provider.company_name || provider.company_name} is an approved specialist automotive tuning garage equipped with performance diagnostic bays, precision fabrication tools, and experienced vehicle modification technicians. All installations and tuning programs adhere to strict safety and road legal compliance guidelines.
                         </p>
                     </div>
 

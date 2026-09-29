@@ -5,7 +5,7 @@ import {
   Calendar,
   UserRound,
   MapPin,
-  Shield,
+  FileText,
   LogOut,
   Sparkles,
 } from "lucide-react";
@@ -28,7 +28,7 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
   const userName =
     user?.first_name || user?.last_name
       ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-      : "VIP Member";
+      : " Member";
 
   const userInitials =
     (user?.first_name?.[0] || "") + (user?.last_name?.[0] || "") || "V";
@@ -51,9 +51,9 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
       icon: MapPin,
     },
     {
-      id: "security",
-      label: "Security & Privacy",
-      icon: Shield,
+      id: "quotes",
+      label: "My Quotes",
+      icon: FileText,
     },
   ];
 
@@ -75,11 +75,7 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="rounded-md border border-[#d9a85f]/40 bg-[#d9a85f]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#e7bd78]">
-              VIP Client
-            </span>
-          </div>
+
           <h3 className="font-bold text-sm text-white truncate mt-1">
             {userName}
           </h3>
@@ -99,11 +95,10 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${
-                isSelected
-                  ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-[#140e0a] shadow-md shadow-[#d09a50]/20 font-bold"
-                  : "text-white/70 hover:bg-[#1f1711] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${isSelected
+                ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-[#140e0a] shadow-md shadow-[#d09a50]/20 font-bold"
+                : "text-white/70 hover:bg-[#1f1711] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <Icon
@@ -115,11 +110,10 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
 
               {item.badge && (
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    isSelected
-                      ? "bg-[#140e0a] text-[#e7bd78]"
-                      : "bg-[#251b13] text-[#e7bd78] border border-[#d9a85f]/30"
-                  }`}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isSelected
+                    ? "bg-[#140e0a] text-[#e7bd78]"
+                    : "bg-[#251b13] text-[#e7bd78] border border-[#d9a85f]/30"
+                    }`}
                 >
                   {item.badge}
                 </span>

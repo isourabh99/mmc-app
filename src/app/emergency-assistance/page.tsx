@@ -1358,6 +1358,19 @@ export default function EmergencyAssistancePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
             {/* LEFT COLUMN: Emergency Response Overview & Status */}
             <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
+              {/* Emergency Showcase Banner */}
+              <div className="relative w-full overflow-hidden rounded-2xl border border-red-900/40 shadow-2xl group" style={{ aspectRatio: '16/7' }}>
+                <Image
+                  src="/emergency.png"
+                  alt="MMC Emergency Roadside Assistance"
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 600px"
+                  className="w-full h-full object-fill transition-transform duration-500 group-hover:scale-[1.02]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0605]/80 via-transparent to-transparent pointer-events-none" />
+              </div>
+
               <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-red-500/40 bg-red-500/10 text-red-400 text-xs font-bold uppercase tracking-widest">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />

@@ -76,6 +76,7 @@ export interface ProviderItem {
   is_emergency_active?: number;
   delivery_type?: string;
   service_location?: string;
+  postcode?: string | null;
   about_us?: string;
   owner?: {
     id: string;
@@ -83,6 +84,7 @@ export interface ProviderItem {
     last_name: string;
     email: string;
     phone: string;
+    contact_person_name?: string;
     identification_type?: string;
   };
   coordinates?: {
@@ -136,6 +138,7 @@ export interface BookingSlotItem {
   start_time: string;
   end_time: string;
   title?: string;
+  is_available?: boolean;
 }
 
 export interface BookingQuestionItem {
@@ -144,6 +147,8 @@ export interface BookingQuestionItem {
   question?: string;
   question_type?: "yes_no" | "text" | "options" | "image";
   is_required?: boolean | number;
+  is_active?: boolean | number;
+  display_order?: number;
   options?: any;
 }
 
@@ -740,6 +745,7 @@ export interface SendModificationBookingRequestParams {
   latitude?: number | string;
   longitude?: number | string;
   postcode?: string;
+  is_partial?: number | 0 | 1;
 }
 
 export const sendModificationBookingRequest = async (
@@ -809,6 +815,9 @@ export const sendModificationBookingRequest = async (
     formData.append("latitude", String(params.latitude || "22.66215"));
     formData.append("longitude", String(params.longitude || "75.9035"));
 
+    if (params.is_partial !== undefined) {
+      formData.append("is_partial", String(params.is_partial));
+    }
     if (params.selected_slot_id) {
       formData.append("selected_slot_id", params.selected_slot_id);
     }
@@ -819,7 +828,10 @@ export const sendModificationBookingRequest = async (
       formData.append("payment_platform", params.payment_platform || "web");
       formData.append(
         "callback",
-        params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
+        params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success")
       );
     }
     formData.append("car_image", params.car_image);
@@ -851,15 +863,23 @@ export const sendModificationBookingRequest = async (
       latitude: String(params.latitude || "22.66215"),
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
+      is_partial: params.is_partial ?? 0,
+      is_terms_accepted: 1,
+      is_provider_terms_accepted: 1,
+      terms_and_conditions: 1,
+      terms_accepted: 1,
     };
 
     if (params.selected_slot_id) {
       payload.selected_slot_id = params.selected_slot_id;
     }
     if (isOnline || params.payment_platform) {
-      payload.payment_platform = params.payment_platform || "web";
+      payload.payment_platform = params.payment_platform || "app";
       payload.callback =
-        params.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response";
+        params.callback ||
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/booking-success");
     }
 
     const response = await apiClient.post("/customer/booking/request/send", payload, {

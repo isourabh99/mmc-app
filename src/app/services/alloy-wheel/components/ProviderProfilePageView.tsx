@@ -139,13 +139,13 @@ export default function ProviderProfilePageView({
                                 <div className="flex items-center gap-1 text-white font-bold">
                                     <Star className="w-4 h-4 fill-[#E8AF66] text-[#E8AF66]" />
                                     <span>
-                                        {fullProvider.avg_rating > 0
-                                            ? Number(fullProvider.avg_rating).toFixed(1)
+                                        {Number(fullProvider.avg_rating || 0) > 0
+                                            ? Number(fullProvider.avg_rating || 0).toFixed(1)
                                             : "4.9"}
                                     </span>
                                 </div>
                                 <span className="text-zinc-500">
-                                    ({fullProvider.rating_count > 0 ? `${fullProvider.rating_count} Reviews` : "Verified Partner"})
+                                    ({Number(fullProvider.rating_count || 0) > 0 ? `${fullProvider.rating_count} Reviews` : "Verified Partner"})
                                 </span>
                             </div>
                         </div>

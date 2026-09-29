@@ -250,7 +250,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                       color: "#17100b",
                     }}
                   >
-                    {chauffeur.type?.name || chauffeur.category?.name || "VIP Chauffeur"}
+                    {chauffeur.type?.name || chauffeur.category?.name || " Chauffeur"}
                   </span>
 
                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 backdrop-blur-md">
@@ -763,7 +763,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                 </div>
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-                  <span>Complimentary VIP Luggage Handling</span>
+                  <span>Complimentary  Luggage Handling</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Clock size={16} className="text-[#FAD293] shrink-0" />
@@ -912,7 +912,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                     {rCar.brand}
                   </h4>
                   <p className="text-xs text-white/50 mt-0.5">
-                    {rCar.type?.name || "VIP Chauffeur"} • {rCar.transmission_type || "-"}
+                    {rCar.type?.name || " Chauffeur"} • {rCar.transmission_type || "-"}
                   </p>
                 </Link>
               ))}
@@ -980,21 +980,29 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
             {/* Actions */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <Link
-                href="/account?tab=bookings"
+                href={`/account?tab=bookings&bookingId=${encodeURIComponent(bookingSuccessModal.bookingId)}`}
                 className="py-3 px-4 rounded-xl font-bold text-black text-xs transition hover:brightness-110 flex items-center justify-center gap-1.5"
                 style={{
                   background: "linear-gradient(135deg, #FAD293, #CEA46B)",
                 }}
               >
                 <Calendar size={14} />
-                <span>View in My Bookings</span>
+                <span>View This Booking</span>
               </Link>
+              <Link
+                href="/services"
+                className="py-3 px-4 rounded-xl font-semibold text-white/90 bg-white/10 hover:bg-white/15 border border-white/15 text-xs transition flex items-center justify-center gap-1.5"
+              >
+                <span>Book Another Service</span>
+              </Link>
+            </div>
+            <div className="pt-1 text-center">
               <button
                 type="button"
                 onClick={() => setBookingSuccessModal(null)}
-                className="py-3 px-4 rounded-xl font-semibold text-white/80 bg-white/10 hover:bg-white/15 border border-white/15 text-xs transition"
+                className="text-[11px] text-white/40 hover:text-white/80 transition cursor-pointer"
               >
-                Close
+                Close Window
               </button>
             </div>
           </div>

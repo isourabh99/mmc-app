@@ -14,6 +14,7 @@ export interface EmergencyServiceItem {
 export interface EmergencyCategoryResponse {
   response_code: string;
   message: string;
+  data?: EmergencyServiceItem[];
   content: {
     current_page: number;
     data: EmergencyServiceItem[];

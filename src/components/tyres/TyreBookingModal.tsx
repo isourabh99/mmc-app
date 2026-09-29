@@ -205,7 +205,7 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
                 {isSuccess ? "Fitting Request Confirmed" : "Tyre Fitting & Mobile Dispatch"}
               </h2>
               <p className="text-xs text-white/50 truncate">
-                Zone: London Central (a1614dbe) • {tyre.brand} {tyre.model}
+                {tyre.brand} {tyre.model} • Certified Fitting & Delivery
               </p>
             </div>
           </div>

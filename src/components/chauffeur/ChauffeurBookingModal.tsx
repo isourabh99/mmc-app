@@ -180,8 +180,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
       };
 
       const callbackUrl = typeof window !== "undefined"
-        ? `${window.location.origin}/services/Chauffeur`
-        : "https://mmcclub.co.uk/services/Chauffeur";
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success";
 
       const payload = {
         car_id: bookingChauffeur.id,
@@ -208,9 +208,25 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         bookingObj?.booking_id ||
         res.content?.booking_id ||
         bookingObj?.id ||
-        "MMC-VIP-" + Math.floor(100000 + Math.random() * 900000)
+        "MMC-" + Math.floor(100000 + Math.random() * 900000)
       );
       const totalAmount = bookingObj?.total_amount;
+
+      if (redirectLink) {
+        try {
+          sessionStorage.setItem(
+            "mmc_pending_booking",
+            JSON.stringify({
+              booking_id: bookingRef,
+              readable_id: bookingRef,
+              provider: { company_name: "MMC Chauffeur Fleet" },
+              schedule: `${startDate} ${pickupTime}`,
+              price: totalAmount,
+              service_name: `Chauffeur: ${bookingChauffeur.brand} ${bookingChauffeur.model}`,
+            })
+          );
+        } catch {}
+      }
 
       setBookingSuccessModal({
         open: true,
@@ -259,10 +275,11 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
   };
 
   const handleGoToMyBookings = () => {
+    const bookingRef = bookingSuccessModal.reference;
     setBookingSuccessModal({ open: false, reference: "", message: "" });
     setBookingFailedModal({ open: false, title: "", message: "" });
     onCloseBooking();
-    router.push("/account?tab=bookings");
+    router.push(`/account?tab=bookings${bookingRef ? `&bookingId=${encodeURIComponent(bookingRef)}` : ""}`);
   };
 
   return (
@@ -286,7 +303,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
 
               <div className="text-center">
                 <h3 className="text-sm font-bold tracking-wide text-white uppercase">Chauffeur Reservation</h3>
-                <p className="text-[10px] text-[#e7bd78]">VIP Executive Fleet</p>
+                <p className="text-[10px] text-[#e7bd78]">Executive Fleet</p>
               </div>
 
               <button
@@ -581,7 +598,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               <div className="absolute inset-0 bg-gradient-to-t from-[#14100c] via-transparent to-transparent" />
               
               <span className="absolute bottom-3 left-3 rounded-lg border border-[#e7bd78]/40 bg-[#14100c]/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#e7bd78] backdrop-blur-md">
-                {detailsChauffeur.type?.name || "VIP Fleet"}
+                {detailsChauffeur.type?.name || " Fleet"}
               </span>
             </div>
 
@@ -764,28 +781,43 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               </div>
             )}
 
-            {/* The 2 Primary Action Buttons requested by user */}
+            {/* Action Buttons: View This Booking & Explore Other Services */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Button 1: View My Bookings (/account?tab=bookings) */}
+              {/* Button 1: View My Bookings with the specific booking opened */}
               <button
                 type="button"
                 onClick={handleGoToMyBookings}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-xs font-bold text-[#140e0a] shadow-md transition hover:brightness-105 active:scale-95"
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-xs font-bold text-[#140e0a] shadow-md transition hover:brightness-105 active:scale-95 cursor-pointer"
               >
                 <Calendar size={14} />
-                <span>View My Bookings</span>
+                <span>View This Booking</span>
               </button>
 
-              {/* Button 2: Back to Fleet / Done */}
+              {/* Button 2: Return to Services / Booking Form */}
+              <button
+                type="button"
+                onClick={() => {
+                  setBookingSuccessModal({ open: false, reference: "", message: "" });
+                  onCloseBooking();
+                  router.push("/services");
+                }}
+                className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-[#17120e] text-xs font-semibold text-white/80 transition hover:bg-[#251e18] hover:text-white active:scale-95 cursor-pointer"
+              >
+                <Car size={14} />
+                <span>Book Another Service</span>
+              </button>
+            </div>
+
+            <div className="pt-2 text-center">
               <button
                 type="button"
                 onClick={() => {
                   setBookingSuccessModal({ open: false, reference: "", message: "" });
                   onCloseBooking();
                 }}
-                className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-[#17120e] text-xs font-semibold text-white/80 transition hover:bg-[#251e18] hover:text-white active:scale-95"
+                className="text-[11px] text-white/40 hover:text-white/80 transition cursor-pointer"
               >
-                <span>Back to Fleet</span>
+                Back to Chauffeur Fleet
               </button>
             </div>
 

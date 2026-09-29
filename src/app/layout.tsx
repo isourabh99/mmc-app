@@ -46,7 +46,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
 
-         <LocationPermission />
+        <LocationPermission />
         <ToastProvider>
           <FirebaseNotificationListener />
           <Navbar />

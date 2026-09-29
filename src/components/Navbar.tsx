@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import {
   UserRound,
@@ -13,9 +14,12 @@ import {
   Car,
   Shield,
   Sparkles,
+  Bell,
+  FileText,
 } from "lucide-react";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
+import NotificationCenter from "@/components/NotificationCenter";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -150,26 +154,17 @@ export default function Navbar() {
 
         <Link
           href="/"
-          className="flex items-center gap-3 group"
+          className="flex items-center group"
+          aria-label="Motor Market Connect home"
         >
-          <div>
-            <span
-              className="text-xl font-bold tracking-wider"
-              style={{
-                background:
-                  "linear-gradient(135deg, #FAD293, #CEA46B)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              MMC
-            </span>
-
-            <p className="text-[10px] text-white/40 tracking-widest uppercase -mt-1">
-              Motor Market Connect
-            </p>
-          </div>
+          <Image
+            src="/mmc-logo.jpg"
+            alt="Motor Market Connect"
+            width={300}
+            height={134}
+            priority
+            className="h-10 w-auto sm:h-12 object-contain"
+          />
         </Link>
 
         {/* =================================================
@@ -211,6 +206,11 @@ export default function Navbar() {
         <div className="hidden lg:flex items-center gap-3">
 
           {/* =================================================
+              NOTIFICATIONS
+          ================================================= */}
+          
+
+          {/* =================================================
               EMERGENCY ASSISTANCE
           ================================================= */}
 
@@ -239,7 +239,7 @@ export default function Navbar() {
             <Siren size={17} strokeWidth={2.2} />
             <span>Emergency</span>
           </Link>
-
+<NotificationCenter variant="desktop" />
           {/* =================================================
               LOGIN / GET STARTED / PROFILE
           ================================================= */}
@@ -332,7 +332,7 @@ export default function Navbar() {
                   <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
                     {user?.first_name || "Account"}
                   </span>
-                 
+                  
                 </div>
                 <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
               </button>
@@ -367,6 +367,15 @@ export default function Navbar() {
                     </Link>
 
                     <Link
+                      href="/notifications"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                    >
+                      <Bell size={14} className="text-[#e7bd78]" />
+                      <span>Notifications</span>
+                    </Link>
+
+                    <Link
                       href="/account?tab=profile"
                       onClick={() => setUserDropdownOpen(false)}
                       className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
@@ -385,12 +394,12 @@ export default function Navbar() {
                     </Link>
 
                     <Link
-                      href="/account?tab=security"
+                      href="/account?tab=quotes"
                       onClick={() => setUserDropdownOpen(false)}
                       className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
                     >
-                      <Shield size={14} className="text-[#e7bd78]" />
-                      <span>Security & Privacy</span>
+                      <FileText size={14} className="text-[#e7bd78]" />
+                      <span>My Quotes</span>
                     </Link>
                   </div>
 
@@ -412,33 +421,37 @@ export default function Navbar() {
         </div>
 
         {/* =================================================
-            MOBILE MENU BUTTON
+            MOBILE MENU & NOTIFICATION BUTTONS
         ================================================= */}
 
-        <button
-          id="mobile-menu-btn"
-          className="lg:hidden flex flex-col gap-1.5 p-2"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle menu"
-        >
-          <span
-            className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-              menuOpen ? "rotate-45 translate-y-2" : ""
-            }`}
-          />
+        <div className="lg:hidden flex items-center gap-2">
+          <NotificationCenter variant="mobile" onCloseMobileMenu={() => setMenuOpen(false)} />
 
-          <span
-            className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-              menuOpen ? "opacity-0" : ""
-            }`}
-          />
+          <button
+            id="mobile-menu-btn"
+            className="flex flex-col gap-1.5 p-2"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Toggle menu"
+          >
+            <span
+              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
+                menuOpen ? "rotate-45 translate-y-2" : ""
+              }`}
+            />
 
-          <span
-            className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-              menuOpen ? "-rotate-45 -translate-y-2" : ""
-            }`}
-          />
-        </button>
+            <span
+              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
+                menuOpen ? "opacity-0" : ""
+              }`}
+            />
+
+            <span
+              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
+                menuOpen ? "-rotate-45 -translate-y-2" : ""
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* =================================================
@@ -558,7 +571,7 @@ export default function Navbar() {
             /* MOBILE PROFILE & ACCOUNT LINKS */
             <div className="space-y-2 pt-2 border-t border-white/10">
               <div className="px-3 py-1 text-xs text-white/50">
-                Signed in as <strong className="text-white">{user?.first_name || user?.phone || "VIP Member"}</strong>
+                Signed in as <strong className="text-white">{user?.first_name || user?.phone || " Member"}</strong>
               </div>
 
               <Link
@@ -568,6 +581,24 @@ export default function Navbar() {
               >
                 <Calendar size={17} />
                 <span>My Bookings</span>
+              </Link>
+
+              <Link
+                href="/account?tab=quotes"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 w-full py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium hover:text-white"
+              >
+                <FileText size={17} className="text-[#FAD293]" />
+                <span>My Quotes & Offers</span>
+              </Link>
+
+              <Link
+                href="/notifications"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 w-full py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium hover:text-white"
+              >
+                <Bell size={17} className="text-[#FAD293]" />
+                <span>Notifications & Alerts</span>
               </Link>
 
               <Link

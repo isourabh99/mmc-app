@@ -79,7 +79,10 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/alloy.api";
+import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 import AlloyStepHeader, { type ActiveView } from "./components/AlloyStepHeader";
+import AlloyServicesPageView from "./components/AlloyServicesPageView";
+import AlloyAssessmentPageView from "./components/AlloyAssessmentPageView";
 import TechniciansPageView from "./components/TechniciansPageView";
 import QuotationFormPageView from "./components/QuotationFormPageView";
 import ProviderProfilePageView from "./components/ProviderProfilePageView";
@@ -113,7 +116,7 @@ export default function AlloyWheelPage() {
         if (typeof window === "undefined") return;
         const params = new URLSearchParams(window.location.search);
         const view = params.get("view");
-        if (view && ["landing", "technicians", "request_quote", "quotes", "provider_profile", "booking"].includes(view)) {
+        if (view && ["landing", "choose_services", "assessment", "technicians", "request_quote", "quotes", "provider_profile", "booking"].includes(view)) {
             setActiveView(view as ActiveView);
         }
 
@@ -144,7 +147,13 @@ export default function AlloyWheelPage() {
     const [userLat, setUserLat] = useState<string>("");
     const [userLon, setUserLon] = useState<string>("");
 
-    // Media upload state for Hero Form
+    // Vehicle Year & Work Location State
+    const [carYear, setCarYear] = useState<string>("2022");
+    const [workLocation, setWorkLocation] = useState<"workshop" | "mobile">("workshop");
+
+    // Media upload state for Hero Form (Supports multiple media files)
+    const [heroMediaFiles, setHeroMediaFiles] = useState<File[]>([]);
+    const [heroMediaPreviews, setHeroMediaPreviews] = useState<string[]>([]);
     const [heroCarImage, setHeroCarImage] = useState<File | null>(null);
     const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
 
@@ -212,13 +221,37 @@ export default function AlloyWheelPage() {
         }
     }, []);
 
-    // Media upload handler for Hero form
-    const handleHeroImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setHeroCarImage(file);
-            setHeroImagePreview(URL.createObjectURL(file));
+    // Multi-media upload handlers for Hero form
+    const handleHeroMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        setHeroMediaFiles((prev) => [...prev, ...files]);
+        const newPreviews = files.map((file) => URL.createObjectURL(file));
+        setHeroMediaPreviews((prev) => [...prev, ...newPreviews]);
+
+        if (!heroCarImage && files[0]) {
+            setHeroCarImage(files[0]);
+            setHeroImagePreview(newPreviews[0]);
         }
+    };
+
+    const handleRemoveHeroMedia = (index: number) => {
+        setHeroMediaFiles((prev) => {
+            const updated = prev.filter((_, i) => i !== index);
+            setHeroCarImage(updated[0] || null);
+            return updated;
+        });
+        setHeroMediaPreviews((prev) => {
+            const removed = prev[index];
+            if (removed) URL.revokeObjectURL(removed);
+            const updated = prev.filter((_, i) => i !== index);
+            setHeroImagePreview(updated[0] || null);
+            return updated;
+        });
+    };
+
+    const handleHeroImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        handleHeroMediaChange(e);
     };
 
     // Geocoding fallback if user typed manually without selecting autocomplete suggestion
@@ -259,31 +292,9 @@ export default function AlloyWheelPage() {
         }
     };
 
-    // Start Quotation Request - Opens the Quotation Form for user to review & fill details
-    const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
-        if (!isAuthenticated()) {
-                showToast("Please login to request a quotation.", "info");
-                router.push("/login");
-                return;
-            }
-
-            const ids = (targetProviderIds && targetProviderIds.length > 0)
-                ? targetProviderIds
-                : selectedProviderIdsForQuote;
-
-            if (ids.length === 0) {
-                showToast("Please select at least one technician to request a quote.", "error");
-                return;
-            }
-
-            if (targetProviderIds && targetProviderIds.length > 0) {
-                setSelectedProviderIdsForQuote(targetProviderIds);
-            }
-            navigateToView("request_quote");
-        };
-
-        // Execute actual RFQ submission with user's form data
-        const handleExecuteQuoteSubmission = async (formData: {
+    // Execute actual RFQ submission with user's details directly
+    const handleExecuteQuoteSubmission = async (
+        formData: {
             carReg: string;
             carModel: string;
             selectedServiceIds: string[];
@@ -292,31 +303,51 @@ export default function AlloyWheelPage() {
             damageDesc: string;
             serviceDesc: string;
             carImage: File | null;
-        }) => {
-            const idsToSend = selectedProviderIdsForQuote.length > 0
+        },
+        overrideProviderIds?: string[]
+    ) => {
+        const idsToSend = (overrideProviderIds && overrideProviderIds.length > 0)
+            ? overrideProviderIds
+            : (selectedProviderIdsForQuote.length > 0
                 ? selectedProviderIdsForQuote
-                : (selectedQuoteProvider ? [selectedQuoteProvider.id] : []);
+                : (selectedQuoteProvider ? [selectedQuoteProvider.id] : []));
 
-            if (idsToSend.length === 0) {
-                showToast("Please select at least one provider to send the quote request", "error");
-                return;
+        if (idsToSend.length === 0) {
+            showToast("Please select at least one provider to send the quote request", "error");
+            return;
+        }
+
+        setSubmittingMultiQuote(true);
+        try {
+            let effectiveAddressId = "6";
+            try {
+                effectiveAddressId =
+                    (await getOrCreateCustomerAddressId(
+                        postcode,
+                        userLat || localStorage.getItem("user_lat") || undefined,
+                        userLon || localStorage.getItem("user_lon") || undefined
+                    )) || "6";
+            } catch {
+                effectiveAddressId = "6";
             }
 
-            setSubmittingMultiQuote(true);
-            try {
-                let effectiveAddressId = "6";
-                try {
-                    effectiveAddressId =
-                        (await getOrCreateCustomerAddressId(
-                            postcode,
-                            userLat || localStorage.getItem("user_lat") || undefined,
-                            userLon || localStorage.getItem("user_lon") || undefined
-                        )) || "6";
-                } catch {
-                    effectiveAddressId = "6";
-                }
+            const scheduleStr = `${formData.bookingDate} ${formData.bookingTime || "11:00:00"}`;
 
-                const scheduleStr = `${formData.bookingDate} ${formData.bookingTime || "11:00:00"}`;
+            // Format assessment question answers into notes
+            const assessmentNotes = Object.entries(questionAnswers)
+                .filter(([_, ans]) => ans && ans.trim())
+                .map(([qId, ans]) => {
+                    const qObj = bookingQuestions.find((item) => item.id === qId);
+                    return `${qObj?.question_text || qObj?.question || qId}: ${ans}`;
+                })
+                .join(" | ");
+
+            const combinedDamageDesc = [
+                formData.damageDesc,
+                assessmentNotes ? `[Assessment: ${assessmentNotes}]` : "",
+            ]
+                .filter(Boolean)
+                .join("\n");
 
             const res = await sendQuotationRequest({
                 service_id: formData.selectedServiceIds[0] || "3e8b192f-c32a-4219-946f-6ce98b9a88b6",
@@ -325,13 +356,13 @@ export default function AlloyWheelPage() {
                 provider_ids: idsToSend,
                 service_description:
                     formData.serviceDesc ||
-                    formData.damageDesc ||
+                    combinedDamageDesc ||
                     "Alloy wheel repair quotation request",
                 booking_schedule: scheduleStr,
                 service_address_id: effectiveAddressId,
-                car_model: formData.carModel || "Hyundai Creta 2022",
+                car_model: formData.carModel || "Vehicle 2022",
                 car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
-                damage_description: formData.damageDesc || "Alloy wheel damage inspection",
+                damage_description: combinedDamageDesc || "Alloy wheel damage inspection",
                 car_image: formData.carImage,
             });
 
@@ -350,7 +381,7 @@ export default function AlloyWheelPage() {
                 handleCheckBids({
                     id: newPostId,
                     car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
-                    car_model: formData.carModel || "Hyundai Creta 2022",
+                    car_model: formData.carModel || "Vehicle 2022",
                     booking_schedule: scheduleStr,
                     bids_count: 0,
                     service_description: formData.damageDesc || formData.serviceDesc || "Alloy wheel repair",
@@ -364,10 +395,55 @@ export default function AlloyWheelPage() {
                 err?.message || "Failed to send quotation request. Please try again.",
                 "error"
             );
-            throw err;
         } finally {
             setSubmittingMultiQuote(false);
         }
+    };
+
+    // Start Quotation Request - Directly sends RFQ without intermediate screen
+    const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
+        if (!isAuthenticated()) {
+            showToast("Please login to request a quotation.", "info");
+            router.push("/login");
+            return;
+        }
+
+        const ids = (targetProviderIds && targetProviderIds.length > 0)
+            ? targetProviderIds
+            : selectedProviderIdsForQuote;
+
+        if (ids.length === 0) {
+            showToast("Please select at least one technician to request a quote.", "error");
+            return;
+        }
+
+        // Default tomorrow for booking schedule
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const defaultDateStr = tomorrow.toISOString().split("T")[0];
+
+        // Resolve service IDs from selectedServices
+        let currentServices = services;
+        if (currentServices.length === 0) {
+            currentServices = (await getAlloyServices()) || [];
+        }
+        const serviceIds = selectedServices
+            .map((name) => currentServices.find((s) => s.name.toLowerCase() === name.toLowerCase())?.id)
+            .filter(Boolean) as string[];
+
+        await handleExecuteQuoteSubmission(
+            {
+                carReg: regNo.trim() || "BD51 SMR",
+                carModel: carYear ? `Vehicle (${carYear})` : "Alloy Wheel Vehicle",
+                selectedServiceIds: serviceIds.length > 0 ? serviceIds : ["3e8b192f-c32a-4219-946f-6ce98b9a88b6"],
+                bookingDate: defaultDateStr,
+                bookingTime: "11:00:00",
+                damageDesc: damageDesc || "Alloy wheel refurbishment and repair",
+                serviceDesc: selectedServices.join(", ") || "Alloy Wheel Refurbishment",
+                carImage: heroMediaFiles[0] || heroCarImage || null,
+            },
+            ids
+        );
     };
 
     // ---------------------------------------------------------------------------
@@ -456,7 +532,8 @@ export default function AlloyWheelPage() {
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, any>>({});
     const [serviceAddressId, setServiceAddressId] = useState<string>("");
     const [bookingNotes, setBookingNotes] = useState<string>("");
-    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("cash_after_service");
+    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+    const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [showPaymentSheet, setShowPaymentSheet] = useState<boolean>(false);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
     const [bookingCarImagePreview, setBookingCarImagePreview] = useState<string | null>(null);
@@ -513,16 +590,14 @@ export default function AlloyWheelPage() {
         };
     }, [bookingProviderModal?.id, bookingDate]);
 
-    // Fetch provider additional questions strictly from API: GET /customer/booking/provider/questions
+    // Fetch alloy additional questions strictly from API using ONLY category_id:
+    // GET /customer/booking/provider/questions?category_id={ALLOY_CATEGORY_ID}
     useEffect(() => {
-        if (!bookingProviderModal?.id) {
-            setBookingQuestions([]);
-            return;
-        }
         let isMounted = true;
         setLoadingQuestions(true);
-        const catId = bookingPostItem?.category_id || BOOKING_QUESTIONS_CATEGORY_ID;
-        getProviderQuestions(bookingProviderModal.id, catId)
+        // Strictly fetch using ONLY the alloy category_id so that only alloy questions appear
+        const catId = ALLOY_CATEGORY_ID;
+        getProviderQuestions(undefined, catId)
             .then((questions) => {
                 if (isMounted) {
                     const activeQuestions = (questions || [])
@@ -532,7 +607,7 @@ export default function AlloyWheelPage() {
                 }
             })
             .catch((err) => {
-                console.error("Error fetching provider questions:", err);
+                console.error("Error fetching alloy category questions:", err);
                 if (isMounted) setBookingQuestions([]);
             })
             .finally(() => {
@@ -542,7 +617,7 @@ export default function AlloyWheelPage() {
         return () => {
             isMounted = false;
         };
-    }, [bookingProviderModal?.id, bookingPostItem?.category_id]);
+    }, []);
 
     // Handle return from Stripe payment gateway callback
     useEffect(() => {
@@ -624,9 +699,25 @@ export default function AlloyWheelPage() {
     const refreshQuotationRequests = async () => {
         setLoadingMyQuotationRequests(true);
         try {
-            const list = await getMyQuotationRequests(10, 1);
+            const list = await getMyQuotationRequests(30, 1);
             if (list && list.length > 0) {
-                setMyQuotationRequests(list);
+                // Filter strictly for alloy wheel requests
+                const alloyOnly = list.filter((item) => {
+                    const combined = `${item.service_description || ""} ${item.damage_description || ""} ${item.category?.name || ""}`.toLowerCase();
+                    const isAlloy =
+                        item.category_id === ALLOY_CATEGORY_ID ||
+                        combined.includes("alloy") ||
+                        combined.includes("wheel") ||
+                        combined.includes("rim") ||
+                        combined.includes("refurb") ||
+                        combined.includes("diamond cut");
+                    const isPureBodywork =
+                        item.category_id === "675fb918-9d0c-4ee5-9a0a-904b42651033" &&
+                        !combined.includes("alloy") &&
+                        !combined.includes("wheel");
+                    return isAlloy || !isPureBodywork;
+                });
+                setMyQuotationRequests(alloyOnly.length > 0 ? alloyOnly : list);
                 const fetchedIds = list.map((item) => item.id).filter(Boolean);
                 setSavedQuotePostIds((prev) => {
                     const merged = Array.from(new Set([...prev, ...fetchedIds]));
@@ -647,12 +738,53 @@ export default function AlloyWheelPage() {
     const [postBidsList, setPostBidsList] = useState<PostBidItem[]>([]);
     const [loadingPostBids, setLoadingPostBids] = useState(false);
 
+    // Auto-refresh quotes when entering quotes view
+    useEffect(() => {
+        if (activeView === "quotes") {
+            refreshQuotationRequests();
+        }
+    }, [activeView]);
+
+    // Auto-select latest post or post from query param and fetch its bids
+    useEffect(() => {
+        if (activeView === "quotes" && myQuotationRequests.length > 0 && !selectedPostForBids) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetPostId = urlParams.get("post_id");
+            let targetPost = myQuotationRequests.find((p) => p.id === targetPostId);
+            if (!targetPost) {
+                targetPost = myQuotationRequests.find((p) => Number(p.bids_count || 0) > 0) || myQuotationRequests[0];
+            }
+            if (targetPost) {
+                handleCheckBids(targetPost);
+            }
+        }
+    }, [activeView, myQuotationRequests, selectedPostForBids]);
+
+    const notifyNewBids = (bids: PostBidItem[], post?: CustomerQuotationPostItem | null) => {
+        if (!bids || bids.length === 0) return;
+        bids.forEach((b) => {
+            const seenKey = `mmc_bid_push_${b.id}`;
+            if (typeof window !== "undefined" && !sessionStorage.getItem(seenKey)) {
+                sessionStorage.setItem(seenKey, "1");
+                const price = typeof b.offered_price === "number" ? `£${b.offered_price}` : `£${b.offered_price}`;
+                const title = `New Offer: ${price} from ${b.provider?.company_name || "Specialist"}! 🚗`;
+                const desc = b.provider_note || `${b.provider?.company_name || "Specialist"} sent an offer for your vehicle. Tap to view & book.`;
+                triggerDevicePushNotification(title, desc, `/services/alloy-wheel?view=quotes`);
+                showToast(`New offer received: ${price} from ${b.provider?.company_name || "Specialist"}`, "info");
+            }
+        });
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
+        }
+    };
+
     const handleCheckBids = async (post: CustomerQuotationPostItem) => {
         setSelectedPostForBids(post);
         setLoadingPostBids(true);
         try {
             const bids = await getReceivedBidsForPost(post.id, 10, 1);
             setPostBidsList(bids || []);
+            notifyNewBids(bids || [], post);
         } catch (err) {
             console.error("Failed to load bids for post:", err);
             setPostBidsList([]);
@@ -667,6 +799,7 @@ export default function AlloyWheelPage() {
         try {
             const bids = await getReceivedBidsForPost(selectedPostForBids.id, 10, 1);
             setPostBidsList(bids || []);
+            notifyNewBids(bids || [], selectedPostForBids);
         } catch (err) {
             console.error("Failed to refresh bids:", err);
         } finally {
@@ -808,6 +941,7 @@ export default function AlloyWheelPage() {
                 post_id: effectivePostId,
                 provider_id: bookingProviderModal.id,
                 payment_method: bookingPaymentMethod,
+                is_partial: isPartialPayment ? 1 : 0,
                 service_location: serviceLocation,
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
@@ -815,24 +949,51 @@ export default function AlloyWheelPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                payment_platform: bookingPaymentMethod === "stripe" ? "web" : undefined,
+                payment_platform: bookingPaymentMethod === "stripe" ? "app" : undefined,
                 callback:
                     bookingPaymentMethod === "stripe"
-                        ? "https://mmcclub.co.uk/api/v1/digital-payment-booking-response"
+                        ? (typeof window !== "undefined"
+                            ? `${window.location.origin}/booking-success`
+                            : "https://mmcclub.co.uk/booking-success")
                         : undefined,
             });
 
             // Extract redirect URL for Stripe if returned
             const redirectUrl =
+                res.content?.redirect_link ||
                 res.content?.redirect_url ||
                 res.content?.payment_url ||
                 res.content?.url ||
                 res.content?.link ||
                 res.content?.payment_link ||
+                (res as any).redirect_link ||
                 (res as any).redirect_url ||
                 (res as any).payment_url ||
                 (res as any).url ||
                 (typeof res.content === "string" && res.content.startsWith("http") ? res.content : null);
+
+            const confirmedRefId = res.content?.readable_id || res.content?.booking_id;
+            if (confirmedRefId && bookingPaymentMethod !== "stripe") {
+                saveConfirmedBooking({
+                    id: String(confirmedRefId),
+                    rawId: confirmedRefId,
+                    serviceType: "alloy",
+                    serviceCategoryName: "Alloy Wheel Repair",
+                    serviceTitle: "Alloy Wheel Refurbishment & Repair",
+                    providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    providerPhone: bookingProviderModal?.company_phone,
+                    totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
+                    isPaid: false,
+                    paymentStatus: "Pending Payment",
+                    paymentMethod: bookingPaymentMethod,
+                    status: "accepted",
+                    statusDisplay: "Accepted",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    fullScheduleDisplay: formattedSchedule || "Confirmed",
+                    createdAt: new Date().toISOString(),
+                });
+            }
 
             // Flow 1: Online Payment (Stripe) -> Redirect to Stripe Checkout page for payment verification
             if (bookingPaymentMethod === "stripe") {
@@ -841,11 +1002,13 @@ export default function AlloyWheelPage() {
                         sessionStorage.setItem(
                             "mmc_pending_booking",
                             JSON.stringify({
-                                booking_id: res.content?.booking_id,
-                                readable_id: res.content?.readable_id,
+                                booking_id: res.content?.booking_id || confirmedRefId,
+                                readable_id: res.content?.readable_id || confirmedRefId,
                                 provider: bookingProviderModal,
                                 schedule: formattedSchedule,
                                 price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
+                                is_partial: isPartialPayment ? 1 : 0,
+                                deposit_amount: res.content?.amount,
                             })
                         );
                     } catch { }
@@ -853,20 +1016,18 @@ export default function AlloyWheelPage() {
                     showToast("Redirecting to Stripe secure checkout...", "info");
                     window.location.href = redirectUrl;
                     return;
-                } else if (res.errors) {
+                } else {
                     let errMsg = "Stripe checkout could not be initiated";
-                    if (Array.isArray(res.errors)) {
-                        errMsg = res.errors.map((e: any) => e.message || JSON.stringify(e)).join(", ");
-                    } else if (typeof res.errors === "string") {
-                        errMsg = res.errors;
-                    } else if (res.message) {
+                    if (res.errors) {
+                        if (Array.isArray(res.errors) && res.errors.length > 0) {
+                            const joined = res.errors.map((e: any) => e.message || (typeof e === "string" ? e : JSON.stringify(e))).filter(Boolean).join(", ");
+                            if (joined) errMsg = joined;
+                        } else if (typeof res.errors === "string" && res.errors.trim()) {
+                            errMsg = res.errors;
+                        }
+                    } else if (res.message && typeof res.message === "string" && res.message.trim()) {
                         errMsg = res.message;
                     }
-                    setBookingError(errMsg);
-                    showToast(errMsg, "error");
-                    return;
-                } else {
-                    const errMsg = res.message || "Stripe payment link not received. Please try again or select Cash After Service.";
                     setBookingError(errMsg);
                     showToast(errMsg, "error");
                     return;
@@ -893,11 +1054,12 @@ export default function AlloyWheelPage() {
                     "MMC Booking Confirmed! 🎉",
                     `Your appointment #${refId || "Reserved"} with ${bookingProviderModal?.company_name || "your specialist"} is confirmed!`
                 );
-            } else if (res.errors) {
+            } else if (res.errors && (!Array.isArray(res.errors) || res.errors.length > 0)) {
                 let errMsg = "Failed to confirm booking";
                 if (Array.isArray(res.errors)) {
-                    errMsg = res.errors.map((e: any) => e.message || JSON.stringify(e)).join(", ");
-                } else if (typeof res.errors === "string") {
+                    const joined = res.errors.map((e: any) => e.message || (typeof e === "string" ? e : JSON.stringify(e))).filter(Boolean).join(", ");
+                    if (joined) errMsg = joined;
+                } else if (typeof res.errors === "string" && res.errors.trim()) {
                     errMsg = res.errors;
                 } else if (res.message) {
                     errMsg = res.message;
@@ -913,7 +1075,7 @@ export default function AlloyWheelPage() {
                 if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                     try {
                         new Notification("MMC Booking Confirmed! 🎉", {
-                            body: `Your appointment with ${selectedProvider?.company_name || "your specialist"} is confirmed!`,
+                            body: `Your appointment with ${bookingProviderModal?.company_name || "your specialist"} is confirmed!`,
                             icon: "/mmc-logo.png",
                             badge: "/mmc-logo.png",
                         });
@@ -923,12 +1085,19 @@ export default function AlloyWheelPage() {
                 }
             }
         } catch (err: any) {
-            const apiMsg = err?.response?.data?.errors || err?.response?.data?.message || err?.message || "Booking request failed";
-            const formattedMsg = Array.isArray(apiMsg)
-                ? apiMsg.map((e: any) => e.message || JSON.stringify(e)).join(", ")
-                : typeof apiMsg === "string"
-                    ? apiMsg
-                    : JSON.stringify(apiMsg);
+            console.error("Booking submission error:", err);
+            const apiErrors = err?.response?.data?.errors;
+            let formattedMsg = "Booking request failed. Please try again.";
+            if (Array.isArray(apiErrors) && apiErrors.length > 0) {
+                const joined = apiErrors.map((e: any) => e.message || (typeof e === "string" ? e : JSON.stringify(e))).filter(Boolean).join(", ");
+                if (joined) formattedMsg = joined;
+            } else if (typeof apiErrors === "string" && apiErrors.trim()) {
+                formattedMsg = apiErrors;
+            } else if (err?.response?.data?.message && typeof err.response.data.message === "string") {
+                formattedMsg = err.response.data.message;
+            } else if (err?.message) {
+                formattedMsg = err.message;
+            }
             setBookingError(formattedMsg);
             showToast(`Error: ${formattedMsg}`, "error");
         } finally {
@@ -944,10 +1113,7 @@ export default function AlloyWheelPage() {
 
     const handleOpenQuoteForm = (provider: ProviderItem) => {
         setSelectedQuoteProvider(provider);
-        setSelectedProviderIdsForQuote((prev) =>
-            prev.includes(provider.id) ? prev : [...prev, provider.id]
-        );
-        navigateToView("request_quote");
+        handleStartMultiQuote([provider.id]);
     };
 
     const handleOpenProviderProfile = async (provider: ProviderItem) => {
@@ -1018,24 +1184,42 @@ export default function AlloyWheelPage() {
     }, [isDragging]);
 
     // ---------------------------------------------------------------------------
-    // Handle Quote Submit (Search Providers by Service from API only)
+    // Step 1: Handle Hero Next (Advances to Step 2: Choose Services)
     // ---------------------------------------------------------------------------
-    const handleQuoteSubmit = async (e: React.FormEvent) => {
+    const handleHeroNext = (e: React.FormEvent) => {
         e.preventDefault();
         if (!postcode) {
-            showToast("Please enter your postcode", "error");
+            showToast("Please enter your postcode or city", "error");
             return;
         }
         if (!regNo) {
             showToast("Please enter your vehicle registration number", "error");
             return;
         }
-        if (selectedServices.length === 0) {
-            showToast("Please choose at least one alloy wheel service", "error");
-            return;
-        }
         if (!privacyAgreed) {
             showToast("Please agree to the privacy policy to proceed", "error");
+            return;
+        }
+        navigateToView("choose_services");
+    };
+
+    // ---------------------------------------------------------------------------
+    // Step 2: Handle Quote Submit (Search Providers by Service from API only)
+    // ---------------------------------------------------------------------------
+    const handleQuoteSubmit = async (e?: React.FormEvent) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!postcode) {
+            showToast("Please enter your postcode", "error");
+            navigateToView("landing");
+            return;
+        }
+        if (!regNo) {
+            showToast("Please enter your vehicle registration number", "error");
+            navigateToView("landing");
+            return;
+        }
+        if (selectedServices.length === 0) {
+            showToast("Please choose at least one alloy wheel service", "error");
             return;
         }
 
@@ -1057,13 +1241,22 @@ export default function AlloyWheelPage() {
                 }
             }
 
+            let currentServices = services;
+            if (currentServices.length === 0) {
+                const loaded = await getAlloyServices();
+                if (loaded && loaded.length > 0) {
+                    currentServices = loaded;
+                    setServices(loaded);
+                }
+            }
+
             // Map chosen service names strictly to their IDs from API
             const serviceIds = selectedServices
-                .map((name) => services.find((s) => s.name === name)?.id)
+                .map((name) => currentServices.find((s) => s.name.toLowerCase() === name.toLowerCase())?.id)
                 .filter(Boolean) as string[];
 
             const results = await searchProvidersByService({
-                serviceIds: serviceIds,
+                serviceIds,
                 latitude: currentLat || undefined,
                 longitude: currentLon || undefined,
             });
@@ -1248,7 +1441,20 @@ export default function AlloyWheelPage() {
 
                             {/* Right Column: Get Alloy Quote Form Card */}
                             <div className="lg:col-span-5">
-                                <div className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                                <div className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl overflow-hidden">
+                                    {/* Alloy Showcase Banner (From Kerbed to Curb Appeal) */}
+                                    <div className="relative -mx-6 -mt-6 sm:-mx-7 sm:-mt-7 mb-6 overflow-hidden rounded-t-2xl border-b border-zinc-800/80 aspect-[1672/941] shadow-lg group">
+                                        <Image
+                                            src="/alloy.png"
+                                            alt="MMC Alloy Wheel Refurbishment - From Kerbed to Curb Appeal"
+                                            fill
+                                            priority
+                                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 600px"
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-[#131417] via-transparent to-transparent pointer-events-none" />
+                                    </div>
+
                                     <h2 className="text-2xl font-extrabold text-white tracking-tight">
                                         Get Alloy Provider
                                     </h2>
@@ -1256,7 +1462,7 @@ export default function AlloyWheelPage() {
                                         Fill in the details and get an instant quote
                                     </p>
 
-                                    <form onSubmit={handleQuoteSubmit} className="space-y-4">
+                                    <form onSubmit={handleHeroNext} className="space-y-4">
                                         {/* Row 1: Enter Postcode / Location (Google Places Autocomplete) */}
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
@@ -1285,7 +1491,7 @@ export default function AlloyWheelPage() {
                                             )}
                                         </div>
 
-                                        {/* Row 3: Car Registration No */}
+                                        {/* Row 2: Car Registration No */}
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
                                                 <Car className="w-4 h-4" />
@@ -1299,225 +1505,90 @@ export default function AlloyWheelPage() {
                                             />
                                         </div>
 
-                                        {/* Row 3: Multi-Select Alloy Services */}
-                                        <div className="relative" ref={dropdownRef}>
-                                            <div
-                                                onClick={() => {
-                                                    setShowServicesDropdown((prev) => !prev);
-                                                    if (services.length === 0) {
-                                                        setLoadingServices(true);
-                                                        getAlloyServices().then((data) => {
-                                                            if (data && data.length > 0) setServices(data);
-                                                            setLoadingServices(false);
-                                                        });
-                                                    }
-                                                }}
-                                                className={`w-full bg-[#1B1C20] border rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white cursor-pointer transition-colors flex items-center justify-between min-h-[46px] ${showServicesDropdown
-                                                    ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
-                                                    : "border-zinc-800/90 hover:border-zinc-700"
-                                                    }`}
-                                            >
-                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                    <Wrench className="w-4 h-4" />
-                                                </div>
-
-                                                <div className="flex-1 pr-2">
-                                                    {selectedServices.length === 0 ? (
-                                                        <span className="text-zinc-400 select-none">
-                                                            {loadingServices
-                                                                ? "Loading services..."
-                                                                : "Select Alloy Services"}
-                                                        </span>
-                                                    ) : (
-                                                        <div className="flex flex-wrap gap-1.5 py-0.5">
-                                                            {selectedServices.map((name) => (
-                                                                <span
-                                                                    key={name}
-                                                                    className="inline-flex items-center gap-1 bg-[#E8AF66]/20 border border-[#E8AF66]/40 text-[#E8AF66] text-xs px-2.5 py-0.5 rounded-lg font-medium shadow-sm"
-                                                                >
-                                                                    <span>{name}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => removeService(name, e)}
-                                                                        className="hover:text-white transition-colors"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                    <ChevronDown
-                                                        className={`w-4 h-4 transition-transform duration-200 ${showServicesDropdown ? "rotate-180 text-[#E8AF66]" : ""
-                                                            }`}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Dropdown Menu Popover */}
-                                            {showServicesDropdown && (
-                                                <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-[#16171A] border border-zinc-700/80 rounded-xl shadow-2xl p-2 max-h-64 overflow-y-auto backdrop-blur-xl animate-fade-in space-y-1">
-                                                    <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-800 text-[11px] text-zinc-400">
-                                                        <span>
-                                                            {selectedServices.length === 0
-                                                                ? "Select one or more services"
-                                                                : `${selectedServices.length} selected`}
-                                                        </span>
-                                                        {selectedServices.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSelectedServices([])}
-                                                                className="text-[#E8AF66] hover:underline font-semibold"
-                                                            >
-                                                                Clear all
-                                                            </button>
-                                                        )}
-                                                    </div>
-
-                                                    {loadingServices ? (
-                                                        <div className="py-6 flex flex-col items-center justify-center text-zinc-400 gap-2">
-                                                            <RefreshCw className="w-5 h-5 animate-spin text-[#E8AF66]" />
-                                                            <span className="text-xs">Loading services from MMC...</span>
-                                                        </div>
-                                                    ) : services.length === 0 ? (
-                                                        <div className="py-6 text-center text-zinc-400 space-y-2">
-                                                            <p className="text-xs">No services loaded.</p>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setLoadingServices(true);
-                                                                    getAlloyServices().then((res) => {
-                                                                        setServices(res || []);
-                                                                        setLoadingServices(false);
-                                                                    });
-                                                                }}
-                                                                className="text-xs text-[#E8AF66] underline hover:text-[#f3c68a] font-semibold"
-                                                            >
-                                                                Retry Loading
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        services.map((item) => {
-                                                            const isSelected = selectedServices.includes(item.name);
-                                                            return (
-                                                                <div
-                                                                    key={item.id}
-                                                                    onClick={() => toggleService(item.name)}
-                                                                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm select-none ${isSelected
-                                                                        ? "bg-[#E8AF66]/15 text-[#E8AF66] font-semibold"
-                                                                        : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
-                                                                        }`}
-                                                                >
-                                                                    <div className="flex items-center gap-2.5">
-                                                                        <div
-                                                                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected
-                                                                                ? "bg-[#E8AF66] border-[#E8AF66] text-black"
-                                                                                : "border-zinc-600 bg-zinc-900"
-                                                                                }`}
-                                                                        >
-                                                                            {isSelected && (
-                                                                                <Check className="w-3 h-3 stroke-[3]" />
-                                                                            )}
-                                                                        </div>
-                                                                        <span>{item.name}</span>
-                                                                    </div>
-
-                                                                    {isSelected && (
-                                                                        <span className="text-[10px] text-[#E8AF66] font-bold uppercase tracking-wider">
-                                                                            Selected
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Row 4: Describe the alloy damage (Optional) */}
+                                        {/* Row 3: Vehicle Registration / Manufacturing Year */}
                                         <div className="relative">
-                                            <div className="absolute top-3.5 left-3.5 pointer-events-none text-zinc-400">
-                                                <FileText className="w-4 h-4" />
+                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+                                                <Calendar className="w-4 h-4 text-[#E8AF66]" />
                                             </div>
-                                            <textarea
-                                                rows={2}
-                                                value={damageDesc}
-                                                onChange={(e) => setDamageDesc(e.target.value)}
-                                                placeholder="Describe the alloy damage (Optional)"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors resize-none"
+                                            <input
+                                                type="text"
+                                                value={carYear}
+                                                onChange={(e) => setCarYear(e.target.value)}
+                                                placeholder="Vehicle Year (e.g. 2022)"
+                                                maxLength={4}
+                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                                             />
                                         </div>
 
-                                        {/* Row 5: Upload Damage Photo / Media (Optional) */}
-                                        <div className="space-y-1.5">
+                                        {/* Row 4: Multiple Damage Photos / Media Upload */}
+                                        <div className="space-y-2">
                                             <div className="flex items-center justify-between text-xs text-zinc-400">
                                                 <span className="flex items-center gap-1.5 font-medium">
                                                     <Camera className="w-3.5 h-3.5 text-[#E8AF66]" />
-                                                    <span>Upload Damage Photo (Optional)</span>
+                                                    <span>Upload Damage Photos / Media (Optional)</span>
                                                 </span>
-                                                {heroCarImage && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold cursor-pointer"
-                                                    >
-                                                        Remove
-                                                    </button>
+                                                {heroMediaFiles.length > 0 && (
+                                                    <span className="text-[11px] text-[#E8AF66] font-bold">
+                                                        {heroMediaFiles.length} photo{heroMediaFiles.length > 1 ? "s" : ""}
+                                                    </span>
                                                 )}
                                             </div>
 
-                                            {heroImagePreview ? (
-                                                <div className="relative rounded-xl border border-zinc-700 bg-zinc-900/80 p-2 flex items-center gap-3">
-                                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-zinc-700 shrink-0 bg-black">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src={heroImagePreview}
-                                                            alt="Damage Preview"
-                                                            className="w-full h-full object-cover"
+                                            {/* Preview Grid if photos uploaded */}
+                                            {heroMediaPreviews.length > 0 && (
+                                                <div className="grid grid-cols-4 gap-2 pb-1">
+                                                    {heroMediaPreviews.map((preview, idx) => (
+                                                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-zinc-700 bg-black group shadow-sm">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img
+                                                                src={preview}
+                                                                alt={`Damage Photo ${idx + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveHeroMedia(idx)}
+                                                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 hover:bg-red-600 text-white flex items-center justify-center transition-colors cursor-pointer"
+                                                                title="Remove photo"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+
+                                                    <label className="aspect-square border border-dashed border-zinc-700 hover:border-[#E8AF66] rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-[#1B1C20]/50 hover:bg-[#1B1C20] group">
+                                                        <Upload className="w-4 h-4 text-[#E8AF66] mb-1 group-hover:scale-110 transition-transform" />
+                                                        <span className="text-[10px] text-zinc-400 font-bold group-hover:text-white">+ Add</span>
+                                                        <input
+                                                            type="file"
+                                                            multiple
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={handleHeroMediaChange}
                                                         />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1 text-xs">
-                                                        <p className="text-white font-medium truncate">{heroCarImage?.name}</p>
-                                                        <p className="text-[10px] text-zinc-400 mt-0.5">
-                                                            {heroCarImage ? (heroCarImage.size / 1024).toFixed(0) + " KB" : ""} • Attached for quote
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </button>
+                                                    </label>
                                                 </div>
-                                            ) : (
-                                                <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-zinc-700 hover:border-[#E8AF66]/70 rounded-xl bg-[#1B1C20]/60 hover:bg-[#1B1C20] cursor-pointer transition-colors group">
+                                            )}
+
+                                            {heroMediaPreviews.length === 0 && (
+                                                <label className="flex items-center justify-center gap-2 p-3.5 border border-dashed border-zinc-700 hover:border-[#E8AF66]/70 rounded-xl bg-[#1B1C20]/60 hover:bg-[#1B1C20] cursor-pointer transition-colors group">
                                                     <input
                                                         type="file"
+                                                        multiple
                                                         accept="image/*"
                                                         className="hidden"
-                                                        onChange={handleHeroImageChange}
+                                                        onChange={handleHeroMediaChange}
                                                     />
                                                     <CloudUpload className="w-4 h-4 text-[#E8AF66]" />
                                                     <span className="text-xs font-semibold text-zinc-300 group-hover:text-white">
-                                                        Attach damage photo / media
+                                                        Attach damage photos / media
                                                     </span>
                                                     <span className="text-[10px] text-zinc-500">(JPG, PNG)</span>
                                                 </label>
                                             )}
                                         </div>
 
-                                        {/* Row 6: Privacy Policy Checkbox */}
+                                        {/* Row 5: Privacy Policy Checkbox */}
                                         <div className="flex items-center gap-2.5 pt-1">
                                             <input
                                                 type="checkbox"
@@ -1540,20 +1611,14 @@ export default function AlloyWheelPage() {
                                             </label>
                                         </div>
 
-                                        {/* Row 7: Submit Button */}
+                                        {/* Row 6: Submit Button (Advances to Step 2: Choose Services) */}
                                         <button
                                             type="submit"
                                             disabled={submitting}
                                             className="w-full mt-3 bg-[#E8AF66] hover:bg-[#d99f55] active:scale-[0.99] text-zinc-950 font-extrabold text-sm sm:text-base py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#E8AF66]/20 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed uppercase tracking-wider cursor-pointer"
                                         >
-                                            {submitting ? (
-                                                <div className="w-5 h-5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                                <>
-                                                    <span>GET ALLOY QUOTE</span>
-                                                    <ArrowRight className="w-4 h-4" />
-                                                </>
-                                            )}
+                                            <span>NEXT</span>
+                                            <ArrowRight className="w-4 h-4" />
                                         </button>
                                     </form>
                                 </div>
@@ -1814,6 +1879,51 @@ export default function AlloyWheelPage() {
                 </>
             )}
 
+            {/* View 1.5: Dedicated Choose Services Full Screen (Matches Screenshot 2) */}
+            {activeView === "choose_services" && (
+                <AlloyServicesPageView
+                    regNo={regNo}
+                    postcode={postcode}
+                    carYear={carYear}
+                    selectedServices={selectedServices}
+                    onToggleService={toggleService}
+                    workLocation={workLocation}
+                    onChangeWorkLocation={setWorkLocation}
+                    onBack={() => navigateToView("landing")}
+                    onSubmit={async () => navigateToView("assessment")}
+                    submitting={submitting}
+                    services={services}
+                    loadingServices={loadingServices}
+                />
+            )}
+
+            {/* View 1.8: Dedicated Step 3: Damage Assessment & Schedule Screen (Matches Screenshot 3, 4, 5) */}
+            {activeView === "assessment" && (
+                <AlloyAssessmentPageView
+                    regNo={regNo}
+                    postcode={postcode}
+                    carYear={carYear}
+                    selectedServices={selectedServices}
+                    bookingQuestions={bookingQuestions}
+                    loadingQuestions={loadingQuestions}
+                    questionAnswers={questionAnswers}
+                    onAnswerChange={(qId, ans) =>
+                        setQuestionAnswers((prev) => ({ ...prev, [qId]: ans }))
+                    }
+                    damageDesc={damageDesc}
+                    onDamageDescChange={setDamageDesc}
+                    bookingDate={bookingDate}
+                    onBookingDateChange={setBookingDate}
+                    bookingTime={bookingTime}
+                    onBookingTimeChange={setBookingTime}
+                    privacyAgreed={privacyAgreed}
+                    onPrivacyAgreedChange={setPrivacyAgreed}
+                    onBack={() => navigateToView("choose_services")}
+                    onSubmit={handleQuoteSubmit}
+                    submitting={submitting}
+                />
+            )}
+
             {/* View 2: Dedicated Technicians Discovery Full Screen */}
             {activeView === "technicians" && (
                 <TechniciansPageView
@@ -1826,7 +1936,7 @@ export default function AlloyWheelPage() {
                     onOpenQuoteForm={handleOpenQuoteForm}
                     onSendMultiQuoteRequest={() => handleStartMultiQuote()}
                     submittingMultiQuote={submittingMultiQuote}
-                    onBackToSearch={() => navigateToView("landing")}
+                    onBackToSearch={() => navigateToView("choose_services")}
                     onViewQuotes={() => navigateToView("quotes")}
                     regNo={regNo}
                     postcode={postcode}
@@ -2045,6 +2155,8 @@ export default function AlloyWheelPage() {
                         onNotesChange={setBookingNotes}
                         bookingPaymentMethod={bookingPaymentMethod}
                         onPaymentMethodChange={setBookingPaymentMethod}
+                        isPartialPayment={isPartialPayment}
+                        onPartialPaymentChange={setIsPartialPayment}
                         bookingCarImage={bookingCarImage}
                         bookingCarImagePreview={bookingCarImagePreview}
                         onCarImageChange={(e) => {
