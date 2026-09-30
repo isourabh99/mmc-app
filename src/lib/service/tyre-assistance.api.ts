@@ -6,8 +6,6 @@ import {
   ServiceLocationType,
   TyreProvider,
   QuoteSummary,
-  DEFAULT_PROVIDERS,
-  DEFAULT_TECHNICIANS,
   calculateQuote,
 } from "@/lib/data/tyre-assistance.data";
 
@@ -20,7 +18,7 @@ export const TYRE_CATEGORY_ID = "5d98d5c9-509e-4ab7-859d-806174384e27";
 export const TYRE_EMERGENCY_SERVICE_ID = "1e5455a9-62f8-4489-bfa8-4eb52d033a7d";
 export const TYRE_REPLACEMENT_SERVICE_ID = "9913c6e3-1f99-4929-989c-25484da50e00";
 export const DEFAULT_SERVICE_ID = TYRE_REPLACEMENT_SERVICE_ID;
-export const DEFAULT_PROVIDER_ID = "9b1d7cc4-6f97-4b80-8931-9167c3bc3c15";
+export const DEFAULT_PROVIDER_ID = "cffcce91-5498-4b73-b571-8e6e69bbd89d";
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 export interface TyreEmergencyVariation {
@@ -31,22 +29,56 @@ export interface TyreEmergencyVariation {
   description?: string;
 }
 
-export const TYRE_EMERGENCY_VARIATIONS: TyreEmergencyVariation[] = [
-  {
-    id: 25,
-    variant: "Puncture",
-    variant_key: "puncture",
-    price: 50,
-    description: "Rapid puncture repair, valve reseal, and roadside inspection",
-  },
-  {
-    id: 26,
-    variant: "Burst Tyre",
-    variant_key: "burst-tyre",
-    price: 100,
-    description: "Complete blowout rescue, rim safety inspection, and emergency replacement fitting",
-  },
-];
+export const TYRE_EMERGENCY_VARIATIONS: TyreEmergencyVariation[] = [];
+
+/**
+ * Fetch Tyre Emergency Variations dynamically from Category API
+ */
+export async function fetchTyreEmergencyVariations(): Promise<TyreEmergencyVariation[]> {
+  try {
+    const services = await fetchTyreCategoryServices(TYRE_CATEGORY_ID);
+    const emergencyService =
+      services.find(
+        (s) =>
+          s.id === TYRE_EMERGENCY_SERVICE_ID ||
+          s.name?.toLowerCase().includes("emergency")
+      ) || services[0];
+
+    if (!emergencyService) return [];
+
+    const variations: TyreEmergencyVariation[] = [];
+
+    if (Array.isArray(emergencyService.variations) && emergencyService.variations.length > 0) {
+      emergencyService.variations.forEach((v: any, idx: number) => {
+        variations.push({
+          id: v.id ?? idx + 1,
+          variant: v.variant || v.variant_name || v.variant_key || "Standard",
+          variant_key: v.variant_key || v.variant || `variant-${idx}`,
+          price: Number(v.price) || Number(v.admin_price) || 0,
+          description: v.short_description || v.description || "",
+        });
+      });
+    } else if (
+      Array.isArray(emergencyService.variations_app_format?.zone_wise_variations) &&
+      emergencyService.variations_app_format.zone_wise_variations.length > 0
+    ) {
+      emergencyService.variations_app_format.zone_wise_variations.forEach((v: any, idx: number) => {
+        variations.push({
+          id: idx + 1,
+          variant: v.variant_name || v.variant_key || "Standard",
+          variant_key: v.variant_key || `variant-${idx}`,
+          price: Number(v.price) || Number(v.admin_price) || 0,
+          description: "",
+        });
+      });
+    }
+
+    return variations;
+  } catch (err) {
+    console.warn("fetchTyreEmergencyVariations error:", err);
+    return [];
+  }
+}
 
 export const getOrCreateGuestId = (): string => {
   if (typeof window === "undefined") return "a6013221-b529-4113-b60b-bac64dd6b7d7";
@@ -128,24 +160,76 @@ export async function fetchTyreCategoryServices(
       return data;
     }
   } catch (error) {
-    console.warn("fetchTyreCategoryServices failed, using fallback:", error);
+    console.warn("fetchTyreCategoryServices failed:", error);
   }
 
-  // Exact fallback matching user backend response
-  return [
-    {
-      id: TYRE_EMERGENCY_SERVICE_ID,
-      name: "Tyre Emergency Service",
-      category_id: TYRE_CATEGORY_ID,
-      variations: TYRE_EMERGENCY_VARIATIONS,
-    },
-    {
-      id: TYRE_REPLACEMENT_SERVICE_ID,
-      name: "Tyre Replacement Service",
-      category_id: TYRE_CATEGORY_ID,
-      variations: [],
-    },
-  ];
+  return [];
+}
+
+/**
+ * Dynamic Provider Search for Tyre Services:
+ * POST /customer/provider/search-by-service
+ */
+export async function searchTyreProviders(
+  serviceIds: string[] = [TYRE_REPLACEMENT_SERVICE_ID, TYRE_EMERGENCY_SERVICE_ID],
+  latitude: number | string = "51.5074",
+  longitude: number | string = "-0.1278"
+): Promise<any[]> {
+  const zoneId =
+    (typeof window !== "undefined" && localStorage.getItem(ZONE_KEY)) ||
+    DEFAULT_ZONE_ID;
+
+  try {
+    const formData = new FormData();
+    serviceIds.forEach((id) => formData.append("service_ids[]", id));
+    formData.append("latitude", String(latitude));
+    formData.append("longitude", String(longitude));
+
+    const res = await apiClient.post("/customer/provider/search-by-service", formData, {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+    });
+
+    const data = res.data?.content?.data || res.data?.content || res.data?.data;
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
+    }
+  } catch (err) {
+    console.warn("searchTyreProviders notice:", err);
+  }
+  return [];
+}
+
+/**
+ * Fetch Provider Details by ID:
+ * GET /customer/provider-details?id={id}&limit=1&offset=1
+ */
+export async function fetchProviderDetails(
+  providerId: string,
+  limit: number = 1,
+  offset: number = 1
+): Promise<any | null> {
+  const zoneId =
+    (typeof window !== "undefined" && localStorage.getItem(ZONE_KEY)) ||
+    DEFAULT_ZONE_ID;
+
+  try {
+    const res = await apiClient.get("/customer/provider-details", {
+      params: { id: providerId, limit, offset },
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+    });
+    return res.data?.content?.provider || res.data?.content || null;
+  } catch (err) {
+    console.warn("fetchProviderDetails notice:", err);
+    return null;
+  }
 }
 
 /**
@@ -208,68 +292,6 @@ export async function getZoneIdFromCoordinates(
   return DEFAULT_ZONE_ID;
 }
 
-// Fallback tyres from user's live backend response
-const FALLBACK_TYRES: BackendTyreItem[] = [
-  {
-    id: "b96c93e1-46ea-4071-ba10-93a282303724",
-    provider_id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-    category_id: TYRE_CATEGORY_ID,
-    service_id: TYRE_REPLACEMENT_SERVICE_ID,
-    brand: "Michelin",
-    model: "Primacy 4",
-    tyre_type: "tube_type",
-    season: "summer",
-    vehicle_type: "suv_4x4",
-    size: "205/55 R16 91V",
-    price: 999,
-    stock: 1,
-    images: ["2026-09-25-6ab60206964bf.png"],
-    image_full_paths: [
-      "https://mmcclub.co.uk/storage/app/public/tyre/2026-09-25-6ab60206964bf.png",
-    ],
-    provider: {
-      id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-      company_name: "TATA ROHIT",
-      company_phone: "+916263626362",
-      company_address: "London UK",
-      company_email: "rohitbellway12@gmail.com",
-      logo_full_path:
-        "https://mmcclub.co.uk/storage/app/public/provider/logo/2026-03-05-69a92b9b3230d.png",
-      avg_rating: 4.9,
-      rating_count: 24,
-    },
-  },
-  {
-    id: "42139f8f-f5f6-457d-afe6-1931268782f2",
-    provider_id: "f32d2b88-0014-4f8b-909f-097f23b13af0",
-    category_id: TYRE_CATEGORY_ID,
-    service_id: TYRE_REPLACEMENT_SERVICE_ID,
-    brand: "BMW",
-    model: "X7 RunFlat",
-    tyre_type: "tubeless",
-    season: "all_season",
-    vehicle_type: "passenger_car",
-    size: "205/55 R17",
-    price: 2000,
-    stock: 10,
-    images: ["2026-07-31-6a6c6ebc513d3.png"],
-    image_full_paths: [
-      "https://mmcclub.co.uk/storage/app/public/tyre/2026-07-31-6a6c6ebc513d3.png",
-    ],
-    provider: {
-      id: "f32d2b88-0014-4f8b-909f-097f23b13af0",
-      company_name: "Atif Alam",
-      company_phone: "+919876543210",
-      company_address: "London NW1",
-      company_email: "workdeveloperid2728@gmail.com",
-      logo_full_path:
-        "https://mmcclub.co.uk/storage/app/public/provider/logo/2026-07-31-6a6c33b8694c3.png",
-      avg_rating: 4.8,
-      rating_count: 32,
-    },
-  },
-];
-
 /**
  * Fetch Dynamic Tyres List from Backend
  * GET /customer/tyre/list?limit=50&offset=1
@@ -288,14 +310,17 @@ export async function fetchDynamicTyres(
       headers: { zoneId, zoneid: zoneId },
     });
 
-    const data = response.data?.content?.data;
+    const data =
+      response.data?.content?.data ||
+      (Array.isArray(response.data?.content) ? response.data?.content : null) ||
+      (Array.isArray(response.data?.data) ? response.data?.data : null);
     if (Array.isArray(data) && data.length > 0) {
       return data;
     }
   } catch (error) {
-    console.warn("fetchDynamicTyres failed, using fallback:", error);
+    console.warn("fetchDynamicTyres failed:", error);
   }
-  return FALLBACK_TYRES;
+  return [];
 }
 
 /**
@@ -324,64 +349,7 @@ export async function fetchProviderQuestions(
     console.warn("fetchProviderQuestions failed:", error);
   }
 
-  // Sensible default questions matching backend schema
-  return [
-    {
-      id: "c860ab63-8a2a-4e69-b3c4-f448a80b766d",
-      provider_id: null,
-      category_id: TYRE_CATEGORY_ID,
-      question_text: "Assistance Type",
-      options: "Mobile Tyre Service, Recovery Truck",
-      question_type: "select",
-      is_required: true,
-      is_active: true,
-      display_order: 1,
-    },
-    {
-      id: "2c336123-5d3b-46d9-903b-fd12886ab880",
-      provider_id: null,
-      category_id: TYRE_CATEGORY_ID,
-      question_text: "Tyre Size (e.g., 205/55 R16)",
-      options: null,
-      question_type: "text",
-      is_required: true,
-      is_active: true,
-      display_order: 2,
-    },
-    {
-      id: "960dec0d-a3a0-4bda-9882-55dbaf9ef392",
-      provider_id: null,
-      category_id: TYRE_CATEGORY_ID,
-      question_text: "Vehicle Model & Year",
-      options: null,
-      question_type: "text",
-      is_required: true,
-      is_active: true,
-      display_order: 3,
-    },
-    {
-      id: "3fd59fd8-4d95-4ed4-be6c-3203b3d93623",
-      provider_id: null,
-      category_id: TYRE_CATEGORY_ID,
-      question_text: "Current Situation",
-      options: "Puncture, Burst Tyre, New Tyre",
-      question_type: "select",
-      is_required: true,
-      is_active: true,
-      display_order: 4,
-    },
-    {
-      id: "521bed35-c457-432a-9202-22e02b3b59b6",
-      provider_id: null,
-      category_id: TYRE_CATEGORY_ID,
-      question_text: "Number of Tyres",
-      options: "1, 2, 3, 4",
-      question_type: "select",
-      is_required: true,
-      is_active: true,
-      display_order: 5,
-    },
-  ];
+  return [];
 }
 
 /**
@@ -613,9 +581,10 @@ export async function sendBookingRequestToBackend(
   const pad = (n: number) => String(n).padStart(2, "0");
   const fallbackSchedule = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-  // Exact JSON body format matching live mobile app
+  // Exact JSON body format matching user curl and Demandium specification
   const postData: Record<string, any> = {
     guest_id: guestId,
+    provider_id: payload.provider_id || DEFAULT_PROVIDER_ID,
     payment_method: payload.payment_method || "stripe",
     is_partial: String(payload.is_partial !== undefined ? (Number(payload.is_partial) === 1 ? "1" : "0") : "1"),
     payment_platform: payload.payment_platform || "app",
@@ -624,12 +593,17 @@ export async function sendBookingRequestToBackend(
     service_address_id: String(payload.service_address_id || "6"),
     service_location: "customer",
     booking_type: payload.booking_type || "normal",
-    car_registration_number: (payload.car_registration_number || "AN@#$AB").trim().toUpperCase(),
-    car_model: payload.car_model || "BMW BMW122",
-    car_manufacture_year: payload.car_manufacture_year || "2026",
-    car_color: payload.car_color || "White",
-    notes: payload.notes || "Mobile tyre fitting required at home address. (Recovery Truck Needed)",
+    selected_slot_id: (payload as any).selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
+    callback: payload.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
+    car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
+    car_model: payload.car_model || "",
+    car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
+    car_color: payload.car_color || "",
+    notes: payload.notes || "",
   };
+  if ((payload as any).post_id) {
+    postData.post_id = (payload as any).post_id;
+  }
 
   console.log("[TyreBooking] POST /customer/booking/request/send body:", postData);
 
@@ -751,19 +725,16 @@ export async function createAssistanceRequest(
         : isUuid(matchedTyre.provider.id)
           ? matchedTyre.provider.id
           : DEFAULT_PROVIDER_ID,
-      name: matchedTyre.provider.company_name || "MMC Certified Tyre Partner",
-      companyName: matchedTyre.provider.company_name || "MMC Certified Tyre Partner",
-      rating: Number(matchedTyre.provider.avg_rating || 4.9),
-      reviewCount: Number(matchedTyre.provider.rating_count || 18),
-      distanceMiles: 1.2,
-      address:
-        matchedTyre.provider.company_address || "123 Main Street, London",
-      city: "London",
-      phone: matchedTyre.provider.company_phone || "+44 20 7946 0912",
-      email: matchedTyre.provider.company_email || "tyres@mmcclub.co.uk",
-      image:
-        matchedTyre.provider.logo_full_path ||
-        "https://mmcclub.co.uk/storage/app/public/provider/logo/2026-03-05-69a92b9b3230d.png",
+      name: matchedTyre.provider.company_name || "",
+      companyName: matchedTyre.provider.company_name || "",
+      rating: Number(matchedTyre.provider.avg_rating || 0),
+      reviewCount: Number(matchedTyre.provider.rating_count || 0),
+      distanceMiles: 0,
+      address: matchedTyre.provider.company_address || "",
+      city: "",
+      phone: matchedTyre.provider.company_phone || "",
+      email: matchedTyre.provider.company_email || "",
+      image: matchedTyre.provider.logo_full_path || "",
       capabilities: {
         inStock: true,
         offersRecoveryTruck: true,
@@ -771,7 +742,25 @@ export async function createAssistanceRequest(
       },
     };
   } else {
-    provider = DEFAULT_PROVIDERS[0];
+    const provDetails = await fetchProviderDetails(params.providerId || DEFAULT_PROVIDER_ID);
+    provider = {
+      id: provDetails?.id || params.providerId || DEFAULT_PROVIDER_ID,
+      name: provDetails?.company_name || "",
+      companyName: provDetails?.company_name || "",
+      rating: Number(provDetails?.avg_rating || 0),
+      reviewCount: Number(provDetails?.rating_count || 0),
+      distanceMiles: 0,
+      address: provDetails?.company_address || "",
+      city: "",
+      phone: provDetails?.company_phone || "",
+      email: provDetails?.company_email || "",
+      image: provDetails?.logo_full_path || "",
+      capabilities: {
+        inStock: true,
+        offersRecoveryTruck: true,
+        canComeToLocation: true,
+      },
+    };
   }
 
   // 4. Distinguish Emergency Service vs Replacement Service
@@ -802,7 +791,7 @@ export async function createAssistanceRequest(
   });
 
   const qty = params.tyreQuantity || 1;
-  const tyreSize = params.tyreSize || matchedTyre?.size || "205/55 R16";
+  const tyreSize = params.tyreSize || matchedTyre?.size || "";
 
   let tyreDescription = "";
   let tyrePrice = 0;
@@ -813,7 +802,7 @@ export async function createAssistanceRequest(
   if (isEmergency) {
     const isBurst = emergencyVariantKey === "burst-tyre";
     const emergencyPrice = isBurst ? 100 : 50;
-    tyrePrice = emergencyPrice * qty;
+    tyrePrice = (params.selectedTyrePrice || emergencyPrice) * qty;
     callOutFee = params.assistanceType === "recovery_truck" ? 45 : 10;
     labourPrice = 0;
     fareAmount = tyrePrice + callOutFee;
@@ -825,12 +814,14 @@ export async function createAssistanceRequest(
     const unitPrice =
       params.selectedTyrePrice ||
       matchedTyre?.price ||
-      (params.category === "upgrades" ? 180 : 120);
+      0;
     tyrePrice = unitPrice * qty;
     labourPrice = 20 * qty;
     callOutFee = params.serviceLocationType === "workshop" ? 0 : 10;
     fareAmount = tyrePrice + labourPrice + callOutFee;
-    tyreDescription = `${matchedTyre?.brand || "Premium"} ${matchedTyre?.model || "Tyre"} (${tyreSize})`;
+    tyreDescription = matchedTyre
+      ? `${matchedTyre.brand || ""} ${matchedTyre.model || ""} (${tyreSize})`.trim()
+      : `Tyre Replacement (${tyreSize})`.trim();
   }
 
   const quote: QuoteSummary = {
@@ -885,12 +876,12 @@ export async function createAssistanceRequest(
     scheduledDate: params.scheduledDate,
     scheduledTimeSlot: params.scheduledTimeSlot,
     formattedDateTime,
-    locationAddress: params.locationAddress || "Flat 4B, Baker Street, London",
-    locationPostcode: params.locationPostcode || "NW1 6XE",
+    locationAddress: params.locationAddress || "",
+    locationPostcode: params.locationPostcode || "",
     latitude: lat,
     longitude: lng,
-    vehicleMakeModel: params.vehicleMakeModel || "BMW 5 Series",
-    vehicleRegistration: params.vehicleRegistration || "GF21 XYZ",
+    vehicleMakeModel: params.vehicleMakeModel || "",
+    vehicleRegistration: params.vehicleRegistration || "",
     tyreSize,
     tyreQuantity: qty,
     notes: combinedNotes,
@@ -976,11 +967,11 @@ export async function confirmQuoteAndAssignTechnician(
     service_address_id: "6",
     service_location: "customer",
     booking_type: isEmergency ? "emergency" : "normal",
-    car_registration_number: booking.vehicleRegistration || "AN@#$AB",
-    car_model: booking.vehicleMakeModel || "BMW BMW122",
-    car_manufacture_year: "2026",
-    car_color: "White",
-    notes: booking.notes || "Mobile tyre fitting required at home address. (Recovery Truck Needed)",
+    car_registration_number: booking.vehicleRegistration || "",
+    car_model: booking.vehicleMakeModel || "",
+    car_manufacture_year: new Date().getFullYear().toString(),
+    car_color: "",
+    notes: booking.notes || "",
     is_partial: paymentOptions?.is_partial ?? 1,
     payment_platform: "app",
   });
@@ -1167,7 +1158,7 @@ export function extractReadableBookingId(res: any): string | null {
 export async function assignTechnicianToBooking(
   bookingId: string
 ): Promise<TyreAssistanceBooking> {
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await new Promise((resolve) => setTimeout(resolve, 800));
 
   const bookings = getStoredBookings();
   const index = bookings.findIndex(
@@ -1177,11 +1168,7 @@ export async function assignTechnicianToBooking(
     throw new Error("Booking not found");
   }
 
-  const isTruck = bookings[index].assistanceType === "recovery_truck";
-  const technician = isTruck ? DEFAULT_TECHNICIANS[1] : DEFAULT_TECHNICIANS[0];
-
   bookings[index].status = "confirmed";
-  bookings[index].technician = technician;
   bookings[index].updatedAt = new Date().toISOString();
 
   // If a real booking ID was saved in localStorage, ensure referenceNumber uses it!

@@ -139,75 +139,10 @@ export const MAINTENANCE_TIPS: MaintenanceTip[] = [
   },
 ];
 
-// Default Providers matching UI Screen 4 ("Test Company Ltd")
-export const DEFAULT_PROVIDERS: TyreProvider[] = [
-  {
-    id: "9b1d7cc4-6f97-4b80-8931-9167c3bc3c15",
-    name: "MMC Rapid Response Tyres",
-    companyName: "MMC Rapid Response Tyres",
-    rating: 4.9,
-    reviewCount: 320,
-    distanceMiles: 1.2,
-    address: "Unit 4, Gateway Commerce Park, London",
-    city: "London",
-    phone: "+44 20 7946 0912",
-    email: "support@mmcclub.co.uk",
-    image: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
-    capabilities: {
-      inStock: true,
-      offersRecoveryTruck: true,
-      canComeToLocation: true,
-    },
-  },
-  {
-    id: "prov-rapid-tyres-uk",
-    name: "MMC Rapid Response Tyres",
-    companyName: "Motor Market Connect Mobile Fleet",
-    rating: 4.9,
-    reviewCount: 342,
-    distanceMiles: 2.1,
-    address: "Unit 4, Gateway Commerce Park, London",
-    city: "London",
-    phone: "+44 800 123 4567",
-    email: "dispatch@motormarketconnect.com",
-    image: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=600&q=80",
-    capabilities: {
-      inStock: true,
-      offersRecoveryTruck: true,
-      canComeToLocation: true,
-    },
-  },
-];
+export const DEFAULT_PROVIDERS: TyreProvider[] = [];
 
 // Default Assigned Technician
-export const DEFAULT_TECHNICIANS: TechnicianInfo[] = [
-  {
-    id: "tech-david-miller",
-    name: "David Miller",
-    role: "Senior Mobile Tyre Specialist",
-    phone: "+44 7700 900451",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-    rating: 4.9,
-    completedJobs: 1420,
-    vehicleModel: "Mercedes-Benz Sprinter Mobile Fitting Van",
-    vehiclePlate: "MMC 24 TYR",
-    etaMinutes: 12,
-    currentStatus: "En Route to Your Location",
-  },
-  {
-    id: "tech-marcus-vance",
-    name: "Marcus Vance",
-    role: "Certified Roadside Recovery Engineer",
-    phone: "+44 7700 900892",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
-    rating: 5.0,
-    completedJobs: 980,
-    vehicleModel: "MAN Flatbed Recovery Truck",
-    vehiclePlate: "REC 88 MMC",
-    etaMinutes: 15,
-    currentStatus: "En Route to Your Location",
-  },
-];
+export const DEFAULT_TECHNICIANS: TechnicianInfo[] = [];
 
 // Helper to compute quote
 export function calculateQuote(
