@@ -704,6 +704,7 @@ export interface SendBookingRequestParams {
   payment_platform?: string;
   callback?: string;
   is_partial?: number | 0 | 1;
+  amount?: number;
 }
 
 export interface SendBookingRequestResponse {
@@ -1028,6 +1029,9 @@ export const sendBookingRequest = async (
     if (params.is_partial !== undefined) {
       formData.append("is_partial", String(params.is_partial));
     }
+    if (params.amount !== undefined) {
+      formData.append("amount", String(params.amount));
+    }
     formData.append("is_terms_accepted", "1");
     formData.append("is_provider_terms_accepted", "1");
     formData.append("terms_and_conditions", "1");
@@ -1066,6 +1070,7 @@ export const sendBookingRequest = async (
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,
       is_partial: params.is_partial !== undefined ? Number(params.is_partial) : 0,
+      ...(params.amount !== undefined ? { amount: Number(params.amount) } : {}),
       is_terms_accepted: 1,
       is_provider_terms_accepted: 1,
       terms_and_conditions: 1,

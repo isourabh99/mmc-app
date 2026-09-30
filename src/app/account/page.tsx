@@ -85,12 +85,11 @@ function AccountContent() {
       const data = await fetchAllCustomerBookings({
         limit: 50,
         offset: 1,
-        booking_status: "all",
-        service_type: "all",
       });
+      console.log("[BookingsTab] Fetched bookings count:", data.length);
       setBookings(data);
     } catch (err: any) {
-      console.error("Failed to load customer bookings:", err);
+      console.error("[BookingsTab] Failed to load customer bookings:", err?.response?.status, err?.response?.data || err?.message);
       setBookingsError(
         err?.response?.data?.message ||
           "Unable to load reservations. Please make sure you are logged in."

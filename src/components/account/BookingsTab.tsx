@@ -426,7 +426,33 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. SEARCH & STATUS FILTERS TOOLBAR                                         */}
+      {/* 3. STATUS TABS (Like Mobile: Pending | Accepted | In Progress | Completed) */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        {[
+          { id: "all", label: "All" },
+          { id: "pending", label: "Pending" },
+          { id: "accepted", label: "Accepted" },
+          { id: "ongoing", label: "In Progress" },
+          { id: "completed", label: "Completed" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setSelectedStatus(tab.id)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              selectedStatus === tab.id
+                ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-black shadow-md shadow-[#d09a50]/20"
+                : "bg-[#17120e] text-zinc-300 hover:text-white border border-white/10 hover:border-white/20"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3B. SEARCH & FILTERS TOOLBAR                                              */}
       {/* ========================================================================= */}
       <div className="p-4 rounded-2xl bg-[#17120e] border border-white/10">
         {/* Status, Search and Sort Row */}
@@ -594,16 +620,15 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
             const isOngoing = item.status === "ongoing";
             const isCanceled = item.status === "canceled";
 
-            // Payment completion and remaining balance calculation
-            const isFullyPaid = item.isPaid || item.raw?.is_paid === 1 || item.raw?.payment_status === "paid";
-            const isOngoingOrPending = isOngoing || item.status === "accepted" || isPending;
-            const isPartial =
-              item.raw?.is_partial === 1 ||
-              item.raw?.is_partial === "1" ||
-              (Array.isArray(item.raw?.partial_payments) && item.raw.partial_payments.length > 0);
-            const remainingBalance = isPartial
-              ? Number(item.raw?.additional_charge ?? item.raw?.due_amount ?? (item.totalAmount * 0.75))
-              : Number(item.totalAmount);
+            // Use pre-computed payment fields from normalizer
+            const isFullyPaid = item.isPaid;
+            const paidAmount = item.paidAmount;
+            const dueAmount = item.dueAmount;
+            const isPartiallyPaid = item.isPartiallyPaid;
+
+            // Allow pay button only for accepted/ongoing with an outstanding due amount
+            const isOngoingOrAccepted = isOngoing || item.status === "accepted";
+            const canPayDue = !isFullyPaid && dueAmount > 0 && isOngoingOrAccepted;
 
             return (
               <div
@@ -710,12 +735,14 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
 
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                        item.isPaid
+                        isFullyPaid
                           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                          : isPartiallyPaid
+                          ? "bg-orange-500/20 text-orange-300 border border-orange-500/40"
                           : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                       }`}
                     >
-                      {item.isPaid ? "✓ Paid" : "Payment Pending"}
+                      {isFullyPaid ? "✓ Fully Paid" : isPartiallyPaid ? "⚡ Partially Paid" : "Payment Pending"}
                     </span>
                   </div>
                 </div>
@@ -828,9 +855,25 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                     <div>
                       <span className="text-[10px] uppercase text-zinc-400 font-bold block">Total Amount</span>
-                      <span className="text-xl font-black text-[#FAD293]">
+                      <span className="text-xl font-black text-white">
                         {formatPrice(item.totalAmount)}
                       </span>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs font-bold flex-wrap">
+                        {paidAmount > 0 && (
+                          <span className="text-emerald-400">
+                            Paid: {formatPrice(paidAmount)}
+                          </span>
+                        )}
+                        {dueAmount > 0 ? (
+                          <span className="text-orange-400 animate-pulse">
+                            Due: {formatPrice(dueAmount)}
+                          </span>
+                        ) : isFullyPaid && paidAmount === 0 ? (
+                          <span className="text-emerald-400">
+                            Paid: {formatPrice(item.totalAmount)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="border-l border-white/10 pl-4">
@@ -851,15 +894,15 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
-                    {/* Pay Now Button for In-Progress / Pending bookings with remaining unpaid balance */}
-                    {!isFullyPaid && isOngoingOrPending && (
+                    {/* Pay Now Button for Ongoing / Accepted bookings with remaining unpaid balance */}
+                    {canPayDue && (
                       <button
                         type="button"
                         onClick={() => setBookingForPayment(item)}
-                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
                       >
                         <CreditCard size={13} className="text-zinc-950" />
-                        <span>Pay Remaining (£{remainingBalance.toFixed(2)})</span>
+                        <span>Pay Now (£{dueAmount.toFixed(2)})</span>
                       </button>
                     )}
 
@@ -1009,35 +1052,36 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 <span className="text-2xl font-black text-[#FAD293]">
                   {formatPrice(selectedBookingForModal.totalAmount)}
                 </span>
+                {selectedBookingForModal.paidAmount > 0 && (
+                  <div className="flex items-center gap-3 mt-1 text-xs font-bold flex-wrap">
+                    <span className="text-emerald-400">Paid: {formatPrice(selectedBookingForModal.paidAmount)}</span>
+                    {selectedBookingForModal.dueAmount > 0 && (
+                      <span className="text-orange-400">Due: {formatPrice(selectedBookingForModal.dueAmount)}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {!(
-                  selectedBookingForModal.isPaid ||
-                  selectedBookingForModal.raw?.is_paid === 1 ||
-                  selectedBookingForModal.raw?.payment_status === "paid"
-                ) &&
-                  (selectedBookingForModal.status === "ongoing" ||
-                    selectedBookingForModal.status === "accepted" ||
-                    selectedBookingForModal.status === "pending") && (
-                    <button
-                      type="button"
-                      onClick={() => setBookingForPayment(selectedBookingForModal)}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
-                    >
-                      <CreditCard size={13} className="text-zinc-950" />
-                      <span>
-                        Pay Remaining (£
-                        {(
-                          selectedBookingForModal.raw?.is_partial === 1 ||
-                          selectedBookingForModal.raw?.is_partial === "1"
-                            ? selectedBookingForModal.totalAmount * 0.75
-                            : selectedBookingForModal.totalAmount
-                        ).toFixed(2)}
-                        )
-                      </span>
-                    </button>
-                  )}
+                {(() => {
+                  const modalCanPay =
+                    !selectedBookingForModal.isPaid &&
+                    selectedBookingForModal.dueAmount > 0 &&
+                    (selectedBookingForModal.status === "ongoing" || selectedBookingForModal.status === "accepted");
+
+                  return (
+                    modalCanPay && (
+                      <button
+                        type="button"
+                        onClick={() => setBookingForPayment(selectedBookingForModal)}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
+                      >
+                        <CreditCard size={13} className="text-zinc-950" />
+                        <span>Pay Due ({formatPrice(selectedBookingForModal.dueAmount)})</span>
+                      </button>
+                    )
+                  );
+                })()}
 
                 <button
                   type="button"
@@ -1055,138 +1099,235 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       {/* ========================================================================= */}
       {/* 9. PAY REMAINING BALANCE MODAL                                            */}
       {/* ========================================================================= */}
-      {bookingForPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-md bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl animate-scale-up text-left">
-            <button
-              type="button"
-              onClick={() => {
-                setBookingForPayment(null);
-                setPaymentSuccess(false);
-              }}
-              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-            >
-              <X size={16} />
-            </button>
+      {bookingForPayment && (() => {
+        // Use pre-computed fields from the normalizer for accuracy
+        const totalAgreed = bookingForPayment.totalAmount;
+        const dueToPay = bookingForPayment.dueAmount;
+        const paidAlready = bookingForPayment.paidAmount;
 
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-[#FAD293] block">
-                Outstanding Balance Payment
-              </span>
-              <h3 className="text-xl font-black text-white mt-1">
-                {bookingForPayment.serviceTitle}
-              </h3>
-              <p className="text-xs text-zinc-400 mt-0.5 font-mono">
-                Booking #{bookingForPayment.id} • {bookingForPayment.statusDisplay}
-              </p>
-            </div>
-
-            {/* Price breakdown */}
-            <div className="rounded-2xl border border-white/10 bg-black/50 p-4 space-y-2.5 text-xs">
-              <div className="flex items-center justify-between text-zinc-400">
-                <span>Total Agreed Price:</span>
-                <span className="font-bold text-white">£{bookingForPayment.totalAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between text-zinc-400">
-                <span>Advance Deposit (25% Paid):</span>
-                <span className="font-semibold text-emerald-400">
-                  -£{(bookingForPayment.totalAmount * 0.25).toFixed(2)}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
-                <span className="text-[#FAD293]">Remaining Amount Due:</span>
-                <span className="text-base font-extrabold text-[#FAD293]">
-                  £{(bookingForPayment.totalAmount * 0.75).toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Payment method selector */}
-            <div className="p-4 rounded-2xl border border-[#D5A054]/40 bg-[#1C1A16] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FAD293]/20 border border-[#FAD293]/40 flex items-center justify-center text-[#FAD293]">
-                  <CreditCard size={18} />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-white block">Online Payment (Stripe)</span>
-                  <span className="text-[11px] text-zinc-400">Debit / Credit Card, Apple Pay, Google Pay</span>
-                </div>
-              </div>
-              <Check className="w-4 h-4 text-[#FAD293]" />
-            </div>
-
-            {paymentSuccess ? (
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center space-y-1">
-                <Check className="w-6 h-6 mx-auto stroke-[3]" />
-                <p>Payment Received Successfully!</p>
-                <p className="text-[11px] text-zinc-400 font-normal">Updating your booking records...</p>
-              </div>
-            ) : (
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div className="relative w-full max-w-md bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl animate-scale-up text-left">
               <button
                 type="button"
-                disabled={payingRemaining}
-                onClick={async () => {
-                  setPayingRemaining(true);
-                  try {
-                    const bookingId = bookingForPayment.rawId || bookingForPayment.id;
-                    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-                    const userObj = userStr ? JSON.parse(userStr) : null;
-                    const userId = userObj?.id || "";
-
-                    const callbackUrl = `${window.location.origin}/account?tab=bookings&status=ongoing&bookingId=${bookingId}&payment_success=true`;
-
-                    let redirectUrl = "";
-
-                    // 1. Try calling Demandium customer payment API endpoint
-                    try {
-                      const res = await apiClient.post("/customer/booking/payment", {
-                        booking_id: bookingId,
-                        payment_method: "stripe",
-                        payment_platform: "app",
-                        callback: callbackUrl,
-                      });
-
-                      redirectUrl =
-                        res.data?.content?.redirect_url ||
-                        res.data?.content?.redirect_link ||
-                        res.data?.content?.payment_url ||
-                        res.data?.content?.url;
-                    } catch (e: any) {
-                      // Fallback to direct gateway URL
-                    }
-
-                    // 2. Direct Demandium Stripe checkout gateway link
-                    if (!redirectUrl) {
-                      redirectUrl = `https://mmcclub.co.uk/payment/stripe?booking_id=${encodeURIComponent(String(bookingId))}&user_id=${encodeURIComponent(String(userId))}&callback=${encodeURIComponent(callbackUrl)}`;
-                    }
-
-                    // Redirect to live Stripe payment portal
-                    window.location.href = redirectUrl;
-                  } catch (err: any) {
-                    console.error("Payment initiation failed:", err);
-                    setPayingRemaining(false);
-                  }
+                onClick={() => {
+                  setBookingForPayment(null);
+                  setPaymentSuccess(false);
                 }}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
-                {payingRemaining ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>Connecting to Stripe Gateway...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      Pay Remaining £{(bookingForPayment.totalAmount * 0.75).toFixed(2)} Now
-                    </span>
-                    <ArrowRight size={14} />
-                  </>
-                )}
+                <X size={16} />
               </button>
-            )}
+
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#FAD293] block">
+                  Outstanding Due Payment
+                </span>
+                <h3 className="text-xl font-black text-white mt-1">
+                  {bookingForPayment.serviceTitle}
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5 font-mono">
+                  Booking #{bookingForPayment.id} • {bookingForPayment.statusDisplay}
+                </p>
+              </div>
+
+              {/* Price breakdown */}
+              <div className="rounded-2xl border border-white/10 bg-black/50 p-4 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span>Total Agreed Price:</span>
+                  <span className="font-bold text-white">£{totalAgreed.toFixed(2)}</span>
+                </div>
+                {paidAlready > 0 && (
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span>Amount Already Paid:</span>
+                    <span className="font-semibold text-emerald-400">
+                      -£{paidAlready.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
+                  <span className="text-[#FAD293]">Due Payment:</span>
+                  <span className="text-base font-extrabold text-[#FAD293]">
+                    £{dueToPay.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment method selector - Online Only (No Cash Allowed) */}
+              <div className="p-4 rounded-2xl border border-[#D5A054]/40 bg-[#1C1A16] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#FAD293]/20 border border-[#FAD293]/40 flex items-center justify-center text-[#FAD293]">
+                    <CreditCard size={18} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">Online Payment (Stripe)</span>
+                    <span className="text-[11px] text-zinc-400">Debit / Credit Card, Apple Pay, Google Pay</span>
+                  </div>
+                </div>
+                <Check className="w-4 h-4 text-[#FAD293]" />
+              </div>
+
+              {paymentSuccess ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center space-y-1">
+                  <Check className="w-6 h-6 mx-auto stroke-[3]" />
+                  <p>Payment Received Successfully!</p>
+                  <p className="text-[11px] text-zinc-400 font-normal">Updating your booking records...</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setPayingRemaining(true);
+                    try {
+                      // Use the REAL backend UUID from raw booking data
+                      const bookingId =
+                        bookingForPayment.raw?.id ||
+                        bookingForPayment.raw?.booking_id ||
+                        bookingForPayment.rawId;
+
+                      console.log("[Payment] booking_id:", bookingId);
+
+                      const callbackUrl = `${window.location.origin}/account?tab=bookings&bookingId=${bookingId}&payment_success=true`;
+                      const isValidUUID = (str: string) =>
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+                      let redirectUrl = "";
+                      let stripePaymentId = "";
+
+                      // Backend endpoint for switching payment method / paying booking balance:
+                      // POST /customer/booking/switch-payment-method
+                      const defaultCallback = "https://mmcclub.co.uk/api/v1/digital-payment-booking-response";
+
+                      const payloadsToTry = [
+                        {
+                          booking_id: bookingId,
+                          payment_method: "stripe",
+                          is_partial: 0,
+                          payment_platform: "app",
+                          callback: defaultCallback,
+                        },
+                        {
+                          booking_id: bookingId,
+                          payment_method: "stripe",
+                          is_partial: 0,
+                          payment_platform: "app",
+                          callback: callbackUrl,
+                        },
+                        {
+                          booking_id: bookingId,
+                          payment_method: "stripe",
+                          is_partial: 0,
+                          payment_platform: "web",
+                          callback: defaultCallback,
+                        },
+                      ];
+
+                      for (const payload of payloadsToTry) {
+                        if (redirectUrl || stripePaymentId) break;
+                        try {
+                          console.log("[Payment] Calling /customer/booking/switch-payment-method:", payload);
+                          const res = await apiClient.post("/customer/booking/switch-payment-method", payload);
+                          const fullResp = res.data;
+                          console.log("[Payment] switch-payment-method API resp:", fullResp);
+
+                          const content = fullResp?.content;
+                          const raw2 = (typeof content === "object" && content !== null) ? content : fullResp || {};
+
+                          // 1. Direct string URL in content
+                          if (typeof content === "string" && content.startsWith("http")) {
+                            redirectUrl = content;
+                            console.log("[Payment] Got direct URL from content:", redirectUrl);
+                            break;
+                          }
+
+                          // 2. Redirect URL candidate
+                          const urlCandidate =
+                            raw2?.redirect_url ||
+                            raw2?.redirect_link ||
+                            raw2?.payment_url ||
+                            raw2?.url ||
+                            raw2?.stripe_url ||
+                            raw2?.link ||
+                            raw2?.data?.redirect_url ||
+                            raw2?.data?.url;
+
+                          if (urlCandidate && String(urlCandidate).startsWith("http")) {
+                            redirectUrl = String(urlCandidate);
+                            console.log("[Payment] Got redirect URL:", redirectUrl);
+                            break;
+                          }
+
+                          // 3. Payment ID UUID candidate
+                          const candidate =
+                            raw2?.payment_id ||
+                            raw2?.paymentId ||
+                            raw2?.stripe_payment_id ||
+                            raw2?.data?.payment_id ||
+                            "";
+
+                          if (candidate && isValidUUID(String(candidate))) {
+                            stripePaymentId = String(candidate);
+                            console.log("[Payment] Got valid payment UUID:", stripePaymentId);
+                            break;
+                          }
+                        } catch (e: any) {
+                          const status = e?.response?.status;
+                          const errData = e?.response?.data;
+                          console.warn(`[Payment] switch-payment-method failed ${status}:`, errData?.message || e?.message);
+                          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+                            redirectUrl = String(errData.content.redirect_url);
+                            break;
+                          }
+                          if (errData?.content?.payment_id && isValidUUID(String(errData.content.payment_id))) {
+                            stripePaymentId = String(errData.content.payment_id);
+                            break;
+                          }
+                        }
+                      }
+
+                      // Build the Stripe redirect URL if payment_id was returned
+                      if (stripePaymentId && !redirectUrl) {
+                        redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(stripePaymentId)}`;
+                      }
+
+                      if (!redirectUrl) {
+                        console.error("[Payment] switch-payment-method failed to return redirect URL for booking:", bookingId);
+                        setPayingRemaining(false);
+                        window.dispatchEvent(new CustomEvent("mmc-toast", {
+                          detail: { message: "Unable to initiate payment gateway. Please try again.", type: "error" }
+                        }));
+                        return;
+                      }
+
+                      console.log("[Payment] Redirecting to:", redirectUrl);
+                      window.location.href = redirectUrl;
+                    } catch (err: any) {
+                      console.error("Payment initiation failed:", err);
+                      setPayingRemaining(false);
+                    }
+                  }}
+                  disabled={payingRemaining}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
+                >
+                  {payingRemaining ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                      <span>Connecting to Stripe Gateway...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        Pay Due £{dueToPay.toFixed(2)} Online Now
+                      </span>
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

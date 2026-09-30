@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import {
   AlertOctagon,
   ArrowLeftRight,
@@ -14,6 +15,7 @@ import {
   Clock,
   Wrench,
   Truck,
+  Sparkles,
 } from "lucide-react";
 import { TyreCategory, MAINTENANCE_TIPS } from "@/lib/data/tyre-assistance.data";
 import { TyreAssistanceHeader } from "./TyreAssistanceHeader";
@@ -148,6 +150,80 @@ export const TyreCategoryStep: React.FC<TyreCategoryStepProps> = ({
             </p>
           </div>
         </button>
+      </div>
+
+      {/* 2.5 Featured Wheels & Upgrades Spotlight Banner */}
+      <div
+        onClick={() => onSelectCategory("upgrades")}
+        className="group relative rounded-3xl overflow-hidden border border-[#CEA46B]/30 hover:border-[#FAD293]/70 bg-gradient-to-br from-[#18130e] via-[#120f0d] to-[#0a0807] p-4 sm:p-5 shadow-[0_15px_45px_rgba(0,0,0,0.7)] hover:shadow-[0_20px_60px_rgba(206,164,107,0.22)] transition-all duration-300 cursor-pointer active:scale-[0.99]"
+      >
+        {/* Subtle top gold sheen highlight */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#FAD293]/70 to-transparent" />
+
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
+          {/* Left: Complete Image without any cropping */}
+          <div className="sm:col-span-5 relative w-full aspect-square max-w-[260px] sm:max-w-none mx-auto rounded-2xl overflow-hidden border border-[#CEA46B]/25 bg-black/50 shadow-lg">
+            <Image
+              src="/tyre-fiiting.jpeg"
+              alt="MMC - Your Wheels. Your Finish. Custom Wheel & Tyre Fitting"
+              fill
+              sizes="(max-width: 640px) 100vw, 300px"
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            {/* Subtle gloss shine overlay */}
+            <div className="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-2xl" />
+          </div>
+
+          {/* Right: Info & Quick Action */}
+          <div className="sm:col-span-7 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/15 border border-[#FAD293]/30 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                <Sparkles size={11} className="text-[#FAD293]" />
+                Featured Upgrade
+              </span>
+              <span className="text-[11px] text-white/40">
+                Premium Stance & Performance
+              </span>
+            </div>
+
+            <div>
+              <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-[#FAD293] transition-colors flex items-center gap-2">
+                Your Wheels. Your Finish.
+                <ChevronRight size={18} className="text-white/40 group-hover:text-[#FAD293] group-hover:translate-x-1 transition-all" />
+              </h3>
+              <p className="text-xs text-white/60 leading-relaxed mt-1">
+                Precision mobile wheel balancing, OEM colour customization, and ultra-high performance tyre fittings delivered at your door.
+              </p>
+            </div>
+
+            {/* 4 Finishes Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+              {[
+                { name: "Gloss Black", dot: "bg-neutral-900 border-neutral-600" },
+                { name: "Silver", dot: "bg-slate-300 border-white" },
+                { name: "Graphite", dot: "bg-zinc-700 border-zinc-500" },
+                { name: "Bronze", dot: "bg-amber-700 border-amber-500" },
+              ].map((finish) => (
+                <div
+                  key={finish.name}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/40 border border-white/5 text-[11px] text-white/70"
+                >
+                  <span className={`w-2 h-2 rounded-full border ${finish.dot}`} />
+                  <span className="truncate font-medium">{finish.name}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-1 flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#FAD293] flex items-center gap-1">
+                Explore Upgrades & Custom Finishes
+              </span>
+              <span className="text-[11px] px-3 py-1 rounded-xl bg-gradient-to-r from-[#FAD293] to-[#CEA46B] text-black font-bold">
+                Select Option →
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 3. Maintenance Tips Section */}

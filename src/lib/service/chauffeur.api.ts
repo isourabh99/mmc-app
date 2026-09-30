@@ -231,6 +231,8 @@ export interface ChauffeurBookingPayload {
   drop_location: string;
   drop_coordinates?: ChauffeurBookingCoordinates;
   payment_method: string;
+  is_partial?: number | 0 | 1;
+  payment_platform?: string;
   callback?: string;
   note?: string;
 }
@@ -335,7 +337,7 @@ export const bookChauffeur = async (
   try {
     const sanitizedPayload: ChauffeurBookingPayload = {
       ...payload,
-      payment_method: "cash_after_service",
+      payment_method: payload.payment_method || "cash_after_service",
     };
     const response = await apiClient.post<ChauffeurBookingResponse>(
       "/customer/car/chauffeur/book",

@@ -419,7 +419,7 @@ export default function GetStartedPage() {
                   </div>
 
                   {/* PASSWORD + CONFIRM PASSWORD */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-white/60 mb-1 block font-medium">
                         Password
@@ -447,7 +447,7 @@ export default function GetStartedPage() {
                         className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none focus:border-[#FAD293]/60 transition-colors"
                       />
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* CREATE ACCOUNT BUTTON */}
                   <button

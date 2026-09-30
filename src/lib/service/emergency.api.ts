@@ -497,6 +497,10 @@ export interface SendEmergencyBookingRequestParams {
   guest_id?: string;
   car_image?: File | null;
   answers?: Record<string, any>;
+  is_partial?: number | 0 | 1;
+  amount?: number;
+  payment_platform?: string;
+  callback?: string;
 }
 
 /**
@@ -565,6 +569,22 @@ export const sendEmergencyBookingRequest = async (
     formData.append("zone_id", zoneId);
     formData.append("guest_id", guestId);
     formData.append("car_image", params.car_image);
+    if (params.is_partial !== undefined) {
+      formData.append("is_partial", String(params.is_partial));
+    }
+    if (params.amount !== undefined) {
+      formData.append("amount", String(params.amount));
+    }
+    if (params.payment_platform) {
+      formData.append("payment_platform", params.payment_platform);
+    }
+    if (params.callback) {
+      formData.append("callback", params.callback);
+    }
+    formData.append("is_terms_accepted", "1");
+    formData.append("is_provider_terms_accepted", "1");
+    formData.append("terms_and_conditions", "1");
+    formData.append("terms_accepted", "1");
 
     if (params.answers && typeof params.answers === "object") {
       Object.entries(params.answers).forEach(([key, val]) => {
@@ -602,6 +622,14 @@ export const sendEmergencyBookingRequest = async (
       longitude: String(params.longitude || "75.9035"),
       zone_id: zoneId,
       guest_id: guestId,
+      ...(params.is_partial !== undefined ? { is_partial: Number(params.is_partial) } : {}),
+      ...(params.amount !== undefined ? { amount: Number(params.amount) } : {}),
+      ...(params.payment_platform ? { payment_platform: params.payment_platform } : {}),
+      ...(params.callback ? { callback: params.callback } : {}),
+      is_terms_accepted: 1,
+      is_provider_terms_accepted: 1,
+      terms_and_conditions: 1,
+      terms_accepted: 1,
     };
 
     if (params.answers && typeof params.answers === "object") {
@@ -642,6 +670,10 @@ export interface BookEmergencyProviderParams {
   longitude?: number | string;
   car_image?: File | null;
   postcode?: string;
+  is_partial?: number | 0 | 1;
+  amount?: number;
+  payment_platform?: string;
+  callback?: string;
 }
 
 /**
@@ -656,6 +688,9 @@ export const bookEmergencyProvider = async (
   booking_id?: string | number;
   message: string;
   status: string;
+  redirect_link?: string;
+  url?: string;
+  amount?: number;
 }> => {
   const zoneId =
     (typeof window !== "undefined" &&
@@ -711,6 +746,12 @@ export const bookEmergencyProvider = async (
     }
     if (!cleanPostcode) cleanPostcode = "12345";
 
+    const callbackUrl =
+      params.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success");
+
     const bookingRes = await sendEmergencyBookingRequest({
       payment_method: params.payment_method || "cash_after_service",
       service_address_id: "6",
@@ -729,6 +770,10 @@ export const bookEmergencyProvider = async (
       longitude: params.longitude || "75.9035",
       zone_id: zoneId,
       car_image: params.car_image,
+      is_partial: params.is_partial,
+      amount: params.amount,
+      payment_platform: params.payment_method === "stripe" ? "app" : undefined,
+      callback: params.payment_method === "stripe" ? callbackUrl : undefined,
     });
 
     const bookingContent = bookingRes?.content;
@@ -739,6 +784,27 @@ export const bookEmergencyProvider = async (
         : bookingContent?.booking_id) ||
       `EMG-${Math.floor(100000 + Math.random() * 900000)}`;
 
+    let redirectUrl =
+      bookingContent?.url ||
+      bookingContent?.redirect_link ||
+      bookingContent?.redirect_url ||
+      bookingContent?.payment_url ||
+      bookingRes?.url ||
+      bookingRes?.redirect_link;
+
+    const isUuid = (val: any) =>
+      typeof val === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+    if (!redirectUrl && params.payment_method === "stripe") {
+      const pId = isUuid(bookingContent?.payment_id) ? bookingContent.payment_id : isUuid(bookingContent?.booking_id) ? bookingContent.booking_id : null;
+      if (pId) {
+        redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+          String(pId)
+        )}`;
+      }
+    }
+
     return {
       reference: String(generatedRef),
       booking_id: Array.isArray(bookingContent?.booking_id)
@@ -746,6 +812,9 @@ export const bookEmergencyProvider = async (
         : bookingContent?.booking_id,
       message: bookingRes?.message || "Booking Placed successfully",
       status: "success",
+      redirect_link: redirectUrl,
+      url: redirectUrl,
+      amount: bookingContent?.amount || params.amount,
     };
   } catch (bookingErr: any) {
     console.warn("Direct booking request send fallback:", bookingErr);
@@ -772,10 +841,15 @@ export const bookEmergencyProvider = async (
       console.warn("Post fallback error:", postErr);
     }
 
+    let fallbackRedirectUrl: string | undefined = undefined;
+
     return {
       reference: fallbackRef,
       message: "Emergency technician dispatched successfully!",
       status: "success",
+      redirect_link: fallbackRedirectUrl,
+      url: fallbackRedirectUrl,
+      amount: params.amount,
     };
   }
 };

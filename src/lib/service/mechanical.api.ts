@@ -206,6 +206,7 @@ export const addMechanicalToCart = async (payload: {
   provider_id: string;
   service_id: string;
   category_id: string;
+  variant_key?: string;
   quantity?: number;
   is_terms_accepted?: number;
   guest_id?: string;
@@ -220,6 +221,7 @@ export const addMechanicalToCart = async (payload: {
       provider_id: payload.provider_id,
       service_id: payload.service_id,
       category_id: payload.category_id,
+      variant_key: payload.variant_key || "default",
       quantity: payload.quantity ?? 1,
       is_terms_accepted: payload.is_terms_accepted ?? 1,
     },
@@ -287,9 +289,13 @@ export const getMechanicalProviderQuestions = async (
 
 export const sendMechanicalBookingRequest = async (payload: {
   provider_id: string;
+  service_id?: string;
+  category_id?: string;
   payment_method: string;
+  is_partial?: number | 0 | 1;
   service_schedule: string;
   service_address_id?: string;
+  service_address?: string;
   service_location?: string;
   booking_type?: string;
   selected_slot_id?: string;
@@ -301,22 +307,89 @@ export const sendMechanicalBookingRequest = async (payload: {
   postcode?: string;
   car_image?: File | null;
   zone_id?: string;
+  guest_id?: string;
+  payment_platform?: string;
+  callback?: string;
 }): Promise<any> => {
-  const zoneId = payload.zone_id || DEFAULT_ZONE_ID;
+  const zoneId =
+    payload.zone_id ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId"))) ||
+    DEFAULT_ZONE_ID;
+
+  const guestId =
+    payload.guest_id ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("guest_id") ||
+        localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid"))) ||
+    getOrCreateGuestId();
+
+  // STEP 1: Add item to cart first so Demandium cart amount is non-zero
+  if (payload.service_id && payload.provider_id) {
+    try {
+      await addMechanicalToCart({
+        provider_id: payload.provider_id,
+        service_id: payload.service_id,
+        category_id: payload.category_id || FALLBACK_MECHANICAL_CATEGORY_ID,
+        quantity: 1,
+        is_terms_accepted: 1,
+        guest_id: guestId,
+        zone_id: zoneId,
+      });
+    } catch (cartErr) {
+      console.warn("addMechanicalToCart before booking request:", cartErr);
+    }
+  }
+
+  let cleanPostcode = (payload.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "12345";
+
+  const fullAddress = payload.service_address || payload.postcode || "Customer Location, UK";
+  const apiServiceLocation = "customer";
+
+  let effectiveNotes = payload.notes || "";
+  if (payload.service_location === "workshop" && !effectiveNotes.includes("Workshop")) {
+    effectiveNotes = `[Service Mode: Workshop Bay Drop-Off]\n\n${effectiveNotes}`;
+  }
 
   const formData = new FormData();
   formData.append("provider_id", payload.provider_id);
-  formData.append("payment_method", payload.payment_method || "cash_after_service");
+  if (payload.service_id) formData.append("service_id", payload.service_id);
+  if (payload.category_id) formData.append("category_id", payload.category_id);
+  if (payload.amount !== undefined) {
+    formData.append("amount", String(payload.amount));
+    formData.append("total_cost", String(payload.amount));
+  }
+  formData.append("payment_method", payload.payment_method || "stripe");
+  if (payload.is_partial !== undefined) {
+    formData.append("is_partial", String(payload.is_partial));
+  }
   formData.append("service_address_id", payload.service_address_id || "6");
+  formData.append("service_address", fullAddress);
   formData.append("service_schedule", payload.service_schedule || "2026-01-14 10:00:00");
-  formData.append("service_location", payload.service_location || "customer");
+  formData.append("service_location", apiServiceLocation);
   formData.append("booking_type", payload.booking_type || "normal");
   if (payload.selected_slot_id) formData.append("selected_slot_id", payload.selected_slot_id);
   if (payload.damage_description) formData.append("damage_description", payload.damage_description);
   if (payload.car_registration_number) formData.append("car_registration_number", payload.car_registration_number);
   if (payload.car_model) formData.append("car_model", payload.car_model);
-  if (payload.notes) formData.append("notes", payload.notes);
-  if (payload.postcode) formData.append("postcode", payload.postcode);
+  if (effectiveNotes) formData.append("notes", effectiveNotes);
+  formData.append("postcode", cleanPostcode);
+  formData.append("latitude", "51.5074");
+  formData.append("longitude", "-0.1278");
+  if (payload.payment_platform) {
+    formData.append("payment_platform", payload.payment_platform);
+  }
+  if (payload.callback) {
+    formData.append("callback", payload.callback);
+  }
   if (payload.answers) {
     Object.entries(payload.answers).forEach(([key, value]) => {
       formData.append(`answers[${key}]`, String(value));
@@ -328,19 +401,18 @@ export const sendMechanicalBookingRequest = async (payload: {
   formData.append("terms_and_conditions", "1");
   formData.append("terms_accepted", "1");
   formData.append("zone_id", zoneId);
+  formData.append("guest_id", guestId);
+
   const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
   if (fcmToken) {
     formData.append("fcm_token", fcmToken);
-  }
-  const guestId = typeof window !== "undefined" ? localStorage.getItem("guest_id") : null;
-  if (guestId) {
-    formData.append("guest_id", guestId);
   }
 
   const response = await apiClient.post("/customer/booking/request/send", formData, {
     headers: {
       zoneid: zoneId,
       zoneId: zoneId,
+      ZoneId: zoneId,
       "Content-Type": "multipart/form-data",
     },
   });
