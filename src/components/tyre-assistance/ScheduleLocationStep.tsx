@@ -35,7 +35,8 @@ import {
   ProviderQuestion,
   TYRE_EMERGENCY_SERVICE_ID,
   TYRE_REPLACEMENT_SERVICE_ID,
-  TYRE_EMERGENCY_VARIATIONS,
+  fetchTyreEmergencyVariations,
+  TyreEmergencyVariation,
 } from "@/lib/service/tyre-assistance.api";
 import { TyreAssistanceHeader } from "./TyreAssistanceHeader";
 
@@ -78,9 +79,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
   // Dynamic Backend State
   const [dynamicTyres, setDynamicTyres] = useState<BackendTyreItem[]>([]);
   const [dynamicQuestions, setDynamicQuestions] = useState<ProviderQuestion[]>([]);
+  const [emergencyVariations, setEmergencyVariations] = useState<TyreEmergencyVariation[]>([]);
   const [isLoadingBackendData, setIsLoadingBackendData] = useState<boolean>(true);
 
-  // Emergency Variation Selection ("puncture" (£50) or "burst-tyre" (£100))
+  // Emergency Variation Selection
   const [selectedEmergencyVariantKey, setSelectedEmergencyVariantKey] =
     useState<string>("puncture");
 
@@ -137,7 +139,15 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
           setDynamicQuestions(questions);
         }
 
-        // 4. Saved addresses
+        // 4. Dynamic Emergency Variations from Backend
+        const eVariations = await fetchTyreEmergencyVariations();
+        if (mounted && eVariations.length > 0) {
+          setEmergencyVariations(eVariations);
+          setSelectedEmergencyVariantKey(eVariations[0].variant_key);
+          setSituation(eVariations[0].variant);
+        }
+
+        // 5. Saved addresses
         const addrs = await getCustomerAddresses();
         if (mounted && addrs.length > 0) {
           setSavedAddresses(addrs);
@@ -224,7 +234,7 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
     const isEmergency = category === "emergency";
     const chosenTyre = !isEmergency ? dynamicTyres.find((t) => t.id === selectedTyreId) : undefined;
     const chosenEmergencyVar = isEmergency
-      ? TYRE_EMERGENCY_VARIATIONS.find((v) => v.variant_key === selectedEmergencyVariantKey)
+      ? emergencyVariations.find((v) => v.variant_key === selectedEmergencyVariantKey)
       : undefined;
 
     try {
@@ -524,9 +534,9 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                 </span>
               </div>
 
-              {/* Two Emergency Variations Cards: Puncture (£50) & Burst Tyre (£100) */}
+              {/* Dynamic Emergency Variations Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {TYRE_EMERGENCY_VARIATIONS.map((v) => {
+                {emergencyVariations.map((v) => {
                   const isSelected = selectedEmergencyVariantKey === v.variant_key;
                   const isBurst = v.variant_key === "burst-tyre";
                   return (

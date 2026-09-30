@@ -310,19 +310,19 @@ export const getWashTypes = async (
         cover_image:
           item.cover_image_full_path ||
           item.cover_image ||
-          "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
+          "",
         cover_image_full_path:
           item.cover_image_full_path ||
           item.cover_image ||
-          "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
+          "",
         thumbnail:
           item.thumbnail_full_path ||
           item.thumbnail ||
-          "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=400&q=80",
+          "",
         thumbnail_full_path:
           item.thumbnail_full_path ||
           item.thumbnail ||
-          "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=400&q=80",
+          "",
         price: extractDisplayPrice(item),
         category_id: item.category_id || categoryId,
         is_active: item.is_active ?? 1,
@@ -338,72 +338,6 @@ export const getWashTypes = async (
     return [];
   }
 };
-
-export const FALLBACK_VALET_PROVIDERS: ValetProvider[] = [
-  {
-    id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-    user_id: "usr-valet-001",
-    company_name: "Diamond Gleam Mobile Detailing",
-    company_phone: "+44 20 7946 0912",
-    company_address: "Kensington & Chelsea, London, UK",
-    company_email: "contact@diamondgleam.co.uk",
-    logo_full_path:
-      "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=200&q=80",
-    avg_rating: 4.9,
-    rating_count: 88,
-    is_active: 1,
-    total_selected_services_price: 45,
-    distance_miles: "1.4 mi",
-    estimated_time: "40 mins",
-    service_type: "Mobile",
-    portfolio_images: [
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80",
-    ],
-  },
-  {
-    id: "164a4fdb-5eef-4423-abf7-76ac2cf1fa73",
-    user_id: "usr-valet-002",
-    company_name: "AutoShine Specialist Valet",
-    company_phone: "+44 20 7946 0834",
-    company_address: "Mayfair, Central London, UK",
-    company_email: "bookings@autoshinevalet.co.uk",
-    logo_full_path:
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=200&q=80",
-    avg_rating: 4.8,
-    rating_count: 64,
-    is_active: 1,
-    total_selected_services_price: 55,
-    distance_miles: "2.1 mi",
-    estimated_time: "50 mins",
-    service_type: "Station",
-    portfolio_images: [
-      "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-    ],
-  },
-  {
-    id: "8d7a2ba6-5ee1-48be-a988-44f0bef0fa7c",
-    user_id: "usr-valet-003",
-    company_name: "Prestige EcoWash & Ceramic Lab",
-    company_phone: "+44 20 7946 0521",
-    company_address: "Canary Wharf, London, UK",
-    company_email: "service@prestigeecowash.co.uk",
-    logo_full_path:
-      "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=200&q=80",
-    avg_rating: 5.0,
-    rating_count: 112,
-    is_active: 1,
-    total_selected_services_price: 65,
-    distance_miles: "3.0 mi",
-    estimated_time: "60 mins",
-    service_type: "Mobile",
-    portfolio_images: [
-      "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=800&q=80",
-    ],
-  },
-];
 
 /**
  * Search providers by service ID using the MMC backend endpoint:
@@ -461,31 +395,27 @@ export const searchProvidersByService = async (
     }
 
     if (providerList.length > 0) {
-      return providerList.map((p: any, idx: number) => ({
+      return providerList.map((p: any) => ({
         ...p,
-        id: String(p.id || p.provider_id || `valet-${idx}`),
-        company_name: p.company_name || p.name || "Specialist Valeter",
+        id: String(p.id || p.provider_id || ""),
+        company_name: p.company_name || p.name || "",
         company_phone: p.company_phone || p.phone || "",
-        company_address: p.company_address || p.address || "London, United Kingdom",
+        company_address: p.company_address || p.address || "",
         company_email: p.company_email || p.email || "",
-        logo_full_path:
-          p.logo_full_path ||
-          p.logo ||
-          "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=200&q=80",
-        avg_rating: Number(p.avg_rating || p.rating) || 4.8,
-        rating_count: Number(p.rating_count) || 12,
+        logo_full_path: p.logo_full_path || p.logo || "",
+        avg_rating: Number(p.avg_rating || p.rating) || 0,
+        rating_count: Number(p.rating_count) || 0,
         total_selected_services_price:
-          Number(p.total_selected_services_price || p.price) || 45,
-        distance_miles: p.distance_miles || (1.2 + idx * 0.7).toFixed(1),
-        estimated_time: p.estimated_time || "45 mins",
-        service_type: p.service_type || (idx % 2 === 0 ? "Mobile" : "Station"),
-        portfolio_images:
-          Array.isArray(p.portfolio_images) && p.portfolio_images.length > 0
-            ? p.portfolio_images
-            : [
-                "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-                "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80",
-              ],
+          Number(p.total_selected_services_price || p.price) || 0,
+        distance_miles:
+          p.distance_miles !== undefined && p.distance_miles !== null
+            ? p.distance_miles
+            : p.distance
+            ? Number(p.distance).toFixed(1)
+            : "",
+        estimated_time: p.estimated_time || "",
+        service_type: p.service_type || (p.is_emergency_active ? "Mobile" : "Station"),
+        portfolio_images: Array.isArray(p.portfolio_images) ? p.portfolio_images : [],
       }));
     }
   } catch (err: any) {
@@ -512,39 +442,34 @@ export const searchProvidersByService = async (
       : [];
 
     if (listData.length > 0) {
-      return listData.map((p: any, idx: number) => ({
+      return listData.map((p: any) => ({
         ...p,
-        id: String(p.id || p.provider_id || `valet-${idx}`),
-        company_name: p.company_name || p.name || "Specialist Valeter",
+        id: String(p.id || p.provider_id || ""),
+        company_name: p.company_name || p.name || "",
         company_phone: p.company_phone || p.phone || "",
-        company_address: p.company_address || p.address || "London, United Kingdom",
+        company_address: p.company_address || p.address || "",
         company_email: p.company_email || p.email || "",
-        logo_full_path:
-          p.logo_full_path ||
-          p.logo ||
-          "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=200&q=80",
-        avg_rating: Number(p.avg_rating || p.rating) || 4.8,
-        rating_count: Number(p.rating_count) || 12,
+        logo_full_path: p.logo_full_path || p.logo || "",
+        avg_rating: Number(p.avg_rating || p.rating) || 0,
+        rating_count: Number(p.rating_count) || 0,
         total_selected_services_price:
-          Number(p.total_selected_services_price || p.price) || 45,
-        distance_miles: p.distance_miles || (1.2 + idx * 0.7).toFixed(1),
-        estimated_time: p.estimated_time || "45 mins",
-        service_type: p.service_type || (idx % 2 === 0 ? "Mobile" : "Station"),
-        portfolio_images:
-          Array.isArray(p.portfolio_images) && p.portfolio_images.length > 0
-            ? p.portfolio_images
-            : [
-                "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=800&q=80",
-                "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80",
-              ],
+          Number(p.total_selected_services_price || p.price) || 0,
+        distance_miles:
+          p.distance_miles !== undefined && p.distance_miles !== null
+            ? p.distance_miles
+            : p.distance
+            ? Number(p.distance).toFixed(1)
+            : "",
+        estimated_time: p.estimated_time || "",
+        service_type: p.service_type || (p.is_emergency_active ? "Mobile" : "Station"),
+        portfolio_images: Array.isArray(p.portfolio_images) ? p.portfolio_images : [],
       }));
     }
   } catch (err: any) {
     console.warn("Valet provider/list fallback check:", err?.message || err);
   }
 
-  // 3. Guaranteed fallback: Curated Valet providers
-  return FALLBACK_VALET_PROVIDERS;
+  return [];
 };
 
 export const getOrCreateGuestId = (): string => {
@@ -566,6 +491,39 @@ export const isUuid = (val: any): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
 /**
+ * Fetch full provider profile details directly from the API:
+ * GET /customer/provider-details?id={id}&limit={limit}&offset={offset}
+ */
+export const getProviderDetails = async (
+  providerId: string,
+  limit: number = 1,
+  offset: number = 1
+): Promise<any | null> => {
+  try {
+    const zoneId = getActiveZoneId();
+    const response = await apiClient.get(
+      "/customer/provider-details",
+      {
+        params: { id: providerId, limit, offset },
+        headers: {
+          zoneid: zoneId,
+          "zone-id": zoneId,
+          ZoneId: zoneId,
+        },
+      }
+    );
+
+    if (response.data?.content?.provider) {
+      return response.data.content.provider;
+    }
+    return response.data?.content || null;
+  } catch (error) {
+    console.warn("Failed to fetch provider details from API:", error);
+    return null;
+  }
+};
+
+/**
  * Add Valet service to Cart
  * POST /customer/cart/add
  */
@@ -577,7 +535,7 @@ export const addValetToCart = async (
   const effectiveProviderId =
     payload.provider_id && isUuid(payload.provider_id)
       ? payload.provider_id
-      : "9b1d7cc4-6f97-4b80-8931-9167c3bc3c15";
+      : "cffcce91-5498-4b73-b571-8e6e69bbd89d";
 
   try {
     const postBody: Record<string, any> = {
@@ -631,7 +589,7 @@ export const sendValetBookingRequest = async (
   const effectiveProviderId =
     payload.provider_id && isUuid(payload.provider_id)
       ? payload.provider_id
-      : "9b1d7cc4-6f97-4b80-8931-9167c3bc3c15";
+      : "cffcce91-5498-4b73-b571-8e6e69bbd89d";
 
   // STEP 1: Add to cart first (exactly matches mobile app flow)
   if (payload.service_id) {
@@ -657,9 +615,10 @@ export const sendValetBookingRequest = async (
   const effectivePaymentMethod =
     payload.payment_method === "cash_after_service" ? "cash_after_service" : "stripe";
 
-  // STEP 2: Exact JSON payload matching Demandium's mobile app spec
+  // STEP 2: Exact JSON payload matching Demandium's mobile app spec and user curl
   const postData: Record<string, any> = {
     guest_id: guestId,
+    provider_id: effectiveProviderId,
     payment_method: effectivePaymentMethod,
     is_partial: String(payload.is_partial !== undefined ? (Number(payload.is_partial) === 1 ? "1" : "0") : "1"),
     payment_platform: payload.payment_platform || "app",
@@ -668,12 +627,18 @@ export const sendValetBookingRequest = async (
     service_address_id: String(payload.service_address_id || "6"),
     service_location: "customer",
     booking_type: "normal",
-    car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
-    car_model: payload.car_model || "Standard Vehicle",
-    car_manufacture_year: "2026",
-    car_color: payload.car_color || "White",
-    notes: payload.notes || "Valet & wash service required at customer location.",
+    selected_slot_id: payload.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
+    callback: payload.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
+    car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
+    car_model: payload.car_model || "",
+    car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
+    car_color: payload.car_color || "",
+    notes: payload.notes || "",
   };
+
+  if ((payload as any).post_id) {
+    postData.post_id = (payload as any).post_id;
+  }
 
   console.log("[ValetBooking] POST /customer/booking/request/send body:", postData);
 

@@ -23,7 +23,6 @@ import {
   AssistanceType,
   ServiceLocationType,
   TyreAssistanceBooking,
-  DEFAULT_PROVIDERS,
   calculateQuote,
 } from "@/lib/data/tyre-assistance.data";
 import {
@@ -36,6 +35,7 @@ import {
   getZoneIdFromCoordinates,
   TYRE_EMERGENCY_SERVICE_ID,
   TYRE_REPLACEMENT_SERVICE_ID,
+  DEFAULT_PROVIDER_ID,
 } from "@/lib/service/tyre-assistance.api";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import { TyreCategoryStep } from "@/components/tyre-assistance/TyreCategoryStep";
@@ -244,7 +244,7 @@ export default function TyreAssistancePage() {
       situation: details.situation,
       notes: details.notes,
       acceptedPrivacy: details.acceptedPrivacy,
-      providerId: DEFAULT_PROVIDERS[0].id,
+      providerId: (details as any).providerId || DEFAULT_PROVIDER_ID,
     });
 
     setCurrentBooking(booking);
@@ -268,7 +268,7 @@ export default function TyreAssistancePage() {
         is_partial: isPartial ? 1 : 0,
         payment_method: "stripe",
         payment_platform: "app",
-        callback: callbackUrl,
+        callback: "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
       });
 
       const confirmedRefId =
@@ -628,26 +628,29 @@ export default function TyreAssistancePage() {
               {/* Matched Certified Provider Preview */}
               <div className="p-3.5 rounded-2xl bg-black/40 border border-white/5 flex items-center space-x-3">
                 <div className="w-12 h-12 rounded-xl bg-black border border-white/10 overflow-hidden relative flex-shrink-0">
-                  <Image
-                    src={
-                      currentBooking?.provider.image ||
-                      DEFAULT_PROVIDERS[0].image
-                    }
-                    alt="Provider"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
+                  {currentBooking?.provider?.image ? (
+                    <Image
+                      src={currentBooking.provider.image}
+                      alt="Provider"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-white/5 text-[#FAD293]">
+                      <Sparkles size={16} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-white truncate">
-                    {currentBooking?.provider.name || DEFAULT_PROVIDERS[0].name}
+                    {currentBooking?.provider?.name || "MMC Certified Provider"}
                   </h4>
                   <p className="text-[10px] text-white/50 truncate">
-                    {currentBooking?.provider.address || DEFAULT_PROVIDERS[0].address}
+                    {currentBooking?.provider?.address || "Mobile Service at Location"}
                   </p>
                   <span className="text-[10px] text-[#FAD293] font-semibold">
-                    ⭐ 4.9 • 1.2 Miles away
+                    ⭐ {currentBooking?.provider?.rating || "4.9"} Verified Partner
                   </span>
                 </div>
               </div>
