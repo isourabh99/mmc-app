@@ -72,7 +72,7 @@ function BookingSuccessContent() {
         (cached as any).temp_id = effectiveBookingId;
         try {
           sessionStorage.setItem("mmc_pending_booking", JSON.stringify(cached));
-        } catch {}
+        } catch { }
       }
     }
 
@@ -92,17 +92,38 @@ function BookingSuccessContent() {
       const detectedType = cached?.service_name?.toLowerCase().includes("alloy")
         ? "alloy"
         : cached?.service_name?.toLowerCase().includes("mod")
-        ? "modification"
-        : cached?.service_name?.toLowerCase().includes("chauffeur")
-        ? "chauffeur"
-        : "bodywork";
+          ? "modification"
+          : cached?.service_name?.toLowerCase().includes("chauffeur")
+            ? "chauffeur"
+            : cached?.service_name?.toLowerCase().includes("hire") || cached?.service_name?.toLowerCase().includes("car")
+              ? "car"
+              : cached?.service_name?.toLowerCase().includes("valet") || cached?.service_name?.toLowerCase().includes("wash")
+                ? "valet"
+                : cached?.service_name?.toLowerCase().includes("mechanic")
+                  ? "mechanical"
+                  : "bodywork";
+
+      const detectedCategory =
+        detectedType === "car"
+          ? "Car Hire & Rental"
+          : detectedType === "chauffeur"
+            ? "Chauffeur & Luxury Drive"
+            : detectedType === "valet"
+              ? "Valet & Detailing Service"
+              : detectedType === "mechanical"
+                ? "Mechanical Diagnostic & Repair"
+                : detectedType === "alloy"
+                  ? "Alloy Wheel Refurbishment"
+                  : detectedType === "modification"
+                    ? "Custom Vehicle Modification"
+                    : "Bodywork & Paint Repair";
 
       saveConfirmedBooking({
         id: String(effectiveBookingId),
         rawId: effectiveBookingId,
         serviceType: detectedType,
-        serviceTitle: cached?.service_name || "Specialist Bodywork & Paint Service",
-        serviceCategoryName: "Bodywork & Paint Repair",
+        serviceTitle: cached?.service_name || "Specialist Vehicle Service",
+        serviceCategoryName: detectedCategory,
         providerName: cached?.provider?.company_name || "MMC Verified Specialist",
         providerPhone: cached?.provider?.company_phone,
         totalAmount: rawPrice,
@@ -192,9 +213,8 @@ function BookingSuccessContent() {
         <div className="bg-[#141418] border border-zinc-800/90 rounded-3xl p-6 sm:p-9 shadow-2xl space-y-7 relative overflow-hidden text-center">
           {/* Ambient Glow */}
           <div
-            className={`absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
-              isFailed ? "bg-red-500/10" : "bg-gradient-to-b from-[#FAD293]/20 via-[#10B981]/15 to-transparent"
-            }`}
+            className={`absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none ${isFailed ? "bg-red-500/10" : "bg-gradient-to-b from-[#FAD293]/20 via-[#10B981]/15 to-transparent"
+              }`}
           />
 
           {/* Success / Failure Icon */}
@@ -220,11 +240,10 @@ function BookingSuccessContent() {
           {/* Title & Subtitle */}
           <div className="space-y-2 relative">
             <span
-              className={`text-[11px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full border inline-block ${
-                isFailed
+              className={`text-[11px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full border inline-block ${isFailed
                   ? "bg-red-500/10 text-red-400 border-red-500/30"
                   : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-              }`}
+                }`}
             >
               {isFailed ? "Payment Incomplete" : "Booking Confirmed & Verified"}
             </span>

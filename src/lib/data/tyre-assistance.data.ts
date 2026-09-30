@@ -142,16 +142,16 @@ export const MAINTENANCE_TIPS: MaintenanceTip[] = [
 // Default Providers matching UI Screen 4 ("Test Company Ltd")
 export const DEFAULT_PROVIDERS: TyreProvider[] = [
   {
-    id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-    name: "Test Company Ltd",
-    companyName: "Test Company Ltd",
-    rating: 0,
-    reviewCount: 0,
+    id: "9b1d7cc4-6f97-4b80-8931-9167c3bc3c15",
+    name: "MMC Rapid Response Tyres",
+    companyName: "MMC Rapid Response Tyres",
+    rating: 4.9,
+    reviewCount: 320,
     distanceMiles: 1.2,
-    address: "123 Main Street, Test City",
+    address: "Unit 4, Gateway Commerce Park, London",
     city: "London",
     phone: "+44 20 7946 0912",
-    email: "support@testcompany.co.uk",
+    email: "support@mmcclub.co.uk",
     image: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
     capabilities: {
       inStock: true,

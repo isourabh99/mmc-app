@@ -159,6 +159,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
         pickup_type: pickupType, // "delivery" | "self"
         delivery_address: deliveryAddress.trim(),
         delivery_latitude: deliveryCoords.latitude,
+        delivery_longitude: deliveryCoords.longitude,
         payment_method: "cash_after_service",
         description: description.trim() || undefined,
       };

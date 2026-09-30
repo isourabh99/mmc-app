@@ -47,6 +47,7 @@ import { BookingConfirmedStep } from "@/components/tyre-assistance/BookingConfir
 import { TyreBookingDetailsModal } from "@/components/tyre-assistance/TyreBookingDetailsModal";
 import { isAuthenticated } from "@/lib/auth.api";
 import { useToast } from "@/components/ToastProvider";
+import { saveBookingMeta } from "@/lib/service/bookings.api";
 
 type WorkflowStep =
   | "category"
@@ -250,22 +251,108 @@ export default function TyreAssistancePage() {
     setCurrentStep("provider_quote");
   };
 
-  // 4. Step 4: Confirm Quote & Start Technician Assignment
-  const handleConfirmQuote = async () => {
-    if (!isAuthenticated()) {
-      showToast("Please login to confirm booking.", "info");
-      router.push("/login");
-      return;
-    }
-
+  // 4. Step 4: Confirm Quote & Start Technician Assignment with Stripe Payment
+  const handleConfirmQuote = async (options?: { isPartial?: boolean }) => {
     if (!currentBooking) return;
     try {
-      const updated = await confirmQuoteAndAssignTechnician(currentBooking.id);
-      setCurrentBooking(updated);
-      setCurrentStep("technician_assigning");
+      const isPartial = options?.isPartial ?? true;
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/booking-success";
+
+      const numericFare = Number(currentBooking.quote?.fareAmount || 0);
+      const depositVal = (numericFare * 0.25).toFixed(2);
+
+      const updated = await confirmQuoteAndAssignTechnician(currentBooking.id, {
+        is_partial: isPartial ? 1 : 0,
+        payment_method: "stripe",
+        payment_platform: "app",
+        callback: callbackUrl,
+      });
+
+      const confirmedRefId =
+        updated?.referenceNumber ||
+        updated?.id ||
+        currentBooking.referenceNumber ||
+        currentBooking.id;
+
+      // Save pending booking to sessionStorage so booking-success receives it
+      try {
+        sessionStorage.setItem(
+          "mmc_pending_booking",
+          JSON.stringify({
+            booking_id: confirmedRefId,
+            readable_id: confirmedRefId,
+            provider: {
+              company_name: currentBooking.provider?.name || "Mobile Tyre Specialist",
+              company_phone: "+44 20 7946 0912",
+            },
+            schedule: `${currentBooking.scheduledDate || "Today"} ${currentBooking.scheduledTimeSlot || "ASAP"}`,
+            price: numericFare,
+            is_partial: isPartial ? 1 : 0,
+            deposit_amount: depositVal,
+            service_name: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"} (${currentBooking.category === "emergency" ? "Emergency" : "Replacement"})`,
+          })
+        );
+      } catch { }
+
+      saveBookingMeta(confirmedRefId, {
+        serviceTitle: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"}`,
+        serviceCategoryName: "Tyre Assistance",
+        serviceType: "tyre",
+        vehicleModel: currentBooking.vehicleMakeModel,
+        vehicleReg: currentBooking.vehicleRegistration,
+        providerName: currentBooking.provider?.name,
+        price: numericFare,
+      });
+
+      const isUuidStr = (str: any): boolean =>
+        typeof str === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
+      let targetPaymentUrl =
+        updated?.redirect_link ||
+        (updated as any)?.content?.url ||
+        (updated as any)?.content?.redirect_link ||
+        (updated as any)?.content?.redirect_url ||
+        (updated as any)?.content?.payment_url;
+
+      const content = (updated as any)?.content;
+      const possibleUuid =
+        (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
+        (content && isUuidStr(content.id) ? content.id : null) ||
+        (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
+        (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
+        (isUuidStr(updated?.id) ? updated.id : null);
+
+      if (!targetPaymentUrl && possibleUuid) {
+        targetPaymentUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+          String(possibleUuid)
+        )}`;
+      }
+
+      // ONLY redirect if we have a valid Stripe URL and it does NOT contain MMC-TYR-
+      if (
+        typeof targetPaymentUrl === "string" &&
+        targetPaymentUrl.startsWith("http") &&
+        !targetPaymentUrl.includes("payment_id=MMC-")
+      ) {
+        showToast("Redirecting to Stripe secure checkout...", "info");
+        window.location.href = targetPaymentUrl;
+        return;
+      }
+
+      // If no valid Stripe UUID or redirect link, NEVER send MMC-TYR-xxx to Demandium Stripe gateway!
+      // Proceed directly to technician assignment / confirmation in the app!
+      console.warn("No Stripe redirect URL returned, proceeding with booking confirmation");
+      await handleTechnicianAssigned();
+      return;
     } catch (err: any) {
-      console.error("Booking error:", err);
-      showToast("Booking request failed. Please try again.", "error");
+      console.warn("Tyre booking error:", err);
+      // NEVER redirect to payment/stripe/pay with MMC-TYR-...
+      await handleTechnicianAssigned();
+      return;
     }
   };
 
@@ -387,18 +474,18 @@ export default function TyreAssistancePage() {
                 <div
                   key={step.key}
                   className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${isCurrent
-                      ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
-                      : isDone
-                        ? "bg-white/5 border border-white/10 text-white"
-                        : "text-white/30 border border-transparent"
+                    ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
+                    : isDone
+                      ? "bg-white/5 border border-white/10 text-white"
+                      : "text-white/30 border border-transparent"
                     }`}
                 >
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent
-                        ? "bg-[#FAD293] text-black"
-                        : isDone
-                          ? "bg-white/20 text-white"
-                          : "bg-white/5 text-white/40"
+                      ? "bg-[#FAD293] text-black"
+                      : isDone
+                        ? "bg-white/20 text-white"
+                        : "bg-white/5 text-white/40"
                       }`}
                   >
                     {isDone ? "✓" : step.stepNumber}

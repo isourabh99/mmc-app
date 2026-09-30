@@ -297,7 +297,7 @@ export default function HeroSection() {
       ========================================================= */}
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] items-center px-4 sm:px-6 lg:px-8">
-        <div className="w-full max-w-[700px] pt-20 pb-28 sm:pt-24 lg:pt-1">
+        <div className="w-full max-w-[700px] pt-14 pb-20 sm:pt-20 lg:pt-1">
           {/* Eyebrow */}
           <div className="mb-5 flex items-center gap-3">
             <span
@@ -346,155 +346,13 @@ export default function HeroSection() {
               SEARCH
           ===================================================== */}
 
-          <div
-            className="mt-8 max-w-[720px] rounded-2xl border p-1.5"
-            style={{
-              background: "rgba(255,255,255,0.045)",
-              borderColor: "rgba(234,193,125,0.20)",
-              boxShadow:
-                "0 20px 70px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
-              backdropFilter: "blur(18px)",
-            }}
-          >
-            <div className="flex flex-col gap-1.5 md:flex-row">
-              {/* Service */}
-              <div className="flex min-h-[54px] flex-1 items-center gap-3 rounded-xl px-4 transition-colors hover:bg-white/[0.055]">
-                <svg
-                  className="h-[19px] w-[19px] shrink-0 text-[#E9BD76]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                >
-                  <circle cx="11" cy="11" r="6.5" />
-                  <path
-                    strokeLinecap="round"
-                    d="M16 16l4 4"
-                  />
-                </svg>
-
-                <input
-                  id="hero-search-input"
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="What service do you need?"
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
-                  aria-label="What service do you need?"
-                />
-              </div>
-
-              {/* Divider */}
-              <div className="hidden h-8 w-px self-center bg-white/10 md:block" />
-
-              {/* Location */}
-              <div className="flex min-h-[54px] flex-1 items-center gap-3 rounded-xl px-4 transition-colors hover:bg-white/[0.055]">
-                <svg
-                  className="h-[19px] w-[19px] shrink-0 text-[#E9BD76]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M20 10.5c0 5-8 10-8 10s-8-5-8-10a8 8 0 1116 0z"
-                  />
-                  <circle cx="12" cy="10.5" r="2.5" />
-                </svg>
-
-                <input
-                  id="hero-location-input"
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Your location"
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
-                  aria-label="Your location"
-                />
-              </div>
-
-              {/* Search Button */}
-              <button
-                id="hero-search-btn"
-                type="button"
-                onClick={handleSearch}
-                className="group flex min-h-[54px] items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold text-[#15110B] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_8px_30px_rgba(234,193,125,0.25)] active:translate-y-0 md:min-w-[158px]"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #F8D99E 0%, #DDAE68 100%)",
-                }}
-              >
-                <span>Search Services</span>
-
-                <svg
-                  className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 12h13M13 6l6 6-6 6"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
+         
 
           {/* =====================================================
               CATEGORY PILLS
           ===================================================== */}
 
-          <div className="mt-6 flex max-w-[850px] flex-wrap gap-2.5">
-            {categories.map((category) => {
-              const isSelected = selectedCategory === category.id;
-
-              return (
-                <button
-                  key={category.id}
-                  id={`cat-pill-${category.id}`}
-                  type="button"
-                  title={category.desc}
-                  onClick={() =>
-                    setSelectedCategory(
-                      isSelected ? "" : category.id
-                    )
-                  }
-                  className={`group flex items-center gap-2 rounded-full border px-3.5 py-2.5 text-[12px] font-medium transition-all duration-300 sm:text-[13px] ${
-                    isSelected
-                      ? "border-[#E7BA74] text-[#16110A]"
-                      : "border-white/[0.12] bg-white/[0.045] text-white/65 hover:border-[#D9AA63]/40 hover:bg-white/[0.075] hover:text-white"
-                  }`}
-                  style={
-                    isSelected
-                      ? {
-                          background:
-                            "linear-gradient(135deg, #F6D28E, #D8A75F)",
-                          boxShadow:
-                            "0 5px 20px rgba(218,170,93,0.16)",
-                        }
-                      : undefined
-                  }
-                >
-                  <span
-                    className={
-                      isSelected
-                        ? "text-[#21180B]"
-                        : "text-[#E9BD76]"
-                    }
-                  >
-                    {category.icon}
-                  </span>
-
-                  <span>{category.label}</span>
-                </button>
-              );
-            })}
-          </div>
+   
 
           
         </div>

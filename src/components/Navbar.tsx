@@ -138,7 +138,20 @@ export default function Navbar() {
     };
   }, []);
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
+
   return (
+    <>
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 py-3 ${
         scrolled
@@ -453,19 +466,48 @@ export default function Navbar() {
           </button>
         </div>
       </div>
+    </nav>
 
       {/* =================================================
-          MOBILE MENU
+          MOBILE MENU — Full-screen overlay (outside <nav> to avoid stacking context trap)
       ================================================= */}
 
+      {/* Backdrop */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/70 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* Sliding panel */}
       <div
-        className={`lg:hidden transition-all duration-500 overflow-hidden ${
-          menuOpen
-            ? "max-h-[600px] opacity-100"
-            : "max-h-0 opacity-0"
+        className={`lg:hidden fixed top-0 right-0 bottom-0 z-[10000] w-full sm:w-[360px] h-screen flex flex-col border-l border-[#FAD293]/10 transition-transform duration-300 ease-in-out ${
+          menuOpen ? "translate-x-0" : "translate-x-full"
         }`}
+        style={{ backgroundColor: '#0c0a09' }}
       >
-        <div className="bg-black/95 backdrop-blur-xl border-t border-[#FAD293]/10 px-6 py-6 flex flex-col gap-4">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/8 shrink-0">
+          <Link href="/" onClick={() => setMenuOpen(false)}>
+            <Image src="/mmc-logo.jpg" alt="MMC" width={120} height={54} className="h-9 w-auto object-contain" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            aria-label="Close menu"
+            className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          className="flex flex-col gap-4 px-6 py-6 flex-1 overflow-y-auto overscroll-contain min-h-0"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
 
           {/* =================================================
               EMERGENCY ASSISTANCE - MOBILE
@@ -625,6 +667,6 @@ export default function Navbar() {
           )}
         </div>
       </div>
-    </nav>
+    </>
   );
 }

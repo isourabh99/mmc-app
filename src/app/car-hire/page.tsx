@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Car,
@@ -212,6 +213,46 @@ export default function CarHirePage() {
           activeFilterCount={activeFilterCount}
           totalCount={filteredAndSortedCars.length}
         />
+
+        {/* ─── Car Hire Hero Banner ─── */}
+        <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-[#FAD293]/25 group">
+          <Image
+            src="/carhire.png"
+            alt="MMC Premium Car Hire — Travel in Comfort, Arrive in Style"
+            width={1920}
+            height={680}
+            className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.01]"
+            priority
+          />
+          {/* Bottom fade — blends into page background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+          {/* Left edge vignette for depth */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-transparent pointer-events-none" />
+          {/* Shimmer on hover */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"
+            style={{ background: "linear-gradient(105deg, transparent 40%, rgba(250,210,147,0.06) 50%, transparent 60%)" }}
+          />
+          {/* Live availability badge — top-right */}
+          <div className="absolute top-4 right-4 sm:top-5 sm:right-5 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur-md border border-[#FAD293]/35 text-[11px] font-bold text-[#FAD293] shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-[#FAD293] animate-pulse" />
+            Vehicles Available Now
+          </div>
+          {/* Bottom-left stat strip */}
+          <div className="absolute bottom-4 left-4 sm:bottom-5 sm:left-5 flex items-center gap-3">
+            {[
+              { label: "Premium Vehicles" },
+              { label: "Professional Drivers" },
+              { label: "Safe & Reliable" },
+            ].map((item) => (
+              <span
+                key={item.label}
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-[#FAD293]/20 text-[10px] font-semibold text-[#FAD293]/90"
+              >
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
 
         {/* 2. Main Content: Desktop Sidebar on Left + Vehicles Grid on Right */}
         <div className="flex flex-col lg:flex-row gap-5 items-start">

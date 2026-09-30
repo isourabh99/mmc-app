@@ -17,13 +17,16 @@ import {
   ShieldCheck,
   Truck,
   ArrowRight,
+  Banknote,
+  CreditCard,
+  Info,
 } from "lucide-react";
 import { TyreAssistanceBooking } from "@/lib/data/tyre-assistance.data";
 import { TyreAssistanceHeader } from "./TyreAssistanceHeader";
 
 interface ProviderQuoteStepProps {
   booking: TyreAssistanceBooking;
-  onConfirm: () => Promise<void>;
+  onConfirm: (options?: { isPartial?: boolean }) => Promise<void>;
   onBack: () => void;
 }
 
@@ -33,7 +36,24 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
   onBack,
 }) => {
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
+  const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
   const [showChatModal, setShowChatModal] = useState<boolean>(false);
+
+  const numericFare = Number(booking.quote?.fareAmount || 0);
+  const depositAmount = (numericFare * 0.25).toFixed(2);
+  const remainingAmount = (numericFare * 0.75).toFixed(2);
+
+  const handleExecutePayment = async () => {
+    setIsConfirming(true);
+    try {
+      await onConfirm({ isPartial: isPartialPayment });
+    } catch (err) {
+      console.error("Confirmation error:", err);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
   const [chatMessages, setChatMessages] = useState<
     { sender: "user" | "provider"; text: string; time: string }[]
   >([
@@ -257,14 +277,20 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
               {/* Divider */}
               <div className="border-t border-white/10 my-3" />
 
-              {/* Fare Amount */}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-base font-bold text-[#FAD293]">
-                  Fare Amount
-                </span>
-                <span className="text-2xl font-black text-[#FAD293]">
-                  £{booking.quote.fareAmount}
-                </span>
+              {/* Total Quote Amount & 25% Deposit Eligible Badge */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div>
+                  <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider block">
+                    Total Quote Amount
+                  </span>
+                  <span className="text-2xl font-black text-[#FAD293]">
+                    £{numericFare.toFixed(2)}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-full border border-[#D5A054]/40 bg-[#D5A054]/15 text-[#E8AF66] text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-[#E8AF66] animate-pulse" />
+                  <span>25% Deposit Eligible</span>
+                </div>
               </div>
             </div>
 
@@ -272,29 +298,183 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
             <div className="pt-4 border-t border-white/5">
               <button
                 type="button"
-                onClick={handleConfirm}
+                onClick={() => setShowPaymentModal(true)}
                 disabled={isConfirming}
                 className="w-full py-4 rounded-2xl text-sm font-bold text-black flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] transition-all shadow-xl cursor-pointer disabled:opacity-50"
                 style={{
                   background: "linear-gradient(135deg, #FAD293 0%, #CEA46B 100%)",
                 }}
               >
-                {isConfirming ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Confirming & Assigning...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Confirm & Request Assistance</span>
-                    <ArrowRight size={16} className="stroke-[2.5]" />
-                  </>
-                )}
+                <span>Confirm & Request Assistance</span>
+                <ArrowRight size={16} className="stroke-[2.5]" />
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Select Payment Method Modal (Matches Screenshots & Chauffeur UI) */}
+      {showPaymentModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+          onClick={() => setShowPaymentModal(false)}
+        >
+          <div
+            className="bg-[#141518] border border-[#FAD293]/30 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Select Payment Method
+                </h3>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  Choose how you want to pay for this service
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Payment Options (Deposit 25% vs Full 100%) */}
+            <div className="space-y-3.5 pt-1">
+              {/* Option 1: Deposit (25% Advance) */}
+              <div
+                onClick={() => setIsPartialPayment(true)}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                  isPartialPayment
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                      <Banknote className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
+                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
+                          25% ADVANCE
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay 25% deposit now to confirm booking
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                      isPartialPayment
+                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                        : "border-zinc-700 bg-zinc-900"
+                    }`}
+                  >
+                    {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
+                    <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Due after service (75%):</span>
+                    <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 2: Online Payment (Full 100%) */}
+              <div
+                onClick={() => setIsPartialPayment(false)}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                  !isPartialPayment
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
+                    </div>
+                    <div>
+                      <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay full amount now online
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                      !isPartialPayment
+                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                        : "border-zinc-700 bg-zinc-900"
+                    }`}
+                  >
+                    {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
+                  <span className="text-zinc-300">Amount Due Now:</span>
+                  <span className="text-sm font-extrabold text-[#E8AF66]">£{numericFare.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanatory Policy Note */}
+            <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-start gap-3">
+              <Info className="w-4 h-4 text-[#D5A054] shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                <span className="font-bold text-[#D5A054] block">
+                  {isPartialPayment ? "25% Advance Payment Required" : "Full Online Payment Selected"}
+                </span>
+                <p className="text-zinc-400 leading-relaxed">
+                  {isPartialPayment
+                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the tyre service is completed."
+                    : "Pay 100% upfront securely via Stripe. No remaining balance will be due upon service completion."}
+                </p>
+              </div>
+            </div>
+
+            {/* Pay / Confirm Button */}
+            <button
+              type="button"
+              onClick={handleExecutePayment}
+              disabled={isConfirming}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
+            >
+              {isConfirming ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                  <span>Connecting to Stripe Gateway...</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {isPartialPayment
+                      ? `Pay Deposit (£${depositAmount})`
+                      : `Pay Full (£${numericFare.toFixed(2)})`}
+                  </span>
+                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Direct Chat Modal */}
       {showChatModal && (
@@ -338,8 +518,8 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
                 >
                   <div
                     className={`max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed ${m.sender === "user"
-                        ? "bg-[#FAD293] text-black font-medium rounded-br-none"
-                        : "bg-black/60 text-white/90 border border-white/10 rounded-bl-none"
+                      ? "bg-[#FAD293] text-black font-medium rounded-br-none"
+                      : "bg-black/60 text-white/90 border border-white/10 rounded-bl-none"
                       }`}
                   >
                     {m.text}

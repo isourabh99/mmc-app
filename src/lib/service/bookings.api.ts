@@ -32,6 +32,9 @@ export interface UnifiedBookingItem {
   status: "pending" | "accepted" | "ongoing" | "completed" | "canceled";
   statusDisplay: string;
   isPaid: boolean;
+  isPartiallyPaid: boolean;
+  paidAmount: number;
+  dueAmount: number;
   paymentStatus: string;
   paymentMethod: string;
   totalAmount: number;
@@ -378,10 +381,40 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
 
   const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
 
-  // Payment info
-  const isPaid = raw.is_paid === 1 || raw.payment_status === "paid" || raw.is_paid === true;
-  const paymentStatus = isPaid ? "Paid" : "Pending Payment";
-  const paymentMethod = raw.payment_method ? raw.payment_method.replace(/_/g, " ") : "Cash After Service";
+  // Payment info — correctly handle partial payments
+  // The API sets is_paid=1 even for deposits/partial payments.
+  // We must check due_amount: if it is > 0, the booking is NOT fully paid.
+  const rawDueAmount = raw.due_amount !== undefined ? Number(raw.due_amount) : undefined;
+  const rawPaidAmount = raw.paid_amount !== undefined ? Number(raw.paid_amount) : undefined;
+
+  // Fully paid only if:
+  // (a) is_paid===1 AND due_amount is 0 or absent
+  // (b) payment_status === "paid" AND due_amount is 0 or absent
+  const hasDueRemaining = rawDueAmount !== undefined && rawDueAmount > 0;
+
+  const isPaid = !hasDueRemaining && Boolean(
+    raw.is_paid === 1 ||
+    raw.is_paid === "1" ||
+    raw.is_paid === true ||
+    raw.payment_status === "paid" ||
+    (rawDueAmount !== undefined && rawDueAmount <= 0 && (rawPaidAmount !== undefined && rawPaidAmount > 0))
+  );
+
+  // Detect partial payment
+  const isPartiallyPaid = !isPaid && Boolean(
+    hasDueRemaining && (
+      (rawPaidAmount !== undefined && rawPaidAmount > 0) ||
+      raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true ||
+      raw.is_partial === 1 || raw.is_partial === "1"
+    )
+  );
+
+  const paymentStatus = isPaid ? "Paid" : isPartiallyPaid ? "Partially Paid" : "Pending Payment";
+  let paymentMethod = "Online (Stripe)";
+  if (raw.payment_method) {
+    const cleanMethod = String(raw.payment_method).replace(/_/g, " ");
+    paymentMethod = /cash/i.test(cleanMethod) ? "Online Payment" : cleanMethod;
+  }
 
   // Total Amount
   const totalAmount = Number(
@@ -585,6 +618,26 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     });
   }
 
+  // Compute canonical paid / due amounts to expose on the item
+  let computedPaidAmount = 0;
+  let computedDueAmount = 0;
+  if (isPaid) {
+    computedPaidAmount = totalAmount;
+    computedDueAmount = 0;
+  } else if (rawDueAmount !== undefined && rawDueAmount >= 0) {
+    computedDueAmount = rawDueAmount;
+    computedPaidAmount = Math.max(0, totalAmount - rawDueAmount);
+  } else if (rawPaidAmount !== undefined && rawPaidAmount > 0) {
+    computedPaidAmount = rawPaidAmount;
+    computedDueAmount = Math.max(0, totalAmount - rawPaidAmount);
+  } else if (raw.is_partial === 1 || raw.is_partial === "1") {
+    computedPaidAmount = totalAmount * 0.25;
+    computedDueAmount = totalAmount * 0.75;
+  } else if (!isPaid) {
+    computedDueAmount = totalAmount;
+    computedPaidAmount = 0;
+  }
+
   return {
     id: idStr,
     rawId,
@@ -596,6 +649,9 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     status,
     statusDisplay,
     isPaid,
+    isPartiallyPaid,
+    paidAmount: computedPaidAmount,
+    dueAmount: computedDueAmount,
     paymentStatus,
     paymentMethod,
     totalAmount,
@@ -636,136 +692,121 @@ export async function fetchAllCustomerBookings(
 ): Promise<UnifiedBookingItem[]> {
   const unifiedMap = new Map<string, UnifiedBookingItem>();
 
-  const queryParams = {
-    limit: params.limit || 50,
-    offset: params.offset || 1,
-    booking_status: params.booking_status || "all",
-    service_type: params.service_type || "all",
+  const baseParams = {
+    limit: 50,
+    offset: 1,
+    service_type: "all", // match the working curl command
   };
 
-  // 1. Fetch all general and service bookings
-  try {
-    const resAll = await apiClient.get("/customer/booking", {
-      params: {
-        ...queryParams,
-        ...(params.booking_type ? { booking_type: params.booking_type } : { booking_type: "all" }),
-      },
-    });
+  /**
+   * Extracts a flat array of booking objects from any API response content shape
+   */
+  function extractBookingsFromContent(content: any): any[] {
+    if (!content) return [];
 
-    const content = resAll.data?.content;
+    const results: any[] = [];
 
-    // A. Extract car_bookings if present in content
-    if (content?.car_bookings?.data && Array.isArray(content.car_bookings.data)) {
-      content.car_bookings.data.forEach((item: any) => {
-        const norm = normalizeBooking(item, "chauffeur");
-        unifiedMap.set(norm.id, norm);
-      });
-    } else if (content?.car_bookings && Array.isArray(content.car_bookings)) {
-      content.car_bookings.forEach((item: any) => {
-        const norm = normalizeBooking(item, "chauffeur");
-        unifiedMap.set(norm.id, norm);
-      });
+    // Shape 1: content.data = [...]
+    if (content.data && Array.isArray(content.data)) {
+      results.push(...content.data);
     }
 
-    // B. Extract regular_bookings if present in content
-    if (content?.regular_bookings?.data && Array.isArray(content.regular_bookings.data)) {
-      content.regular_bookings.data.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
-    } else if (content?.regular_bookings && Array.isArray(content.regular_bookings)) {
-      content.regular_bookings.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
+    // Shape 2: content.regular_bookings.data = [...]
+    if (content.regular_bookings?.data && Array.isArray(content.regular_bookings.data)) {
+      results.push(...content.regular_bookings.data);
+    } else if (content.regular_bookings && Array.isArray(content.regular_bookings)) {
+      results.push(...content.regular_bookings);
     }
 
-    // C. Extract bookings / service bookings if present in content
-    if (content?.bookings?.data && Array.isArray(content.bookings.data)) {
-      content.bookings.data.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
-    } else if (content?.bookings && Array.isArray(content.bookings)) {
-      content.bookings.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
+    // Shape 3: content.bookings.data = [...]
+    if (content.bookings?.data && Array.isArray(content.bookings.data)) {
+      results.push(...content.bookings.data);
+    } else if (content.bookings && Array.isArray(content.bookings)) {
+      results.push(...content.bookings);
     }
 
-    // D. Extract repeat_bookings if present in content
-    if (content?.repeat_bookings?.data && Array.isArray(content.repeat_bookings.data)) {
-      content.repeat_bookings.data.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
-    } else if (content?.repeat_bookings && Array.isArray(content.repeat_bookings)) {
-      content.repeat_bookings.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
+    // Shape 4: content.car_bookings.data = [...]
+    if (content.car_bookings?.data && Array.isArray(content.car_bookings.data)) {
+      results.push(...content.car_bookings.data);
+    } else if (content.car_bookings && Array.isArray(content.car_bookings)) {
+      results.push(...content.car_bookings);
     }
 
-    // E. Extract root data array if present
-    if (content?.data && Array.isArray(content.data)) {
-      content.data.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
-    } else if (Array.isArray(content)) {
-      content.forEach((item: any) => {
-        const norm = normalizeBooking(item);
-        unifiedMap.set(norm.id, norm);
-      });
+    // Shape 5: content itself is an array
+    if (Array.isArray(content) && results.length === 0) {
+      results.push(...content);
     }
-  } catch (error) {
-    console.warn("Could not fetch /customer/booking (all):", error);
+
+    return results;
   }
 
-  // 2. Fetch specific car bookings explicitly to ensure 100% complete chauffeur sync
+  /**
+   * Add a raw booking item to the unified map (avoids duplicates)
+   */
+  function addToMap(item: any, hintType?: BookingServiceType) {
+    if (!item) return;
+    const norm = normalizeBooking(item, hintType);
+    // Prefer API data over local data — always overwrite with fresh API data
+    unifiedMap.set(norm.id, norm);
+  }
+
+  // Fetch bookings for each status — this matches the working curl command pattern
+  const statuses = ["accepted", "pending", "ongoing", "completed", "canceled"];
+
+  for (const status of statuses) {
+    try {
+      const res = await apiClient.get("/customer/booking", {
+        params: { ...baseParams, booking_status: status },
+      });
+      const content = res.data?.content;
+      const items = extractBookingsFromContent(content);
+      console.log(`[Bookings] status=${status}: found ${items.length} items`);
+      items.forEach((item) => addToMap(item));
+    } catch (err: any) {
+      console.warn(`[Bookings] status=${status} fetch failed:`, err?.response?.status || err?.message);
+    }
+  }
+
+  // Also try car bookings (chauffeur)
   try {
     const resCar = await apiClient.get("/customer/booking", {
-      params: {
-        ...queryParams,
-        booking_type: "car",
-      },
+      params: { ...baseParams, booking_type: "car" },
     });
-
-    const contentCar = resCar.data?.content;
-    const carList =
-      contentCar?.car_bookings?.data ||
-      contentCar?.car_bookings ||
-      contentCar?.data ||
-      (Array.isArray(contentCar) ? contentCar : []);
-
-    if (Array.isArray(carList)) {
-      carList.forEach((item: any) => {
-        const norm = normalizeBooking(item, "chauffeur");
-        unifiedMap.set(norm.id, norm);
-      });
-    }
-  } catch (error) {
-    console.warn("Could not fetch /customer/booking (car):", error);
+    const carItems = extractBookingsFromContent(resCar.data?.content);
+    console.log(`[Bookings] car bookings: found ${carItems.length} items`);
+    carItems.forEach((item) => addToMap(item, "chauffeur"));
+  } catch (err: any) {
+    console.warn("[Bookings] car fetch failed:", err?.response?.status || err?.message);
   }
 
-  // 3. Purge all dummy client-side localStorage booking entries so ONLY real backend API bookings are displayed
+  // Read locally saved bookings as fallback (for bookings not yet synced from API)
   if (typeof window !== "undefined") {
     try {
-      localStorage.removeItem("mmc_confirmed_bookings");
-      localStorage.removeItem("mmc_tyre_assistance_bookings");
-      localStorage.removeItem("mmc_emergency_assistance_bookings");
+      const localRaw = localStorage.getItem("mmc_confirmed_bookings");
+      if (localRaw) {
+        const localList: any[] = JSON.parse(localRaw);
+        localList.forEach((b: any) => {
+          const bId = String(b.id || b.rawId || "").trim();
+          // Only add local bookings that don't already exist in API results
+          if (bId && !isFakeDummyId(bId) && !unifiedMap.has(bId.toLowerCase())) {
+            addToMap({ ...b, ...(b.raw || {}) });
+          }
+        });
+      }
     } catch (e) {
-      console.warn("Error cleaning local dummy bookings:", e);
+      console.warn("[Bookings] Could not read local bookings:", e);
     }
   }
 
-  // Convert map to array and sort newest first
+  // Sort: newest first
   const allList = Array.from(unifiedMap.values());
   allList.sort((a, b) => {
-    const dateA = new Date(a.createdAt || a.scheduleDate).getTime();
-    const dateB = new Date(b.createdAt || b.scheduleDate).getTime();
+    const dateA = new Date(a.createdAt || a.scheduleDate || 0).getTime();
+    const dateB = new Date(b.createdAt || b.scheduleDate || 0).getTime();
     return dateB - dateA;
   });
 
+  console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status})`));
   return allList;
 }
+

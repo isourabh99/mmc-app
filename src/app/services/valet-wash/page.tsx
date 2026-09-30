@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, Suspense } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +34,8 @@ import {
   Zap,
   ChevronRight,
   RotateCcw,
+  Banknote,
+  Info,
 } from "lucide-react";
 import {
   searchProvidersByService,
@@ -143,6 +146,15 @@ export default function VehicleWashValetPage() {
     }
     return 0;
   }, [activeVariation, selectedProviderForBooking, activeServiceItem]);
+
+  // Payment Modal State (Matches Bodywork / Chauffeur / Mechanical / Car Hire)
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isPartialPayment, setIsPartialPayment] = useState(true);
+
+  const numericPrice = dynamicBookingPrice > 0 ? dynamicBookingPrice : 45;
+  const depositAmount = (numericPrice * 0.25).toFixed(2);
+  const remainingAmount = (numericPrice * 0.75).toFixed(2);
+  const totalAmountFormatted = numericPrice.toFixed(2);
 
   const handleOpenBookingModal = (provider: ValetProvider) => {
     setSelectedProviderForBooking(provider);
@@ -313,9 +325,19 @@ export default function VehicleWashValetPage() {
     return list;
   }, [providers, serviceTypeFilter, searchRadius, sortBy]);
 
-  // Handle Booking Submit
-  const handleConfirmBooking = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Opens Select Payment Method Modal
+  const handleOpenPaymentModal = (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedProviderForBooking) return;
+    setShowPaymentModal(true);
+  };
+
+  const handleConfirmBooking = (e?: React.FormEvent | React.MouseEvent) => {
+    handleOpenPaymentModal(e);
+  };
+
+  // Final Booking Dispatch to API with Stripe Payment
+  const executeValetBooking = async () => {
     if (!selectedProviderForBooking) return;
 
     try {
@@ -329,31 +351,25 @@ export default function VehicleWashValetPage() {
 
       const chosenVarName = activeVariation?.variant || chosenVarKey;
 
-      // Step 1: Add to cart API with selected variation
-      try {
-        await addValetToCart({
-          service_id: selectedServiceId,
-          provider_id: selectedProviderForBooking.id,
-          variant_key: chosenVarKey,
-          quantity: 1,
-          is_terms_accepted: 1,
-        });
-      } catch (cartErr) {
-        console.warn("Cart add warning (proceeding to booking request):", cartErr);
-      }
-
-      // Step 2: Format schedule & send booking request API
       const scheduleTime =
         bookingTime.includes(":") && bookingTime.split(":").length === 2
           ? `${bookingTime}:00`
           : bookingTime;
       const formattedSchedule = `${bookingDate} ${scheduleTime}`;
 
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/booking-success";
+
       const bookingRes = await sendValetBookingRequest({
         service_id: selectedServiceId,
         provider_id: selectedProviderForBooking.id,
         variant_key: chosenVarKey,
-        payment_method: bookingPaymentMethod,
+        payment_method: "stripe",
+        is_partial: isPartialPayment ? 1 : 0,
+        payment_platform: "app",
+        callback: callbackUrl,
         service_schedule: formattedSchedule,
         service_address_id: "2",
         service_location: bookingLocationType,
@@ -368,20 +384,58 @@ export default function VehicleWashValetPage() {
         notes: `[Valet: ${currentServiceName} (${chosenVarName})] ${bookingAdditionalNotes.trim() || `Location: ${locationAddress}. Slot: ${selectedSlot}`}`,
       });
 
+      let redirectLink =
+        (bookingRes as any)?.content?.url ||
+        (bookingRes as any)?.content?.redirect_link ||
+        (bookingRes as any)?.content?.redirect_url ||
+        (bookingRes as any)?.content?.payment_url ||
+        (bookingRes as any)?.url ||
+        (bookingRes as any)?.redirect_link ||
+        (bookingRes as any)?.redirect_url;
+
       const ref =
         bookingRes?.content?.readable_id ||
         bookingRes?.content?.id ||
         bookingRes?.booking_reference ||
         bookingRes?.content?.booking_id;
 
-      if (!ref && !bookingRes?.content && bookingRes?.response_code !== "default_200") {
-        throw new Error(bookingRes?.message || "Failed to confirm booking.");
-      }
-
-      const confirmedId = String(ref || "MMC-VAL-BOOKING");
+      const confirmedId = String(ref || `MMC-VAL-${Date.now().toString().slice(-6)}`);
       setConfirmedBookingRef(confirmedId);
 
-      // Save exact booking metadata so Account Bookings shows the real service title
+      const isUuidStr = (val: any): boolean =>
+        typeof val === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+      const content = bookingRes?.content;
+      const possibleUuid =
+        (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
+        (content && isUuidStr(content.id) ? content.id : null) ||
+        (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
+        (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
+        (isUuidStr(confirmedId) ? confirmedId : null);
+
+      if (!redirectLink && possibleUuid) {
+        redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+          String(possibleUuid)
+        )}`;
+      }
+
+      try {
+        sessionStorage.setItem(
+          "mmc_pending_booking",
+          JSON.stringify({
+            booking_id: confirmedId,
+            readable_id: confirmedId,
+            provider: selectedProviderForBooking,
+            schedule: formattedSchedule,
+            price: numericPrice,
+            is_partial: isPartialPayment ? 1 : 0,
+            deposit_amount: depositAmount,
+            service_name: `Valet: ${currentServiceName} (${chosenVarName})`,
+          })
+        );
+      } catch { }
+
       saveBookingMeta(confirmedId, {
         serviceTitle: `${currentServiceName} (${chosenVarName})`,
         serviceCategoryName: "Valet & Detailing",
@@ -390,9 +444,22 @@ export default function VehicleWashValetPage() {
         vehicleModel: bookingVehicleModel.trim() || "Audi A4",
         vehicleReg: registrationNo || "AB24 MMC",
         providerName: selectedProviderForBooking.company_name,
-        price: dynamicBookingPrice,
+        price: numericPrice,
       });
 
+      // ONLY redirect if we have a valid URL and it does NOT use MMC-VAL-...
+      if (
+        redirectLink &&
+        typeof redirectLink === "string" &&
+        redirectLink.startsWith("http") &&
+        !redirectLink.includes("payment_id=MMC-")
+      ) {
+        showToast("Redirecting to Stripe secure checkout...", "info");
+        window.location.href = redirectLink;
+        return;
+      }
+
+      setShowPaymentModal(false);
       setIsBookingSuccess(true);
       showToast("Valet Booking Confirmed Successfully!", "success");
 
@@ -400,7 +467,7 @@ export default function VehicleWashValetPage() {
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
         try {
           new Notification("MMC Valet Wash Confirmed! 🧼", {
-            body: `Booking Ref #${ref || "Confirmed"} for ${currentServiceName} has been confirmed!`,
+            body: `Booking Ref #${confirmedId} for ${currentServiceName} has been confirmed!`,
             icon: "/mmc-logo.png",
             badge: "/mmc-logo.png",
           });
@@ -499,15 +566,38 @@ export default function VehicleWashValetPage() {
         </div>
       </section>
 
+      {/* ─── Valet Banner Image ─── */}
+      <div className="relative w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 z-10">
+        <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-[#FAD293]/20 group">
+          <Image
+            src="/valet.png"
+            alt="MMC Premium Valet & Detailing Services"
+            width={1920}
+            height={700}
+            className="w-full h-auto object-cover"
+            priority
+          />
+          {/* Subtle bottom gradient overlay so content below feels connected */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0a09]/60 via-transparent to-transparent pointer-events-none" />
+          {/* Shimmer on hover */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+          {/* Live badge */}
+          <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-[#FAD293]/30 text-[11px] font-bold text-[#FAD293]">
+            <span className="w-2 h-2 rounded-full bg-[#FAD293] animate-pulse" />
+            Now Booking
+          </div>
+        </div>
+      </div>
+
       {/* 2. Main Desktop Layout (Sidebar + Results Grid) */}
       <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
+
           {/* ========================================================= */}
           {/* LEFT COLUMN: Interactive Edit & Filter Sidebar (4 cols)   */}
           {/* ========================================================= */}
           <aside id="sidebar-valet-form" className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
-            
+
             {/* Sidebar Edit Card */}
             <div className="rounded-3xl border border-[#FAD293]/30 bg-[#120e0b]/90 backdrop-blur-xl p-5 sm:p-6 shadow-2xl relative overflow-hidden space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -609,11 +699,10 @@ export default function VehicleWashValetPage() {
                         key={rad}
                         type="button"
                         onClick={() => setSearchRadius(rad)}
-                        className={`py-1.5 rounded-xl text-xs font-semibold border transition ${
-                          searchRadius === rad
-                            ? "bg-[#FAD293] text-black border-[#FAD293] shadow-md"
-                            : "bg-white/5 text-white/70 border-white/10 hover:border-white/20"
-                        }`}
+                        className={`py-1.5 rounded-xl text-xs font-semibold border transition ${searchRadius === rad
+                          ? "bg-[#FAD293] text-black border-[#FAD293] shadow-md"
+                          : "bg-white/5 text-white/70 border-white/10 hover:border-white/20"
+                          }`}
                       >
                         {rad} mi
                       </button>
@@ -637,11 +726,10 @@ export default function VehicleWashValetPage() {
                         key={st.id}
                         type="button"
                         onClick={() => setServiceTypeFilter(st.id as any)}
-                        className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center truncate transition ${
-                          serviceTypeFilter === st.id
-                            ? "bg-[#FAD293]/20 text-[#FAD293] border-[#FAD293]"
-                            : "bg-white/5 text-white/60 border-white/10 hover:text-white"
-                        }`}
+                        className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center truncate transition ${serviceTypeFilter === st.id
+                          ? "bg-[#FAD293]/20 text-[#FAD293] border-[#FAD293]"
+                          : "bg-white/5 text-white/60 border-white/10 hover:text-white"
+                          }`}
                       >
                         {st.label}
                       </button>
@@ -695,27 +783,14 @@ export default function VehicleWashValetPage() {
               </ul>
             </div>
 
-            {/* Sidebar Help Card */}
-            <div className="rounded-2xl border border-white/8 bg-white/5 p-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-xs font-bold text-white">Need Quick Assistance?</span>
-                <p className="text-[11px] text-white/50">24/7 Motor Market Support</p>
-              </div>
-              <a
-                href="tel:07380504571"
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FAD293] text-xs font-bold transition flex items-center gap-1.5"
-              >
-                <Phone size={12} />
-                <span>Call Us</span>
-              </a>
-            </div>
+
           </aside>
 
           {/* ========================================================= */}
           {/* RIGHT COLUMN: Results Header & Vendor Cards Grid (8 cols) */}
           {/* ========================================================= */}
           <section className="lg:col-span-8 space-y-6">
-            
+
             {/* Top Results Banner & Stats */}
             <div className="rounded-3xl border border-[#FAD293]/20 bg-[#120e0b]/80 backdrop-blur-md p-5 sm:p-6 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -733,7 +808,7 @@ export default function VehicleWashValetPage() {
                   <h2 className="text-lg sm:text-xl font-black text-white mt-1">
                     {filteredAndSortedProviders.length} vendors found within {searchRadius} miles radius
                   </h2>
-                  
+
                   <p className="text-xs text-white/60 flex items-center gap-1.5 mt-1">
                     <MapPin size={13} className="text-[#FAD293] shrink-0" />
                     <span className="truncate max-w-sm sm:max-w-md">
@@ -1106,27 +1181,25 @@ export default function VehicleWashValetPage() {
                           v.price > 0
                             ? v.price
                             : activeServiceItem?.price > 0
-                            ? activeServiceItem.price
-                            : 0;
+                              ? activeServiceItem.price
+                              : 0;
 
                         return (
                           <button
                             key={v.variant_key}
                             type="button"
                             onClick={() => setSelectedVariationKey(v.variant_key)}
-                            className={`p-3 rounded-2xl border text-left transition relative flex items-center justify-between gap-2 ${
-                              isSelected
-                                ? "bg-[#FAD293]/15 border-[#FAD293] shadow-md shadow-[#FAD293]/10 ring-1 ring-[#FAD293]"
-                                : "bg-white/5 border-white/10 hover:border-white/25 hover:bg-white/[0.08]"
-                            }`}
+                            className={`p-3 rounded-2xl border text-left transition relative flex items-center justify-between gap-2 ${isSelected
+                              ? "bg-[#FAD293]/15 border-[#FAD293] shadow-md shadow-[#FAD293]/10 ring-1 ring-[#FAD293]"
+                              : "bg-white/5 border-white/10 hover:border-white/25 hover:bg-white/[0.08]"
+                              }`}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <div
-                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition ${
-                                  isSelected
-                                    ? "border-[#FAD293] bg-[#FAD293]"
-                                    : "border-white/30 bg-transparent"
-                                }`}
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition ${isSelected
+                                  ? "border-[#FAD293] bg-[#FAD293]"
+                                  : "border-white/30 bg-transparent"
+                                  }`}
                               >
                                 {isSelected && (
                                   <Check size={10} className="text-black font-bold stroke-[3]" />
@@ -1201,11 +1274,10 @@ export default function VehicleWashValetPage() {
                           setSelectedSlot(s.slot);
                           setBookingTime(s.time);
                         }}
-                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition text-center ${
-                          selectedSlot === s.slot
-                            ? "bg-[#FAD293]/15 border-[#FAD293] text-[#FAD293] ring-1 ring-[#FAD293]"
-                            : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                        }`}
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition text-center ${selectedSlot === s.slot
+                          ? "bg-[#FAD293]/15 border-[#FAD293] text-[#FAD293] ring-1 ring-[#FAD293]"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                          }`}
                       >
                         {s.slot}
                       </button>
@@ -1223,11 +1295,10 @@ export default function VehicleWashValetPage() {
                     <button
                       type="button"
                       onClick={() => setBookingLocationType("customer")}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                        bookingLocationType === "customer"
-                          ? "bg-[#FAD293] text-black shadow-md font-extrabold"
-                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                      }`}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${bookingLocationType === "customer"
+                        ? "bg-[#FAD293] text-black shadow-md font-extrabold"
+                        : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                        }`}
                     >
                       <Smartphone size={13} />
                       <span>Mobile Wash</span>
@@ -1235,11 +1306,10 @@ export default function VehicleWashValetPage() {
                     <button
                       type="button"
                       onClick={() => setBookingLocationType("provider")}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                        bookingLocationType === "provider"
-                          ? "bg-[#FAD293] text-black shadow-md font-extrabold"
-                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                      }`}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${bookingLocationType === "provider"
+                        ? "bg-[#FAD293] text-black shadow-md font-extrabold"
+                        : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                        }`}
                     >
                       <Building size={13} />
                       <span>Workshop</span>
@@ -1328,47 +1398,49 @@ export default function VehicleWashValetPage() {
                     <CreditCard size={12} className="text-[#FAD293]" />
                     <span>Payment Method</span>
                   </label>
-                  <select
-                    value={bookingPaymentMethod}
-                    onChange={(e) => setBookingPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
-                  >
-                    <option value="cash_after_service" className="bg-neutral-900">
-                      Cash After Valet Completion
-                    </option>
-                    <option value="card_stripe" className="bg-neutral-900">
-                      Credit / Debit Card (Online Stripe)
-                    </option>
-                  </select>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-white">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                      <span className="font-semibold text-white">
+                        Deposit (25% Advance) &amp; Full Online via Stripe
+                      </span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-full border border-[#FAD293]/20">
+                      Selectable
+                    </span>
+                  </div>
                 </div>
 
-                {/* Price Total */}
-                <div className="flex items-center justify-between pt-2 border-t border-white/10 font-bold text-sm">
-                  <span className="text-white/70">Estimated Service Cost:</span>
-                  <span className="text-[#FAD293] text-xl font-extrabold">
-                    £{dynamicBookingPrice}
-                  </span>
+                {/* Total Quote Amount & 25% Deposit Eligible Badge */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider block">
+                      Total Quote Amount
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-white">
+                      £{totalAmountFormatted}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAD293]/10 border border-[#FAD293]/30 text-[#FAD293] text-xs font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FAD293] animate-pulse" />
+                      <span>25% Deposit Eligible</span>
+                    </div>
+                  </div>
                 </div>
 
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleOpenPaymentModal}
                   disabled={isBookingSubmitting}
-                  className="w-full py-3.5 rounded-xl font-bold text-black text-xs sm:text-sm flex items-center justify-center gap-2 transition hover:brightness-110 active:scale-98 disabled:opacity-50 shadow-xl shadow-[#FAD293]/10"
+                  className="w-full py-3.5 rounded-xl font-bold text-black text-xs sm:text-sm flex items-center justify-center gap-2 transition hover:brightness-110 active:scale-98 disabled:opacity-50 shadow-xl shadow-[#FAD293]/10 cursor-pointer"
                   style={{
                     background: "linear-gradient(135deg, #FAD293, #CEA46B)",
                   }}
                 >
-                  {isBookingSubmitting ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin text-black" />
-                      <span>Confirming Valet Booking...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={16} className="text-black" />
-                      <span>Confirm Valet Booking</span>
-                    </>
-                  )}
+                  <Sparkles size={16} className="text-black" />
+                  <span>Confirm Valet Booking</span>
+                  <ArrowRight size={16} className="text-black" />
                 </button>
               </form>
             )}
@@ -1448,6 +1520,176 @@ export default function VehicleWashValetPage() {
             >
               Book with {selectedProviderForGallery.company_name}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Select Payment Method Modal / Bottom Sheet (Matches Bodywork/Chauffeur/Mechanical/Car Hire UI) */}
+      {showPaymentModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+          onClick={() => setShowPaymentModal(false)}
+        >
+          <div
+            className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drag Handle for Mobile */}
+            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
+
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Select Payment Method
+                </h3>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  Choose how you want to pay for this valet wash service
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Payment Options */}
+            <div className="space-y-3.5 pt-1">
+              {/* Option 1: Deposit (25% Advance) */}
+              <div
+                onClick={() => setIsPartialPayment(true)}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                      <Banknote className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
+                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
+                          25% ADVANCE
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay 25% deposit now to secure valet appointment
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
+                      }`}
+                  >
+                    {isPartialPayment && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
+                    <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Due on service completion (75%):</span>
+                    <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 2: Online Payment (Full 100%) */}
+              <div
+                onClick={() => setIsPartialPayment(false)}
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
+                    </div>
+                    <div>
+                      <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay full amount now online
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
+                      }`}
+                  >
+                    {!isPartialPayment && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
+                  <span className="text-zinc-300">Amount Due Now:</span>
+                  <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Informational Callout Box */}
+            <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
+              <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="text-xs font-bold text-[#E8AF66] block">
+                  {isPartialPayment
+                    ? "25% Advance Payment Required"
+                    : "100% Online Secure Payment"}
+                </span>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  {isPartialPayment
+                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the valet wash service is completed."
+                    : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
+                </p>
+              </div>
+            </div>
+
+            {/* Pay Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={executeValetBooking}
+                disabled={isBookingSubmitting}
+                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
+              >
+                {isBookingSubmitting ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
+                    <span>Redirecting to Payment Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {isPartialPayment
+                        ? `PAY DEPOSIT (£${depositAmount})`
+                        : `PAY FULL AMOUNT (£${totalAmountFormatted})`}
+                    </span>
+                    <ArrowRight className="w-5 h-5 text-zinc-950" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

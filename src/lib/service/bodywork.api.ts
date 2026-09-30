@@ -931,6 +931,7 @@ export interface SendBookingRequestParams {
   car_image?: File | null;
   payment_platform?: string;
   callback?: string;
+  amount?: number;
 }
 
 export interface SendBookingRequestResponse {
@@ -997,6 +998,9 @@ export const sendBookingRequest = async (
     if (params.is_partial !== undefined) {
       formData.append("is_partial", String(params.is_partial));
     }
+    if (params.amount !== undefined) {
+      formData.append("amount", String(params.amount));
+    }
     formData.append("zone_id", zoneId);
     formData.append("guest_id", guestId);
     formData.append("service_address_id", addressId);
@@ -1047,6 +1051,7 @@ export const sendBookingRequest = async (
       provider_id: params.provider_id,
       payment_method: effectivePaymentMethod,
       ...(params.is_partial !== undefined ? { is_partial: Number(params.is_partial) } : {}),
+      ...(params.amount !== undefined ? { amount: Number(params.amount) } : {}),
       zone_id: zoneId,
       guest_id: guestId,
       service_address_id: addressId,
