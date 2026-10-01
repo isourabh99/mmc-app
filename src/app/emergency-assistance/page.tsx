@@ -59,6 +59,12 @@ import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { searchPlaces, LocationSuggestion } from "@/lib/service/location.service";
 import { isAuthenticated } from "@/lib/auth.api";
 import { useToast } from "@/components/ToastProvider";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
+import {
+  saveServiceFormDraft,
+  getServiceFormDraft,
+  clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 export default function EmergencyAssistancePage() {
   const router = useRouter();
@@ -242,6 +248,26 @@ export default function EmergencyAssistancePage() {
     };
 
     fetchUserData();
+  }, []);
+
+  // 2.5 Restore saved draft after login
+  useEffect(() => {
+    if (isAuthenticated()) {
+      const draft = getServiceFormDraft<any>("emergency");
+      if (draft) {
+        if (draft.locationQuery) setLocationQuery(draft.locationQuery);
+        if (draft.carReg) setCarReg(draft.carReg);
+        if (draft.carModel) setCarModel(draft.carModel);
+        if (Array.isArray(draft.selectedServiceIds) && draft.selectedServiceIds.length > 0) {
+          setSelectedServiceIds(draft.selectedServiceIds);
+        }
+        if (draft.situationDescription) setSituationDescription(draft.situationDescription);
+        if (draft.contactPhone) setContactPhone(draft.contactPhone);
+        if (draft.detectedCoords) setDetectedCoords(draft.detectedCoords);
+        clearServiceFormDraft("emergency");
+        showToast("Welcome back! Your vehicle and emergency details have been restored.", "success");
+      }
+    }
   }, []);
 
   // 3. Location Search Autocomplete with debounce
@@ -455,79 +481,47 @@ export default function EmergencyAssistancePage() {
   };
 
   // =========================================================================
-  // HANDLER: BOOK A SPECIFIC PROVIDER
+  // HANDLER: OPEN DIRECT PAYMENT MODAL (MATCHES OTHER SERVICES)
   // =========================================================================
-  const handleConfirmProviderBooking = async () => {
-    if (!selectedProviderForBooking) return;
-
+  const handleOpenBookingModal = (provider: EmergencyProviderItem) => {
     if (!isAuthenticated()) {
-      showToast("Please login to confirm emergency dispatch.", "info");
-      router.push("/login");
+      saveServiceFormDraft("emergency", {
+        locationQuery,
+        carReg,
+        carModel,
+        selectedServiceIds,
+        situationDescription,
+        contactPhone,
+        detectedCoords,
+        targetProviderId: provider.id,
+      });
+      showToast("Please log in to complete your emergency dispatch payment.", "info");
+      router.push(`/login?redirect=${encodeURIComponent("/emergency-assistance")}`);
       return;
     }
+    setSelectedProviderForBooking(provider);
+  };
 
-    if (bookingPaymentMethod === "stripe") {
-      setShowPaymentModal(true);
-      return;
-    }
-
-    try {
-      setIsBookingSubmitting(true);
-
-      const matchedServiceNames = selectedServices.map((s) => s.name).join(", ");
-      const primaryServiceName = selectedServices[0]?.name || "Emergency Roadside Assistance";
-
-      const res = await bookEmergencyProvider({
-        provider: selectedProviderForBooking,
-        car_registration_number: carReg.trim().toUpperCase(),
-        car_model: carModel.trim(),
-        emergency_service_id: selectedServiceId,
-        emergency_service_ids: selectedServiceIds,
-        emergency_service_name: matchedServiceNames || primaryServiceName,
-        situation_description: situationDescription.trim(),
-        contact_phone: contactPhone.trim(),
-        service_address: locationQuery.trim(),
-        service_location: bookingLocationType,
-        payment_method: "cash_after_service",
-        latitude: detectedCoords.lat,
-        longitude: detectedCoords.lon,
-      });
-
-      setSubmittedRequest({
-        reference: res.reference,
-        serviceName: matchedServiceNames || primaryServiceName,
-        location: locationQuery.trim(),
-        carReg: carReg.trim().toUpperCase(),
-        estimatedArrival:
-          selectedProviderForBooking.estimated_time ||
-          (selectedProviderForBooking.emergency_response_time
-            ? `${selectedProviderForBooking.emergency_response_time} mins`
-            : "20 - 35 Minutes"),
-        providerName: selectedProviderForBooking.company_name,
-        providerPhone:
-          selectedProviderForBooking.company_phone ||
-          selectedProviderForBooking.contact_person_phone ||
-          "0800 123 4567",
-      });
-
-      setSelectedProviderForBooking(null);
-      setShowProvidersView(false);
-      showToast("Emergency Assistance unit dispatched successfully!", "success");
-      window.scrollTo({ top: 50, behavior: "smooth" });
-    } catch (err: any) {
-      console.error("Booking error:", err);
-      showToast(err?.message || "Failed to dispatch booking. Please try again.", "error");
-    } finally {
-      setIsBookingSubmitting(false);
-    }
+  const handleClosePaymentModal = () => {
+    setShowPaymentModal(false);
   };
 
   const handleFinalEmergencyPayment = async () => {
     if (!selectedProviderForBooking) return;
 
     if (!isAuthenticated()) {
+      saveServiceFormDraft("emergency", {
+        locationQuery,
+        carReg,
+        carModel,
+        selectedServiceIds,
+        situationDescription,
+        contactPhone,
+        detectedCoords,
+        targetProviderId: selectedProviderForBooking.id,
+      });
       showToast("Please login to confirm emergency dispatch.", "info");
-      router.push("/login");
+      router.push(`/login?redirect=${encodeURIComponent("/emergency-assistance")}`);
       return;
     }
 
@@ -563,7 +557,7 @@ export default function EmergencyAssistancePage() {
       let targetUrl = res.url || res.redirect_link;
       if (!targetUrl && (isUuidStr(res.payment_id) || isUuidStr(res.booking_id))) {
         const pId = isUuidStr(res.payment_id) ? res.payment_id : res.booking_id;
-        targetUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}`;
+        targetUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}`;
       }
 
       try {
@@ -582,6 +576,39 @@ export default function EmergencyAssistancePage() {
         );
       } catch { }
 
+      saveBookingMeta(refId, {
+        serviceTitle: matchedServiceNames || primaryServiceName,
+        serviceCategoryName: "Emergency Assistance",
+        serviceType: "emergency",
+        vehicleModel: carModel.trim() || "Vehicle",
+        vehicleReg: carReg.trim().toUpperCase() || "AB24 MMC",
+        providerName: selectedProviderForBooking.company_name,
+        price: totalEmergencyAmount,
+      });
+
+      saveConfirmedBooking({
+        id: refId,
+        rawId: refId,
+        readableId: refId,
+        serviceType: "emergency",
+        serviceTitle: matchedServiceNames || primaryServiceName,
+        serviceCategoryName: "Emergency Assistance",
+        providerName: selectedProviderForBooking.company_name,
+        providerPhone: selectedProviderForBooking.company_phone || selectedProviderForBooking.contact_person_phone,
+        totalAmount: totalEmergencyAmount,
+        isPaid: false,
+        paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
+        paymentMethod: "Stripe (Online)",
+        status: "accepted",
+        statusDisplay: "Accepted",
+        scheduleDate: new Date().toISOString().split("T")[0],
+        scheduleTime: "Immediate",
+        fullScheduleDisplay: "Immediate Dispatch",
+        vehicleModel: carModel.trim() || "Vehicle",
+        vehicleReg: carReg.trim().toUpperCase() || "AB24 MMC",
+        createdAt: new Date().toISOString(),
+      });
+
       if (targetUrl && targetUrl.startsWith("http") && !targetUrl.includes("payment_id=EMG-")) {
         showToast("Redirecting to Stripe secure checkout...", "info");
         window.location.href = targetUrl;
@@ -589,15 +616,32 @@ export default function EmergencyAssistancePage() {
       }
 
       setShowPaymentModal(false);
-      setIsBookingSuccess(true);
+      setSubmittedRequest({
+        reference: refId,
+        serviceName: matchedServiceNames || primaryServiceName,
+        location: locationQuery.trim(),
+        carReg: carReg.trim().toUpperCase(),
+        estimatedArrival:
+          selectedProviderForBooking.estimated_time ||
+          (selectedProviderForBooking.emergency_response_time
+            ? `${selectedProviderForBooking.emergency_response_time} mins`
+            : "20 - 35 Minutes"),
+        providerName: selectedProviderForBooking.company_name,
+        providerPhone:
+          selectedProviderForBooking.company_phone ||
+          selectedProviderForBooking.contact_person_phone ||
+          "0800 123 4567",
+      });
+      setSelectedProviderForBooking(null);
+      setShowProvidersView(false);
       showToast("Emergency Assistance Dispatched!", "success");
+      window.scrollTo({ top: 50, behavior: "smooth" });
       return;
     } catch (err: any) {
       console.warn("Emergency booking note:", err);
       setShowPaymentModal(false);
-      setIsBookingSuccess(true);
-      showToast("Emergency Assistance Dispatched!", "success");
-      return;
+      setSelectedProviderForBooking(null);
+      showToast(err?.message || "Failed to initiate emergency payment. Please try again.", "error");
     } finally {
       setIsBookingSubmitting(false);
     }
@@ -767,8 +811,8 @@ export default function EmergencyAssistancePage() {
           <div
             onClick={() => setIsDropdownOpen((prev) => !prev)}
             className={`relative rounded-xl border cursor-pointer bg-black/50 transition flex items-center justify-between px-3.5 py-2.5 shadow-inner ${isDropdownOpen
-                ? "border-[#FAD293] ring-1 ring-[#FAD293]"
-                : "border-zinc-700/80 hover:border-zinc-500"
+              ? "border-[#FAD293] ring-1 ring-[#FAD293]"
+              : "border-zinc-700/80 hover:border-zinc-500"
               }`}
           >
             <div className="flex items-center gap-2.5 overflow-hidden flex-1 mr-1">
@@ -923,15 +967,15 @@ export default function EmergencyAssistancePage() {
                         role="button"
                         onClick={() => handleToggleService(svc.id)}
                         className={`w-full text-left px-2.5 py-2 rounded-xl transition flex items-center justify-between gap-2 text-xs group cursor-pointer select-none ${isSelected
-                            ? "bg-[#FAD293]/15 border border-[#FAD293]/50 text-white font-bold"
-                            : "hover:bg-white/5 border border-transparent text-zinc-300 hover:text-white"
+                          ? "bg-[#FAD293]/15 border border-[#FAD293]/50 text-white font-bold"
+                          : "hover:bg-white/5 border border-transparent text-zinc-300 hover:text-white"
                           }`}
                       >
                         <div className="flex items-center gap-2 truncate">
                           <div
                             className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${isSelected
-                                ? "bg-[#FAD293] border-[#FAD293] text-black shadow-sm"
-                                : "border-zinc-600 bg-black/40 group-hover:border-[#FAD293]/60"
+                              ? "bg-[#FAD293] border-[#FAD293] text-black shadow-sm"
+                              : "border-zinc-600 bg-black/40 group-hover:border-[#FAD293]/60"
                               }`}
                           >
                             {isSelected && (
@@ -1242,7 +1286,7 @@ export default function EmergencyAssistancePage() {
                           weekend_emergency_available: 1,
                           total_selected_services_price: selectedServices.reduce((acc, s) => acc + (s.price || 3000), 0),
                         };
-                        setSelectedProviderForBooking(fallbackProvider);
+                        handleOpenBookingModal(fallbackProvider);
                       }}
                       className="px-8 py-3.5 rounded-xl font-bold text-xs text-[#120d09] tracking-wider uppercase transition hover:brightness-110 active:scale-98 shadow-lg shadow-amber-500/20"
                       style={{
@@ -1282,7 +1326,7 @@ export default function EmergencyAssistancePage() {
                     const logoUrl =
                       provider.logo_full_path ||
                       (provider.logo && provider.logo !== "default.png"
-                        ? `https://mmcclub.co.uk/storage/app/public/provider/logo/${provider.logo}`
+                        ? `https://mmcclub.co.uk/backend/storage/app/public/provider/logo/${provider.logo}`
                         : null);
 
                     const images =
@@ -1436,7 +1480,7 @@ export default function EmergencyAssistancePage() {
 
                             <button
                               type="button"
-                              onClick={() => setSelectedProviderForBooking(provider)}
+                              onClick={() => handleOpenBookingModal(provider)}
                               className="px-4 py-2.5 rounded-xl font-bold text-xs text-[#120d09] uppercase tracking-wider flex items-center gap-1.5 transition hover:brightness-110 active:scale-98 shadow-md shadow-amber-500/20 cursor-pointer"
                               style={{
                                 background: "linear-gradient(135deg, #FAD293 0%, #E8AF66 40%, #D49A4C 100%)",
@@ -1493,7 +1537,7 @@ export default function EmergencyAssistancePage() {
               </div>
 
               {/* Emergency Hotline Card */}
-              <div className="rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-950/40 via-black to-[#18110b] p-4 sm:p-5 flex items-center justify-between gap-4 shadow-xl">
+              {/* <div className="rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-950/40 via-black to-[#18110b] p-4 sm:p-5 flex items-center justify-between gap-4 shadow-xl">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
                     <PhoneCall className="w-5 h-5 text-red-500" />
@@ -1517,7 +1561,7 @@ export default function EmergencyAssistancePage() {
                 >
                   Call Now
                 </a>
-              </div>
+              </div> */}
 
               {/* Core Emergency Guarantees */}
               <div className="space-y-3">
@@ -1572,13 +1616,18 @@ export default function EmergencyAssistancePage() {
           </div>
         )}
       </div>
-
       {/* ========================================================================= */}
-      {/* 4. EMERGENCY BOOKING MODAL                                                */}
+      {/* 4. EMERGENCY BOOKING CONFIRMATION MODAL (INTERMEDIATE)                    */}
       {/* ========================================================================= */}
-      {selectedProviderForBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-3xl border border-[#FAD293]/40 bg-gradient-to-b from-[#1c1611] via-[#120e0b] to-black p-6 sm:p-8 shadow-2xl space-y-5 text-white max-h-[90vh] overflow-y-auto">
+      {selectedProviderForBooking && !showPaymentModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setSelectedProviderForBooking(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-[#FAD293]/40 bg-gradient-to-b from-[#1c1611] via-[#120e0b] to-black p-6 sm:p-8 shadow-2xl space-y-5 text-white max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div>
@@ -1592,7 +1641,7 @@ export default function EmergencyAssistancePage() {
               <button
                 type="button"
                 onClick={() => setSelectedProviderForBooking(null)}
-                className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition"
+                className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1637,31 +1686,9 @@ export default function EmergencyAssistancePage() {
                       : "20 - 35 mins")}
                 </span>
               </div>
-              <div className="flex justify-between items-center pt-1 border-t border-white/10">
-                <span className="text-zinc-400">Total Service Estimate:</span>
-                <span className="font-extrabold text-[#FAD293] text-sm">
-                  £
-                  {(() => {
-                    if (selectedProviderForBooking.total_selected_services_price) {
-                      return selectedProviderForBooking.total_selected_services_price;
-                    }
-                    const matched =
-                      selectedProviderForBooking.selected_services?.filter((s) =>
-                        selectedServiceIds.includes(s.service_id)
-                      ) || [];
-                    if (matched.length > 0) {
-                      return matched.reduce(
-                        (acc, s) => acc + (s.service_price || s.min_price || 0),
-                        0
-                      );
-                    }
-                    return selectedServices.reduce((acc, s) => acc + (s.price || 3000), 0);
-                  })()}
-                </span>
-              </div>
             </div>
 
-            {/* Service Location Selection */}
+            {/* Dispatch Mode */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-zinc-300 block">
                 Dispatch Mode
@@ -1670,9 +1697,9 @@ export default function EmergencyAssistancePage() {
                 <button
                   type="button"
                   onClick={() => setBookingLocationType("customer")}
-                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${bookingLocationType === "customer"
-                      ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
-                      : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
+                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${bookingLocationType === "customer"
+                    ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
+                    : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
                     }`}
                 >
                   <Truck className="w-4 h-4 text-[#FAD293]" />
@@ -1681,9 +1708,9 @@ export default function EmergencyAssistancePage() {
                 <button
                   type="button"
                   onClick={() => setBookingLocationType("workshop")}
-                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${bookingLocationType === "workshop"
-                      ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
-                      : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
+                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${bookingLocationType === "workshop"
+                    ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
+                    : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
                     }`}
                 >
                   <Building className="w-4 h-4 text-[#FAD293]" />
@@ -1692,66 +1719,53 @@ export default function EmergencyAssistancePage() {
               </div>
             </div>
 
-            {/* Payment Method */}
+            {/* Payment Method Summary (Screenshot 3 Style) */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-zinc-300 block">
-                Payment Method
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setBookingPaymentMethod("cash_after_service")}
-                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${bookingPaymentMethod === "cash_after_service"
-                      ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
-                      : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
-                    }`}
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Pay on Completion</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBookingPaymentMethod("stripe")}
-                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${bookingPaymentMethod === "stripe"
-                      ? "border-[#FAD293] bg-[#FAD293]/15 text-white"
-                      : "border-zinc-800 bg-black/40 text-zinc-400 hover:text-white"
-                    }`}
-                >
-                  <CreditCard className="w-4 h-4 text-[#FAD293]" />
-                  <span>Online Card (Stripe)</span>
-                </button>
+              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                <CreditCard className="w-3.5 h-3.5 text-[#FAD293]" />
+                <span>Payment Method</span>
+              </div>
+              <div className="p-4 rounded-2xl border border-[#FAD293]/30 bg-[#1c1611] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span className="text-sm font-semibold text-white">
+                    Deposit (25% Advance) &amp; Full Online via Stripe
+                  </span>
+                </div>
+                <span className="bg-[#D5A054]/20 text-[#E8AF66] text-[10px] font-black px-2.5 py-1 rounded-md border border-[#D5A054]/40 uppercase tracking-wider shrink-0">
+                  Selectable
+                </span>
               </div>
             </div>
 
-            {/* Submit Booking Button */}
-            <div className="pt-2 flex items-center gap-3">
+            {/* Total Quote Amount (Screenshot 3 Style) */}
+            <div className="p-4 rounded-2xl border border-zinc-800 bg-black/60 flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Total Quote Amount
+                </span>
+                <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#D5A054]">
+                  £{totalAmountFormatted}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-[#FAD293]/10 border border-[#FAD293]/30 px-3 py-1.5 rounded-full shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#FAD293]" />
+                <span className="text-[11px] font-bold text-[#E8AF66]">25% Deposit Eligible</span>
+              </div>
+            </div>
+
+            {/* Book Button */}
+            <div className="pt-1">
               <button
                 type="button"
-                onClick={() => setSelectedProviderForBooking(null)}
-                className="w-1/3 py-3.5 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-xs font-bold transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isBookingSubmitting}
-                onClick={handleConfirmProviderBooking}
-                className="w-2/3 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider text-[#120d09] flex items-center justify-center gap-2 transition hover:brightness-110 active:scale-98 disabled:opacity-50"
+                onClick={() => setShowPaymentModal(true)}
+                className="w-full py-4 rounded-2xl font-black text-sm sm:text-base uppercase tracking-wider text-[#120d09] flex items-center justify-center gap-2.5 transition hover:brightness-110 active:scale-[0.99] shadow-xl shadow-amber-500/25 cursor-pointer"
                 style={{
                   background: "linear-gradient(135deg, #FAD293 0%, #E8AF66 40%, #D49A4C 100%)",
                 }}
               >
-                {isBookingSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#120d09]" />
-                    <span>Confirming Dispatch...</span>
-                  </>
-                ) : (
-                  <>
-                    <Siren className="w-4 h-4 text-red-600" />
-                    <span>Confirm & Dispatch</span>
-                  </>
-                )}
+                <span>Book Emergency Service</span>
+                <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -1763,13 +1777,16 @@ export default function EmergencyAssistancePage() {
       {/* ========================================================================= */}
       {showPaymentModal && selectedProviderForBooking && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-          onClick={() => setShowPaymentModal(false)}
+          className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+          onClick={handleClosePaymentModal}
         >
           <div
-            className="bg-[#141518] border border-[#FAD293]/30 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-white"
+            className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-left"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Drag Handle for Mobile */}
+            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
+
             {/* Modal Header */}
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1777,26 +1794,51 @@ export default function EmergencyAssistancePage() {
                   Select Payment Method
                 </h3>
                 <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                  Choose how you want to pay for this emergency service
+                  Choose how you want to pay for this emergency assistance service
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowPaymentModal(false)}
+                onClick={handleClosePaymentModal}
                 className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Payment Options (Deposit 25% vs Full 100%) */}
+            {/* Quick Dispatch Breakdown Summary */}
+            <div className="p-3.5 rounded-2xl bg-black/60 border border-zinc-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-400">Assigned Fleet Unit:</span>
+                <span className="font-bold text-white uppercase">{selectedProviderForBooking.company_name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-400">Vehicle / Reg:</span>
+                <span className="font-bold text-yellow-400">{carReg} {carModel ? `(${carModel})` : ""}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-400">Location:</span>
+                <span className="font-medium text-zinc-300 truncate max-w-[200px]">{locationQuery}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 border-t border-zinc-800/80">
+                <span className="text-zinc-400">Estimated Arrival:</span>
+                <span className="font-bold text-emerald-400">
+                  {selectedProviderForBooking.estimated_time ||
+                    (selectedProviderForBooking.emergency_response_time
+                      ? `${selectedProviderForBooking.emergency_response_time} mins`
+                      : "20 - 35 mins")}
+                </span>
+              </div>
+            </div>
+
+            {/* Payment Options */}
             <div className="space-y-3.5 pt-1">
               {/* Option 1: Deposit (25% Advance) */}
               <div
                 onClick={() => setIsPartialPayment(true)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -1812,18 +1854,20 @@ export default function EmergencyAssistancePage() {
                         </span>
                       </div>
                       <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay 25% deposit now to confirm booking
+                        Pay 25% deposit now to secure emergency dispatch
                       </p>
                     </div>
                   </div>
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
-                    {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    {isPartialPayment && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
                   </div>
                 </div>
 
@@ -1833,7 +1877,7 @@ export default function EmergencyAssistancePage() {
                     <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                    <span>Due after service (75%):</span>
+                    <span>Due on service completion (75%):</span>
                     <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
                   </div>
                 </div>
@@ -1843,8 +1887,8 @@ export default function EmergencyAssistancePage() {
               <div
                 onClick={() => setIsPartialPayment(false)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -1862,11 +1906,13 @@ export default function EmergencyAssistancePage() {
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
-                    {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    {!isPartialPayment && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
                   </div>
                 </div>
 
@@ -1882,11 +1928,13 @@ export default function EmergencyAssistancePage() {
               <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <span className="text-xs font-bold text-[#E8AF66] block">
-                  {isPartialPayment ? "25% Advance Payment Required" : "100% Online Secure Payment"}
+                  {isPartialPayment
+                    ? "25% Advance Payment Required"
+                    : "100% Online Secure Payment"}
                 </span>
                 <p className="text-[11px] text-zinc-300 leading-relaxed">
                   {isPartialPayment
-                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the service is completed."
+                    ? "You must pay a 25% deposit upfront to confirm your emergency dispatch. The remaining 75% will be paid once the service is completed."
                     : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
                 </p>
               </div>
@@ -1903,7 +1951,7 @@ export default function EmergencyAssistancePage() {
                 {isBookingSubmitting ? (
                   <>
                     <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                    <span>Redirecting to Stripe Gateway...</span>
+                    <span>Redirecting to Payment Gateway...</span>
                   </>
                 ) : (
                   <>

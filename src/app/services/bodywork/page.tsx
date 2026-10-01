@@ -82,6 +82,11 @@ import BodyworkProviderProfileView from "./components/BodyworkProviderProfileVie
 import BodyworkQuotesView from "./components/BodyworkQuotesView";
 import BodyworkBookingView from "./components/BodyworkBookingView";
 import { searchPlaces, type LocationSuggestion } from "@/lib/service/location.service";
+import {
+    saveServiceFormDraft,
+    getServiceFormDraft,
+    clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 export default function BodyworkPage() {
     const router = useRouter();
@@ -584,6 +589,27 @@ export default function BodyworkPage() {
         refreshQuotationRequests();
     }, []);
 
+    useEffect(() => {
+        if (isAuthenticated()) {
+            const draft = getServiceFormDraft("bodywork");
+            if (draft) {
+                if (draft.postcode) setPostcode(draft.postcode);
+                if (draft.regNo) setRegNo(draft.regNo);
+                if (draft.carModel) setCarModel(draft.carModel);
+                if (Array.isArray(draft.selectedServices) && draft.selectedServices.length > 0) {
+                    setSelectedServices(draft.selectedServices);
+                }
+                if (draft.userLat) setUserLat(draft.userLat);
+                if (draft.userLon) setUserLon(draft.userLon);
+                if (draft.step) {
+                    setHeroStep(draft.step);
+                }
+                clearServiceFormDraft("bodywork");
+                showToast("Welcome back! Your vehicle details have been restored.", "success");
+            }
+        }
+    }, []);
+
     const handleCopyAnyId = (id: string) => {
         navigator.clipboard.writeText(id);
         setCopiedAnyId(id);
@@ -592,17 +618,20 @@ export default function BodyworkPage() {
 
     const notifyNewBids = (bids: PostBidItem[], post?: CustomerQuotationPostItem | null) => {
         if (!bids || bids.length === 0) return;
-        bids.forEach((b) => {
-            const seenKey = `mmc_bid_push_${b.id}`;
-            if (typeof window !== "undefined" && !sessionStorage.getItem(seenKey)) {
-                sessionStorage.setItem(seenKey, "1");
-                const price = typeof b.offered_price === "number" ? `£${b.offered_price}` : `£${b.offered_price}`;
-                const title = `New Offer: ${price} from ${b.provider?.company_name || "Specialist"}! 🚗`;
-                const desc = b.notes || `${b.provider?.company_name || "Specialist"} sent an offer for your vehicle repair.`;
-                triggerDevicePushNotification(title, desc, `/services/bodywork?view=quotes`);
-                showToast(`New offer received: ${price} from ${b.provider?.company_name || "Specialist"}`, "info");
-            }
-        });
+        // Only notify the latest single new bid to avoid multiple notification spam
+        const latestBid = bids[0];
+        if (!latestBid) return;
+
+        const seenKey = `mmc_bid_push_${latestBid.id}`;
+        if (typeof window !== "undefined" && !localStorage.getItem(seenKey)) {
+            localStorage.setItem(seenKey, "1");
+            const price = typeof latestBid.offered_price === "number" ? `£${latestBid.offered_price}` : `£${latestBid.offered_price}`;
+            const title = `New Offer: ${price} from ${latestBid.provider?.company_name || "Specialist"}! 🚗`;
+            const desc = latestBid.notes || `${latestBid.provider?.company_name || "Specialist"} sent an offer for your vehicle repair.`;
+            triggerDevicePushNotification(title, desc, `/services/bodywork?view=quotes`, seenKey);
+            showToast(`New offer received: ${price} from ${latestBid.provider?.company_name || "Specialist"}`, "info");
+        }
+
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
         }
@@ -652,7 +681,7 @@ export default function BodyworkPage() {
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to proceed with booking", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/bodywork")}`);
             return;
         }
 
@@ -715,7 +744,7 @@ export default function BodyworkPage() {
     const handleExecuteBooking = async () => {
         if (!isAuthenticated()) {
             showToast("Please login to complete your booking", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/bodywork")}`);
             return;
         }
 
@@ -763,7 +792,7 @@ export default function BodyworkPage() {
                 callback:
                     typeof window !== "undefined"
                         ? `${window.location.origin}/booking-success`
-                        : "https://mmcclub.co.uk/booking-success",
+                        : "https://mmcclub.co.uk/backend/booking-success",
             });
 
             const responseContent: unknown = res.content;
@@ -789,7 +818,7 @@ export default function BodyworkPage() {
                     isUuidStr(res.content?.booking_id) ? res.content.booking_id :
                     null;
                 if (possibleUuid) {
-                    redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
+                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
                 }
             }
 
@@ -942,7 +971,7 @@ export default function BodyworkPage() {
     const handleSendQuoteForProviders = async (targetProviderIds: string[]) => {
         if (!isAuthenticated()) {
             showToast("Please login to submit a quote request.", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/bodywork")}`);
             return;
         }
 
@@ -1050,6 +1079,22 @@ export default function BodyworkPage() {
             return;
         }
 
+        // Require user authentication before advancing
+        if (!isAuthenticated()) {
+            saveServiceFormDraft("bodywork", {
+                postcode,
+                regNo,
+                carModel,
+                selectedServices,
+                userLat,
+                userLon,
+                step: 2,
+            });
+            showToast("Please log in to continue booking your service", "info");
+            router.push(`/login?redirect=${encodeURIComponent("/services/bodywork")}`);
+            return;
+        }
+
         setHeroStep(2);
         if (typeof window !== "undefined") {
             const card = document.getElementById("bodywork-hero-card");
@@ -1064,6 +1109,21 @@ export default function BodyworkPage() {
     // ---------------------------------------------------------------------------
     const handleFinalAssessmentSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
+
+        if (!isAuthenticated()) {
+            saveServiceFormDraft("bodywork", {
+                postcode,
+                regNo,
+                carModel,
+                selectedServices,
+                userLat,
+                userLon,
+                step: 2,
+            });
+            showToast("Please log in to continue booking your service", "info");
+            router.push(`/login?redirect=${encodeURIComponent("/services/bodywork")}`);
+            return;
+        }
 
         if (!privacyAgreed) {
             showToast("Please agree to the privacy policy to proceed", "error");

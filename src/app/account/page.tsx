@@ -7,6 +7,7 @@ import { Car, Loader2, Sparkles } from "lucide-react";
 import {
   fetchAllCustomerBookings,
   UnifiedBookingItem,
+  isFakeDummyId,
 } from "@/lib/service/bookings.api";
 import {
   getCustomerProfile,
@@ -78,16 +79,20 @@ function AccountContent() {
   }, []);
 
   // Load All Universal Bookings
-  const fetchBookings = useCallback(async () => {
+  const fetchBookings = useCallback(async (force: boolean = false) => {
     try {
       setBookingsLoading(true);
       setBookingsError("");
       const data = await fetchAllCustomerBookings({
         limit: 50,
         offset: 1,
+        forceRefresh: force === true,
       });
-      console.log("[BookingsTab] Fetched bookings count:", data.length);
-      setBookings(data);
+      const realOnly = (data || []).filter(
+        (b) => !isFakeDummyId(b.id) && !isFakeDummyId(b.rawId)
+      );
+      console.log("[BookingsTab] Fetched real bookings count:", realOnly.length);
+      setBookings(realOnly);
     } catch (err: any) {
       console.error("[BookingsTab] Failed to load customer bookings:", err?.response?.status, err?.response?.data || err?.message);
       setBookingsError(
@@ -108,6 +113,17 @@ function AccountContent() {
 
     fetchUserProfile();
     fetchBookings();
+
+    const handleSync = () => {
+      fetchBookings(true);
+    };
+    window.addEventListener("mmc-bookings-updated", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    return () => {
+      window.removeEventListener("mmc-bookings-updated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, [fetchUserProfile, fetchBookings, router]);
 
   // Logout Handler
@@ -115,6 +131,15 @@ function AccountContent() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("is_active");
+    localStorage.removeItem("mmc_confirmed_bookings");
+    localStorage.removeItem("mmc_bookings_metadata");
+    localStorage.removeItem("mmc_tyre_assistance_bookings");
+    localStorage.removeItem("mmc_active_tyre_booking_id");
+    localStorage.removeItem("mmc_known_booking_statuses");
+    localStorage.removeItem("mmc_custom_notifications");
+    try {
+      sessionStorage.removeItem("mmc_pending_booking");
+    } catch {}
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new CustomEvent("auth-change"));
     showToast("Logged out successfully.", "info");

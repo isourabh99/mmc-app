@@ -93,13 +93,57 @@ export const onForegroundMessage = async (callback: (payload: any) => void) => {
   }
 };
 
+// Persistent registry of sent push notifications to ensure 1 event = 1 notification only
+const PUSH_NOTIF_HISTORY_KEY = "mmc_pushed_notif_registry_v1";
+
+function isAlreadyPushed(key: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(PUSH_NOTIF_HISTORY_KEY);
+    const registry: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    // Prune entries older than 48 hours to prevent unbounded growth
+    Object.keys(registry).forEach((k) => {
+      if (now - registry[k] > 48 * 3600 * 1000) {
+        delete registry[k];
+      }
+    });
+    if (registry[key]) {
+      return true; // Already pushed once, reject duplicate
+    }
+    registry[key] = now;
+    localStorage.setItem(PUSH_NOTIF_HISTORY_KEY, JSON.stringify(registry));
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Reliably displays a native device push notification using Window Notification API or Service Worker.
+ * Reliably displays a native device push notification with strict single-dispatch deduplication.
  */
-export const triggerDevicePushNotification = async (title: string, body: string, url?: string) => {
+export const triggerDevicePushNotification = async (
+  title: string,
+  body: string,
+  url?: string,
+  dedupKey?: string
+) => {
   if (typeof window === "undefined") return;
 
+  // Generate unique deduplication key for this event
+  const effectiveKey = (
+    dedupKey ||
+    `${title.trim()}:${body.trim()}`
+  ).toLowerCase().replace(/\s+/g, "_");
+
+  // Prevent duplicate notifications for the same booking, quote, or offer
+  if (isAlreadyPushed(effectiveKey)) {
+    console.log("[PushNotification] Deduplicated - already pushed once:", effectiveKey);
+    return;
+  }
+
   const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
+  const notifTag = effectiveKey.slice(0, 32);
 
   // 1. Direct Window Notification API first (Instant on desktop & laptops)
   if ("Notification" in window && Notification.permission === "granted") {
@@ -108,6 +152,7 @@ export const triggerDevicePushNotification = async (title: string, body: string,
         body,
         icon: "/mmc-logo.png",
         badge: "/mmc-logo.png",
+        tag: notifTag,
       });
       notif.onclick = () => {
         window.focus();
@@ -130,6 +175,7 @@ export const triggerDevicePushNotification = async (title: string, body: string,
           body,
           icon: "/mmc-logo.png",
           badge: "/mmc-logo.png",
+          tag: notifTag,
           vibrate: [200, 100, 200],
           data: { url: targetUrl, click_action: targetUrl },
         } as any);

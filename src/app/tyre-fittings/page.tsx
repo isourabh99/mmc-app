@@ -47,7 +47,7 @@ import { BookingConfirmedStep } from "@/components/tyre-assistance/BookingConfir
 import { TyreBookingDetailsModal } from "@/components/tyre-assistance/TyreBookingDetailsModal";
 import { isAuthenticated } from "@/lib/auth.api";
 import { useToast } from "@/components/ToastProvider";
-import { saveBookingMeta } from "@/lib/service/bookings.api";
+import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
 
 type WorkflowStep =
   | "category"
@@ -185,6 +185,15 @@ export default function TyreAssistancePage() {
   const currentStepObj =
     STEP_LABELS.find((s) => s.key === currentStep) || STEP_LABELS[0];
 
+  // Track highest step reached so user can freely click back to any completed step (e.g. Step 1)
+  const [maxStepReached, setMaxStepReached] = useState<number>(1);
+
+  useEffect(() => {
+    if (currentStepObj.stepNumber > maxStepReached) {
+      setMaxStepReached(currentStepObj.stepNumber);
+    }
+  }, [currentStepObj.stepNumber, maxStepReached]);
+
   // 1. Step 1: Category Selection Handler
   const handleSelectCategory = (category: TyreCategory) => {
     setSelectedCategory(category);
@@ -259,7 +268,7 @@ export default function TyreAssistancePage() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : "https://mmcclub.co.uk/backend/booking-success";
 
       const numericFare = Number(currentBooking.quote?.fareAmount || 0);
       const depositVal = (numericFare * 0.25).toFixed(2);
@@ -268,7 +277,7 @@ export default function TyreAssistancePage() {
         is_partial: isPartial ? 1 : 0,
         payment_method: "stripe",
         payment_platform: "app",
-        callback: "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
+        callback: "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
       });
 
       const confirmedRefId =
@@ -307,6 +316,29 @@ export default function TyreAssistancePage() {
         price: numericFare,
       });
 
+      saveConfirmedBooking({
+        id: confirmedRefId,
+        rawId: confirmedRefId,
+        readableId: confirmedRefId,
+        serviceType: "tyre",
+        serviceTitle: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"} (${currentBooking.category === "emergency" ? "Emergency" : "Replacement"})`,
+        serviceCategoryName: "Tyre Assistance",
+        providerName: currentBooking.provider?.name || "MMC Tyre Specialist",
+        providerPhone: currentBooking.provider?.phone,
+        totalAmount: numericFare,
+        isPaid: false,
+        paymentStatus: isPartial ? "Partial Deposit" : "Pending Payment",
+        paymentMethod: "Stripe (Online)",
+        status: "accepted",
+        statusDisplay: "Accepted",
+        scheduleDate: currentBooking.scheduledDate || new Date().toISOString().split("T")[0],
+        scheduleTime: currentBooking.scheduledTimeSlot || "ASAP",
+        fullScheduleDisplay: `${currentBooking.scheduledDate || "Today"} ${currentBooking.scheduledTimeSlot || "ASAP"}`,
+        vehicleModel: currentBooking.vehicleMakeModel,
+        vehicleReg: currentBooking.vehicleRegistration,
+        createdAt: new Date().toISOString(),
+      });
+
       const isUuidStr = (str: any): boolean =>
         typeof str === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
@@ -321,15 +353,15 @@ export default function TyreAssistancePage() {
       const content = (updated as any)?.content;
       const possibleUuid =
         (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
-        (content && isUuidStr(content.id) ? content.id : null) ||
         (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
         (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
+        (content && isUuidStr(content.id) ? content.id : null) ||
         (isUuidStr(updated?.id) ? updated.id : null);
 
       if (!targetPaymentUrl && possibleUuid) {
-        targetPaymentUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        targetPaymentUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(possibleUuid)
-        )}`;
+        )}&is_partial=${isPartial ? 1 : 0}`;
       }
 
       // ONLY redirect if we have a valid Stripe URL and it does NOT contain MMC-TYR-
@@ -402,6 +434,7 @@ export default function TyreAssistancePage() {
     setCurrentBooking(null);
     setSelectedCategory("emergency");
     setSelectedAssistanceType("mobile_tyre");
+    setMaxStepReached(1);
     setCurrentStep("category");
     if (typeof window !== "undefined") {
       localStorage.removeItem("mmc_active_tyre_booking_id");
@@ -469,19 +502,27 @@ export default function TyreAssistancePage() {
             {STEP_LABELS.map((step) => {
               const isDone = currentStepObj.stepNumber > step.stepNumber;
               const isCurrent = currentStepObj.stepNumber === step.stepNumber;
+              const isAccessible = step.stepNumber <= maxStepReached;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={step.key}
-                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all ${isCurrent
+                  disabled={!isAccessible}
+                  onClick={() => {
+                    if (isAccessible) {
+                      setCurrentStep(step.key);
+                    }
+                  }}
+                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all text-left w-full ${isCurrent
                     ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
-                    : isDone
-                      ? "bg-white/5 border border-white/10 text-white"
-                      : "text-white/30 border border-transparent"
+                    : isAccessible
+                      ? "bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-[#FAD293]/50 cursor-pointer"
+                      : "text-white/30 border border-transparent cursor-not-allowed"
                     }`}
                 >
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isCurrent
                       ? "bg-[#FAD293] text-black"
                       : isDone
                         ? "bg-white/20 text-white"
@@ -493,10 +534,38 @@ export default function TyreAssistancePage() {
                   <span className="text-xs font-semibold truncate">
                     {step.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
+        </div>
+
+        {/* Mobile Multi-Step Progress Stepper */}
+        <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {STEP_LABELS.map((step) => {
+            const isDone = currentStepObj.stepNumber > step.stepNumber;
+            const isCurrent = currentStepObj.stepNumber === step.stepNumber;
+            const isAccessible = step.stepNumber <= maxStepReached;
+
+            return (
+              <button
+                type="button"
+                key={step.key}
+                disabled={!isAccessible}
+                onClick={() => isAccessible && setCurrentStep(step.key)}
+                className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ${
+                  isCurrent
+                    ? "bg-[#FAD293] text-black font-bold"
+                    : isAccessible
+                    ? "bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+                    : "bg-white/5 text-white/30 cursor-not-allowed"
+                }`}
+              >
+                <span>{isDone ? "✓" : step.stepNumber}</span>
+                <span>{step.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Main Content Responsive Grid (Desktop 2-Column Layout, Mobile Focused View) */}

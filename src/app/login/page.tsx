@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   sendLoginOtp,
   verifyLoginOtp,
@@ -12,19 +12,19 @@ import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
 import { getFCMToken } from "@/lib/firebase";
 
-export default function LoginPage() {
+function LoginContent() {
   const { showToast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get("redirect");
+
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendingOtp, setResendingOtp] = useState(false);
   const [countdown, setCountdown] = useState(0);
-
-  // OTP send hone ke baad true hoga
   const [otpSent, setOtpSent] = useState(false);
-
-  const router = useRouter();
 
   // Countdown timer for Resend OTP
   useEffect(() => {
@@ -153,6 +153,16 @@ export default function LoginPage() {
           String(response.content?.is_active ?? 1)
         );
 
+        // Purge any guest/stale dummy bookings from storage
+        localStorage.removeItem("mmc_confirmed_bookings");
+        localStorage.removeItem("mmc_bookings_metadata");
+        localStorage.removeItem("mmc_tyre_assistance_bookings");
+        localStorage.removeItem("mmc_active_tyre_booking_id");
+        localStorage.removeItem("mmc_custom_notifications");
+        try {
+          sessionStorage.removeItem("mmc_pending_booking");
+        } catch {}
+
         // Fetch and cache user profile immediately
         try {
           const profileRes = await getCustomerProfile();
@@ -168,7 +178,8 @@ export default function LoginPage() {
         window.dispatchEvent(new CustomEvent("auth-change"));
 
         showToast("Logged in successfully! Welcome back.", "success");
-        router.push("/account");
+        const targetUrl = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/";
+        router.push(targetUrl);
       } else {
         const msg = response?.message || "Invalid OTP";
         setError(msg);
@@ -393,5 +404,19 @@ export default function LoginPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full min-h-[calc(100vh-5rem)] flex items-center justify-center bg-[#090706] text-white">
+          <div className="w-6 h-6 border-2 border-[#E8AF66] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

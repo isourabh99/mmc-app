@@ -57,10 +57,18 @@ import {
   FALLBACK_MECHANICAL_CATEGORY_ID,
 } from "@/lib/service/mechanical.api";
 import { saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth.api";
+import {
+  saveServiceFormDraft,
+  getServiceFormDraft,
+  clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 type ActiveView = "hero" | "providers" | "booking" | "payment" | "success";
 
 export default function MechanicalPage() {
+  const router = useRouter();
   const { showToast } = useToast();
 
   // Navigation views: 'hero' | 'providers' | 'booking' | 'payment' | 'success'
@@ -222,6 +230,28 @@ export default function MechanicalPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isAuthenticated()) {
+      const draft = getServiceFormDraft("mechanical");
+      if (draft) {
+        if (draft.postcode) setPostcode(draft.postcode);
+        if (draft.regNo) setRegNo(draft.regNo);
+        if (draft.userLat) setUserLat(draft.userLat);
+        if (draft.userLon) setUserLon(draft.userLon);
+        if (draft.damageDesc) setDamageDesc(draft.damageDesc);
+        if (draft.selectedCategoryId) setSelectedCategoryId(draft.selectedCategoryId);
+        if (Array.isArray(draft.selectedServiceIds) && draft.selectedServiceIds.length > 0) {
+          setSelectedServiceIds(draft.selectedServiceIds);
+        }
+        if (draft.targetView) {
+          setView(draft.targetView as ActiveView);
+        }
+        clearServiceFormDraft("mechanical");
+        showToast("Welcome back! Your vehicle details have been restored.", "success");
+      }
+    }
+  }, []);
+
   // Google Maps Places Autocomplete setup
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -326,6 +356,22 @@ export default function MechanicalPage() {
 
     if (!selectedServiceIds.length) {
       showToast("Please select at least one mechanical service.", "error");
+      return;
+    }
+
+    if (!isAuthenticated()) {
+      saveServiceFormDraft("mechanical", {
+        postcode,
+        regNo,
+        selectedCategoryId,
+        selectedServiceIds,
+        userLat,
+        userLon,
+        damageDesc,
+        targetView: "providers",
+      });
+      showToast("Please log in to continue booking your service", "info");
+      router.push(`/login?redirect=${encodeURIComponent("/services/mechanical")}`);
       return;
     }
 
@@ -443,7 +489,7 @@ export default function MechanicalPage() {
         callback:
           typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success",
+            : "https://mmcclub.co.uk/backend/booking-success",
       };
 
       const res = await sendMechanicalBookingRequest(payload);
@@ -479,7 +525,7 @@ export default function MechanicalPage() {
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectUrl && isUuidStr(bId)) {
-        redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bId)
         )}`;
       }
@@ -499,6 +545,30 @@ export default function MechanicalPage() {
           })
         );
       } catch { }
+
+      const confirmedMecId = String(bId || `MMC-MEC-${Date.now().toString().slice(-6)}`);
+      saveConfirmedBooking({
+        id: confirmedMecId,
+        rawId: bId || confirmedMecId,
+        readableId: confirmedMecId,
+        serviceType: "mechanical",
+        serviceTitle: "Mechanical Diagnostic & Repair",
+        serviceCategoryName: "Mechanical & Garage",
+        providerName: selectedProvider?.company_name || "MMC Mechanical Partner",
+        providerPhone: selectedProvider?.company_phone,
+        totalAmount: numericPrice,
+        isPaid: false,
+        paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
+        paymentMethod: "Stripe (Online)",
+        status: "pending",
+        statusDisplay: "Pending",
+        scheduleDate: bookingDate,
+        scheduleTime: selectedSlotTime || "11:00",
+        fullScheduleDisplay: formattedSchedule,
+        vehicleModel: bookingVehicleModel.trim() || "Vehicle",
+        vehicleReg: registrationNumber.trim() || "AB24 MMC",
+        createdAt: new Date().toISOString(),
+      });
 
       if (
         redirectUrl &&

@@ -371,8 +371,8 @@ export const searchBodyworkProviders = async (
         const providersData = Array.isArray(content?.data)
           ? content.data
           : Array.isArray(content)
-          ? content
-          : [];
+            ? content
+            : [];
         if (providersData.length > 0) {
           return providersData;
         }
@@ -584,8 +584,8 @@ export const getOrCreateCustomerAddressId = async (
     const existing = Array.isArray(content)
       ? content
       : Array.isArray(content?.data)
-      ? content.data
-      : [];
+        ? content.data
+        : [];
     if (existing.length > 0 && existing[0]?.id) {
       return String(existing[0].id);
     }
@@ -668,11 +668,50 @@ export const getMyQuotationRequests = async (
 
     const postsMap = new Map<string, CustomerQuotationPostItem>();
 
+    // Extract user IDs to filter strictly for current user
+    const userIds = new Set<string>();
+    const userSavedQuoteIds = new Set<string>();
+    if (typeof window !== "undefined") {
+      try {
+        const rawUser = localStorage.getItem("user");
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          if (u.id) userIds.add(String(u.id).toLowerCase().trim());
+          if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
+          if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
+          if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
+          if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
+        }
+        const savedIds = JSON.parse(localStorage.getItem("saved_quote_post_ids") || "[]");
+        if (Array.isArray(savedIds)) {
+          savedIds.forEach((id: string) => userSavedQuoteIds.add(String(id).trim()));
+        }
+      } catch {}
+    }
+
+    const isPostOwnedByCurrentUser = (p: any): boolean => {
+      if (!p) return false;
+      const pid = String(p.id || "").trim();
+      if (userSavedQuoteIds.has(pid)) return true;
+      if (userIds.size === 0) return false;
+      const candidates = [
+        p.customer_user_id,
+        p.customer_id,
+        p.user_id,
+        p.customer?.id,
+        p.customer?.user_id,
+        p.customer?.phone,
+      ]
+        .filter(Boolean)
+        .map((x) => String(x).toLowerCase().trim());
+      return candidates.some((c) => userIds.has(c));
+    };
+
     const addPosts = (res: any) => {
       const data = res?.data?.content?.data || res?.data?.data || res?.data?.content;
       if (Array.isArray(data)) {
         data.forEach((p: any) => {
-          if (p && p.id && !postsMap.has(p.id)) {
+          if (p && p.id && !postsMap.has(p.id) && isPostOwnedByCurrentUser(p)) {
             postsMap.set(p.id, p);
           }
         });
@@ -1019,9 +1058,9 @@ export const sendBookingRequest = async (
       formData.append(
         "callback",
         params.callback ||
-          (typeof window !== "undefined"
-            ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success")
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/backend/booking-success")
       );
     }
     formData.append("is_terms_accepted", "1");
@@ -1077,7 +1116,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success");
+          : "https://mmcclub.co.uk/backend/booking-success");
     }
 
     const response = await apiClient.post<SendBookingRequestResponse>(

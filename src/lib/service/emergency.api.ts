@@ -750,7 +750,7 @@ export const bookEmergencyProvider = async (
       params.callback ||
       (typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/booking-success");
+        : "https://mmcclub.co.uk/backend/booking-success");
 
     const bookingRes = await sendEmergencyBookingRequest({
       payment_method: params.payment_method || "cash_after_service",
@@ -796,12 +796,90 @@ export const bookEmergencyProvider = async (
       typeof val === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
+    const rawBookingId = bookingContent?.booking_id;
+    const bookingUuid =
+      (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+      (typeof rawBookingId === "string" ? rawBookingId : null) ||
+      bookingContent?.id ||
+      bookingContent?.payment_id ||
+      bookingRes?.booking_id ||
+      bookingContent?.readable_id;
+
+    if (!redirectUrl && params.payment_method === "stripe" && bookingUuid) {
+      const payloadsToTry = [
+        {
+          booking_id: String(bookingUuid),
+          payment_method: "stripe",
+          is_partial: params.is_partial ?? 1,
+          payment_platform: "app",
+          callback: callbackUrl,
+        },
+        {
+          booking_id: String(bookingUuid),
+          payment_method: "stripe",
+          is_partial: params.is_partial ?? 1,
+          payment_platform: "web",
+          callback: callbackUrl,
+        },
+      ];
+
+      for (const p of payloadsToTry) {
+        if (redirectUrl) break;
+        try {
+          console.log("[EmergencyPayment] Requesting switch-payment-method:", p);
+          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
+          const sData = switchRes.data;
+          const sContent = sData?.content;
+          const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
+
+          if (typeof sContent === "string" && sContent.startsWith("http")) {
+            redirectUrl = sContent;
+            break;
+          }
+
+          const candidateUrl =
+            sRaw?.redirect_url ||
+            sRaw?.redirect_link ||
+            sRaw?.payment_url ||
+            sRaw?.url ||
+            sRaw?.link ||
+            sRaw?.stripe_url ||
+            sRaw?.data?.redirect_url ||
+            sRaw?.data?.url;
+
+          if (candidateUrl && String(candidateUrl).startsWith("http")) {
+            redirectUrl = String(candidateUrl);
+            break;
+          }
+
+          const pId = sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
+          if (pId) {
+            redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${params.is_partial ?? 1}`;
+            break;
+          }
+        } catch (switchErr: any) {
+          const errData = switchErr?.response?.data;
+          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+            redirectUrl = String(errData.content.redirect_url);
+            break;
+          }
+          console.warn("[EmergencyPayment] switch-payment-method notice:", errData?.message || switchErr.message);
+        }
+      }
+    }
+
     if (!redirectUrl && params.payment_method === "stripe") {
-      const pId = isUuid(bookingContent?.payment_id) ? bookingContent.payment_id : isUuid(bookingContent?.booking_id) ? bookingContent.booking_id : null;
+      const pId = isUuid(bookingContent?.payment_id)
+        ? bookingContent.payment_id
+        : isUuid(bookingContent?.booking_id)
+        ? bookingContent.booking_id
+        : isUuid(bookingUuid)
+        ? bookingUuid
+        : null;
       if (pId) {
-        redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(pId)
-        )}`;
+        )}&is_partial=${params.is_partial ?? 1}`;
       }
     }
 

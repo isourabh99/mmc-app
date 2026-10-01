@@ -1,5 +1,6 @@
 import apiClient from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
+import { isFakeDummyId } from "@/lib/service/bookings.api";
 
 export interface BookingNotification {
   id: string;
@@ -29,10 +30,27 @@ const READ_STORAGE_KEY = "mmc_read_notifications";
 const DISMISSED_STORAGE_KEY = "mmc_dismissed_notifications";
 const SEEN_PUSH_STORAGE_KEY = "mmc_seen_push_notifications";
 
+export function getCurrentUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      return u?.id || u?.user_id || u?.uuid || null;
+    }
+  } catch {}
+  return null;
+}
+
+function getUserStorageKey(base: string): string {
+  const uid = getCurrentUserId();
+  return uid ? `${base}_${uid}` : base;
+}
+
 function getSeenPushIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(SEEN_PUSH_STORAGE_KEY);
+    const raw = localStorage.getItem(getUserStorageKey(SEEN_PUSH_STORAGE_KEY));
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) return new Set(list);
@@ -44,7 +62,7 @@ function getSeenPushIds(): Set<string> {
 function saveSeenPushIds(ids: Set<string>) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(SEEN_PUSH_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+    localStorage.setItem(getUserStorageKey(SEEN_PUSH_STORAGE_KEY), JSON.stringify(Array.from(ids)));
   } catch (err) {}
 }
 
@@ -80,7 +98,7 @@ function formatTimeAgo(dateString: string): string {
 function getReadNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(READ_STORAGE_KEY);
+    const raw = localStorage.getItem(getUserStorageKey(READ_STORAGE_KEY));
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) return new Set(list);
@@ -97,7 +115,7 @@ function getReadNotificationIds(): Set<string> {
 function getDismissedNotificationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(DISMISSED_STORAGE_KEY);
+    const raw = localStorage.getItem(getUserStorageKey(DISMISSED_STORAGE_KEY));
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) return new Set(list);
@@ -413,29 +431,66 @@ export async function fetchBookingNotifications(): Promise<{
       timeout: 10000,
     });
 
+    // Extract current authenticated user identifiers
+    const currentUid = getCurrentUserId();
+    const userIds = new Set<string>();
+    if (currentUid) userIds.add(String(currentUid).toLowerCase().trim());
+    try {
+      const rawUser = localStorage.getItem("user");
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        if (u.id) userIds.add(String(u.id).toLowerCase().trim());
+        if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
+        if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
+        if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
+        if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
+      }
+    } catch {}
+
+    const isBookingOwnedByCurrentUser = (item: any): boolean => {
+      if (!item) return false;
+      if (isFakeDummyId(item.id || item.booking_id || item.readable_id)) return false;
+      if (userIds.size === 0) return true;
+      const bCustomerIds = [
+        item.customer_id,
+        item.user_id,
+        item.customer?.id,
+        item.customer?.user_id,
+      ]
+        .filter(Boolean)
+        .map((x) => String(x).toLowerCase().trim());
+      if (bCustomerIds.length > 0) {
+        return bCustomerIds.some((cid) => userIds.has(cid));
+      }
+      return true;
+    };
+
     if (res.data?.content) {
       const content = res.data.content;
+      const incoming: any[] = [];
 
       if (Array.isArray(content.regular_bookings?.data)) {
-        rawRegularBookings.push(...content.regular_bookings.data);
+        incoming.push(...content.regular_bookings.data);
       } else if (Array.isArray(content.regular_bookings)) {
-        rawRegularBookings.push(...content.regular_bookings);
+        incoming.push(...content.regular_bookings);
       }
 
       if (Array.isArray(content.bookings?.data)) {
-        rawRegularBookings.push(...content.bookings.data);
+        incoming.push(...content.bookings.data);
       } else if (Array.isArray(content.bookings)) {
-        rawRegularBookings.push(...content.bookings);
+        incoming.push(...content.bookings);
       }
 
       if (Array.isArray(content.data)) {
-        rawRegularBookings.push(...content.data);
+        incoming.push(...content.data);
       }
 
+      incoming.filter(isBookingOwnedByCurrentUser).forEach((b) => rawRegularBookings.push(b));
+
       if (Array.isArray(content.car_bookings?.data)) {
-        rawCarBookings.push(...content.car_bookings.data);
+        content.car_bookings.data.filter(isBookingOwnedByCurrentUser).forEach((c: any) => rawCarBookings.push(c));
       } else if (Array.isArray(content.car_bookings)) {
-        rawCarBookings.push(...content.car_bookings);
+        content.car_bookings.filter(isBookingOwnedByCurrentUser).forEach((c: any) => rawCarBookings.push(c));
       }
 
       isLive = true;
@@ -477,17 +532,67 @@ export async function fetchBookingNotifications(): Promise<{
 
   // Only use live confirmed bookings from the API
 
-  // Fetch quotes and check for received specialist bids/offers
+  // Fetch quotes and check for received specialist bids/offers for THIS logged-in user only
   const rawReceivedBids: { bid: any; post: any }[] = [];
   try {
+    // Current user's saved quote IDs
+    const userSavedQuoteIds = new Set<string>();
+    if (typeof window !== "undefined") {
+      try {
+        const savedIds = JSON.parse(
+          localStorage.getItem(getUserStorageKey("saved_quote_post_ids")) ||
+          localStorage.getItem("saved_quote_post_ids") ||
+          "[]"
+        );
+        if (Array.isArray(savedIds)) {
+          savedIds.forEach((id: string) => {
+            if (id) userSavedQuoteIds.add(String(id).trim());
+          });
+        }
+      } catch {}
+    }
+
+    const currentUid = getCurrentUserId();
+    const userIds = new Set<string>();
+    if (currentUid) userIds.add(String(currentUid).toLowerCase().trim());
+    try {
+      const rawUser = localStorage.getItem("user");
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        if (u.id) userIds.add(String(u.id).toLowerCase().trim());
+        if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
+        if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
+        if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
+        if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
+      }
+    } catch {}
+
+    const isPostOwnedByCurrentUser = (p: any): boolean => {
+      if (!p) return false;
+      const pid = String(p.id || "").trim();
+      if (userSavedQuoteIds.has(pid)) return true;
+      if (userIds.size === 0) return false;
+      const candidates = [
+        p.customer_user_id,
+        p.customer_id,
+        p.user_id,
+        p.customer?.id,
+        p.customer?.user_id,
+        p.customer?.phone,
+      ]
+        .filter(Boolean)
+        .map((x) => String(x).toLowerCase().trim());
+      return candidates.some((c) => userIds.has(c));
+    };
+
     const [quoteRes1, quoteRes2] = await Promise.all([
       apiClient.get("/customer/post", {
-        params: { limit: 10, offset: 1 },
+        params: { limit: 20, offset: 1 },
         headers: { zoneid: "a1614dbe-4732-11ee-9702-dee6e8d77be4" },
         timeout: 8000,
       }).catch(() => null),
       apiClient.get("/customer/post", {
-        params: { limit: 10, offset: 1 },
+        params: { limit: 20, offset: 1 },
         timeout: 8000,
       }).catch(() => null),
     ]);
@@ -497,7 +602,7 @@ export async function fetchBookingNotifications(): Promise<{
       const quoteData = res?.data?.content?.data || res?.data?.data || res?.data?.content;
       if (Array.isArray(quoteData)) {
         quoteData.forEach((p: any) => {
-          if (p && p.id && !postMap.has(p.id)) {
+          if (p && p.id && !postMap.has(p.id) && isPostOwnedByCurrentUser(p)) {
             postMap.set(p.id, p);
           }
         });
@@ -506,26 +611,19 @@ export async function fetchBookingNotifications(): Promise<{
     processQuoteRes(quoteRes1);
     processQuoteRes(quoteRes2);
 
-    // Also include saved quote post IDs from localStorage if available
-    if (typeof window !== "undefined") {
-      try {
-        const savedIds = JSON.parse(localStorage.getItem("saved_quote_post_ids") || "[]");
-        if (Array.isArray(savedIds)) {
-          savedIds.forEach((id: string) => {
-            if (id && !postMap.has(id)) {
-              postMap.set(id, { id, service_description: "Alloy wheel refurbishment and repair" });
-            }
-          });
-        }
-      } catch {}
-    }
+    // Also include saved quote post IDs for this user if not already fetched
+    userSavedQuoteIds.forEach((id: string) => {
+      if (!postMap.has(id)) {
+        postMap.set(id, { id, service_description: "Vehicle Service Request" });
+      }
+    });
 
     rawQuotePosts = Array.from(postMap.values());
     if (rawQuotePosts.length > 0) {
       isLive = true;
     }
 
-    // For recent active quote posts (top 6), fetch actual provider bids
+    // For active quote posts belonging strictly to this user, fetch actual provider bids
     const postsToCheck = rawQuotePosts.slice(0, 6);
     const bidsResponses = await Promise.all(
       postsToCheck.map((p) =>
@@ -545,7 +643,6 @@ export async function fetchBookingNotifications(): Promise<{
 
     bidsResponses.forEach(({ post, bids }) => {
       if (bids.length > 0) {
-        // Update post bids count dynamically
         post.bids_count = Math.max(Number(post.bids_count || 0), bids.length);
         bids.forEach((bid: any) => {
           rawReceivedBids.push({ bid, post });
@@ -558,7 +655,7 @@ export async function fetchBookingNotifications(): Promise<{
 
   const list: BookingNotification[] = [];
 
-  // Convert received specialist bid offers (Highest priority for customer)
+  // Convert received specialist bid offers (belonging strictly to this user's requests)
   rawReceivedBids.forEach(({ bid, post }) => {
     const notif = normalizeBidNotification(bid, post, readIds);
     if (!dismissedIds.has(notif.id)) {
@@ -592,10 +689,11 @@ export async function fetchBookingNotifications(): Promise<{
     }
   });
 
-  // Provider Status Transition Detection & Notification
+  // Provider Status Transition Detection & Notification (Scoped to user)
   if (typeof window !== "undefined") {
     try {
-      const knownStatusesRaw = localStorage.getItem("mmc_known_booking_statuses");
+      const statusStorageKey = getUserStorageKey("mmc_known_booking_statuses");
+      const knownStatusesRaw = localStorage.getItem(statusStorageKey);
       const knownStatuses: Record<string, string> = knownStatusesRaw ? JSON.parse(knownStatusesRaw) : {};
       let statusesUpdated = false;
 
@@ -606,7 +704,6 @@ export async function fetchBookingNotifications(): Promise<{
         const prevStatus = knownStatuses[bId];
 
         if (prevStatus && prevStatus !== currentStatus) {
-          // Status updated by provider!
           statusesUpdated = true;
           knownStatuses[bId] = currentStatus;
 
@@ -627,14 +724,12 @@ export async function fetchBookingNotifications(): Promise<{
             statusDesc = `Booking #${item.readable_id || bId} has been cancelled.`;
           }
 
-          // Trigger native device push notification immediately
           triggerDevicePushNotification(
             statusTitle,
             statusDesc,
             `/account?tab=bookings&bookingId=${bId}`
           );
 
-          // Add status update notification card
           list.unshift({
             id: `status_change_${bId}_${currentStatus}`,
             bookingId: bId,
@@ -662,39 +757,36 @@ export async function fetchBookingNotifications(): Promise<{
       });
 
       if (statusesUpdated) {
-        localStorage.setItem("mmc_known_booking_statuses", JSON.stringify(knownStatuses));
+        localStorage.setItem(statusStorageKey, JSON.stringify(knownStatuses));
       }
     } catch (e) {
       console.warn("Status change detection error:", e);
     }
   }
 
-  // Convert custom notifications (deduplicate and keep clean)
+  // Convert custom notifications (deduplicate and keep user-scoped)
   if (typeof window !== "undefined") {
     try {
-      const rawCustom = localStorage.getItem("mmc_custom_notifications");
+      const customKey = getUserStorageKey("mmc_custom_notifications");
+      const rawCustom = localStorage.getItem(customKey);
       if (rawCustom) {
         let customItems: BookingNotification[] = JSON.parse(rawCustom);
         if (Array.isArray(customItems)) {
-          // Deduplicate custom items by bookingId
           const seenBookingIds = new Set<string>();
           const deduped: BookingNotification[] = [];
           customItems.forEach((c) => {
-            const bKey = String(c.bookingId || c.id);
+            const bKey = String(c.bookingId || c.id || "");
+            if (isFakeDummyId(bKey)) return;
             if (!seenBookingIds.has(bKey)) {
               seenBookingIds.add(bKey);
               deduped.push(c);
             }
           });
 
-          // Save deduped list back to localStorage to clean up old random spam
-          if (deduped.length !== customItems.length) {
-            localStorage.setItem("mmc_custom_notifications", JSON.stringify(deduped));
-          }
+          localStorage.setItem(customKey, JSON.stringify(deduped));
 
           deduped.forEach((c) => {
             if (!dismissedIds.has(c.id)) {
-              // Don't add if already in list from live bookings
               if (!list.some((existing) => String(existing.bookingId) === String(c.bookingId))) {
                 list.push({
                   ...c,
@@ -709,16 +801,20 @@ export async function fetchBookingNotifications(): Promise<{
     } catch {}
   }
 
-  // Fire push notification for newly arrived notifications
+  // Fire push notification for newly arrived notifications (strictly at most 1 per event)
   try {
     const seenPushIds = getSeenPushIds();
     let updatedSeen = false;
-    list.slice(0, 3).forEach((n) => {
+    list.slice(0, 1).forEach((n) => {
       if (!seenPushIds.has(n.id)) {
         seenPushIds.add(n.id);
         updatedSeen = true;
-        // Native device push notification
-        triggerDevicePushNotification(n.title, n.subtitle || n.description, n.targetUrl);
+        triggerDevicePushNotification(
+          n.title,
+          n.subtitle || n.description,
+          n.targetUrl,
+          `notif_${n.id}`
+        );
       }
     });
     if (updatedSeen) {
@@ -750,7 +846,7 @@ export function markNotificationAsRead(id: string): void {
   if (typeof window === "undefined") return;
   const readIds = getReadNotificationIds();
   readIds.add(id);
-  localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(Array.from(readIds)));
+  localStorage.setItem(getUserStorageKey(READ_STORAGE_KEY), JSON.stringify(Array.from(readIds)));
   window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 }
 
@@ -761,7 +857,7 @@ export function markAllNotificationsAsRead(notifications: BookingNotification[])
   if (typeof window === "undefined") return;
   const readIds = getReadNotificationIds();
   notifications.forEach((n) => readIds.add(n.id));
-  localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(Array.from(readIds)));
+  localStorage.setItem(getUserStorageKey(READ_STORAGE_KEY), JSON.stringify(Array.from(readIds)));
   window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 }
 
@@ -772,7 +868,7 @@ export function dismissNotification(id: string): void {
   if (typeof window === "undefined") return;
   const dismissedIds = getDismissedNotificationIds();
   dismissedIds.add(id);
-  localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify(Array.from(dismissedIds)));
+  localStorage.setItem(getUserStorageKey(DISMISSED_STORAGE_KEY), JSON.stringify(Array.from(dismissedIds)));
   window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 }
 
@@ -783,7 +879,7 @@ export function clearAllNotifications(notifications: BookingNotification[]): voi
   if (typeof window === "undefined") return;
   const dismissedIds = getDismissedNotificationIds();
   notifications.forEach((n) => dismissedIds.add(n.id));
-  localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify(Array.from(dismissedIds)));
+  localStorage.setItem(getUserStorageKey(DISMISSED_STORAGE_KEY), JSON.stringify(Array.from(dismissedIds)));
   window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 }
 
@@ -806,7 +902,8 @@ export function addCustomBookingNotification(notif: {
 }): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem("mmc_custom_notifications");
+    const customKey = getUserStorageKey("mmc_custom_notifications");
+    const raw = localStorage.getItem(customKey);
     const list: BookingNotification[] = raw ? JSON.parse(raw) : [];
     const newId = `notif_pay_${notif.bookingId}_${Date.now()}`;
     const newNotif: BookingNotification = {
@@ -832,8 +929,7 @@ export function addCustomBookingNotification(notif: {
         `/account?tab=bookings&status=ongoing&bookingId=${encodeURIComponent(String(notif.bookingId))}`,
     };
     const updated = [newNotif, ...list.filter((n) => String(n.bookingId) !== String(notif.bookingId))].slice(0, 30);
-    localStorage.setItem("mmc_custom_notifications", JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
+    localStorage.setItem(customKey, JSON.stringify(updated));
   } catch (e) {
     console.warn("Could not save custom notification:", e);
   }

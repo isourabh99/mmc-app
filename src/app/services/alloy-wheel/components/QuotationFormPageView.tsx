@@ -28,6 +28,7 @@ interface QuotationFormPageViewProps {
     selectedProviders: ProviderItem[];
     allServices: AlloyServiceItem[];
     initialRegNo?: string;
+    initialCarModel?: string;
     initialDamageDesc?: string;
     initialCarImage?: File | null;
     initialCarImagePreview?: string | null;
@@ -49,6 +50,7 @@ export default function QuotationFormPageView({
     selectedProviders,
     allServices,
     initialRegNo = "",
+    initialCarModel = "",
     initialDamageDesc = "",
     initialCarImage = null,
     initialCarImagePreview = null,
@@ -59,7 +61,7 @@ export default function QuotationFormPageView({
     const router = useRouter();
 
     const [carReg, setCarReg] = useState(initialRegNo || "BD51 SMR");
-    const [carModel, setCarModel] = useState("Hyundai Creta 2022");
+    const [carModel, setCarModel] = useState(initialCarModel || "BMW 3 Series");
     const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(() => {
         return allServices.length > 0 ? [allServices[0].id] : [];
     });
@@ -126,7 +128,7 @@ export default function QuotationFormPageView({
 
         if (!isAuthenticated()) {
             setErrorMsg("Please login to submit a quotation request.");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
             return;
         }
 
