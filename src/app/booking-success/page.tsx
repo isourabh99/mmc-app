@@ -78,10 +78,6 @@ function BookingSuccessContent() {
 
     // 2. If payment is successful
     if (!isFailed) {
-      // Mark as paid in local bookings cache
-      saveBookingMeta(effectiveBookingId, { isPaid: true, paymentStatus: "paid" });
-
-      // Persist full booking object so refreshing My Bookings will never lose it
       const sched = cached?.schedule || new Date().toISOString();
       const schedParts = String(sched).split(" ");
       const rawPrice =
@@ -103,6 +99,18 @@ function BookingSuccessContent() {
                   ? "mechanical"
                   : "bodywork";
 
+      // Mark as paid in local bookings cache with full metadata
+      saveBookingMeta(effectiveBookingId, {
+        isPaid: true,
+        paymentStatus: "paid",
+        price: rawPrice,
+        serviceTitle: cached?.service_name || "Vehicle Service",
+        providerName: cached?.provider?.company_name,
+        serviceType: detectedType,
+        scheduleDate: schedParts[0] || new Date().toISOString().split("T")[0],
+        scheduleTime: schedParts[1] ? schedParts[1].slice(0, 5) : "11:00",
+      });
+
       const detectedCategory =
         detectedType === "car"
           ? "Car Hire & Rental"
@@ -122,9 +130,9 @@ function BookingSuccessContent() {
         id: String(effectiveBookingId),
         rawId: effectiveBookingId,
         serviceType: detectedType,
-        serviceTitle: cached?.service_name || "Specialist Vehicle Service",
+        serviceTitle: cached?.service_name ,
         serviceCategoryName: detectedCategory,
-        providerName: cached?.provider?.company_name || "MMC Verified Specialist",
+        providerName: cached?.provider?.company_name ,
         providerPhone: cached?.provider?.company_phone,
         totalAmount: rawPrice,
         isPaid: true,

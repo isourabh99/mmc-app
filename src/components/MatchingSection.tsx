@@ -71,7 +71,7 @@ export default function MatchingSection() {
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-cover rounded-3xl transition-transform duration-700 ease-out group-hover:scale-105"
+                className="object-fit rounded-3xl transition-transform duration-700 ease-out group-hover:scale-105"
               />
             </div>
             {/* Ambient inner border glow */}

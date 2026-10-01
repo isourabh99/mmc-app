@@ -1,9 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
+  output: "export",
   distDir: "out",
+  trailingSlash: false,
 
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
@@ -26,22 +28,6 @@ const nextConfig = {
         hostname: "**.motormatesclub.co.uk",
       },
     ],
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/services/Alloy%20Refurbishment",
-        destination: "/services/alloy-wheel",
-      },
-      {
-        source: "/services/Alloy Refurbishment",
-        destination: "/services/alloy-wheel",
-      },
-      {
-        source: "/services/alloy-refurbishment",
-        destination: "/services/alloy-wheel",
-      },
-    ];
   },
 };
 

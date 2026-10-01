@@ -141,6 +141,7 @@ export default function ModificationPage() {
     const [postcode, setPostcode] = useState("");
     const [regNo, setRegNo] = useState("");
     const [carYear, setCarYear] = useState("");
+    const [carModel, setCarModel] = useState("Custom Vehicle");
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
     const [showServicesDropdown, setShowServicesDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -157,6 +158,8 @@ export default function ModificationPage() {
     // Media upload state for Hero Form
     const [heroCarImage, setHeroCarImage] = useState<File | null>(null);
     const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
+    const [heroMediaFiles, setHeroMediaFiles] = useState<File[]>([]);
+    const [heroMediaPreviews, setHeroMediaPreviews] = useState<string[]>([]);
 
     // Multi-provider selection for RFQ quotation request
     const [selectedProviderIdsForQuote, setSelectedProviderIdsForQuote] = useState<string[]>([]);
@@ -222,13 +225,35 @@ export default function ModificationPage() {
         }
     }, []);
 
-    // Media upload handler for Hero form
-    const handleHeroImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setHeroCarImage(file);
-            setHeroImagePreview(URL.createObjectURL(file));
+    // Media upload handler for Hero form (supports multiple images)
+    const handleHeroMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        setHeroMediaFiles((prev) => [...prev, ...files]);
+        const newPreviews = files.map((file) => URL.createObjectURL(file));
+        setHeroMediaPreviews((prev) => [...prev, ...newPreviews]);
+
+        if (!heroCarImage && files[0]) {
+            setHeroCarImage(files[0]);
+            setHeroImagePreview(newPreviews[0]);
         }
+    };
+
+    const handleRemoveHeroMedia = (index: number) => {
+        setHeroMediaFiles((prev) => {
+            const updated = prev.filter((_, i) => i !== index);
+            setHeroCarImage(updated[0] || null);
+            return updated;
+        });
+        setHeroMediaPreviews((prev) => {
+            const updated = prev.filter((_, i) => i !== index);
+            setHeroImagePreview(updated[0] || null);
+            return updated;
+        });
+    };
+
+    const handleHeroImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        handleHeroMediaChange(e);
     };
 
     // Geocoding fallback if user typed manually without selecting autocomplete suggestion
@@ -349,6 +374,7 @@ export default function ModificationPage() {
                 car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
                 damage_description: formData.damageDesc || "Vehicle modification specification",
                 car_image: formData.carImage,
+                car_images: heroMediaFiles.length > 0 ? heroMediaFiles : (formData.carImage ? [formData.carImage] : undefined),
             });
 
             const newPostId = res?.content?.post_id;
@@ -811,6 +837,13 @@ export default function ModificationPage() {
             .filter(Boolean)
             .join("\n\n");
 
+        const totalBookingPrice = Number(
+            bookingBidOffer?.offered_price ||
+            bookingProviderModal?.total_selected_services_price ||
+            0
+        );
+        const depositAmount = isPartialPayment ? Math.round(totalBookingPrice * 0.2) : totalBookingPrice;
+
         try {
             const res = await sendModificationBookingRequest({
                 post_id: effectivePostId,
@@ -825,7 +858,7 @@ export default function ModificationPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                amount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || depositAmount,
+                amount: totalBookingPrice || depositAmount,
                 payment_platform: bookingPaymentMethod === "stripe" ? "app" : undefined,
                 callback:
                     bookingPaymentMethod === "stripe"
@@ -856,13 +889,9 @@ export default function ModificationPage() {
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
             if (!redirectUrl && bookingPaymentMethod === "stripe") {
-                const possibleUuid =
-                    isUuidStr(res.content?.payment_id) ? res.content.payment_id :
-                    isUuidStr(res.content?.booking_id) ? res.content.booking_id :
-                    isUuidStr(confirmedRefId) ? confirmedRefId :
-                    null;
-                if (possibleUuid) {
-                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
+                const payRef = res.content?.payment_id || res.content?.booking_id || confirmedRefId;
+                if (payRef) {
+                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(payRef))}&is_partial=${isPartialPayment ? 1 : 0}`;
                 }
             }
 
@@ -910,9 +939,7 @@ export default function ModificationPage() {
                     window.location.href = redirectUrl;
                     return;
                 } else {
-                    setBookingConfirmed(true);
-                    showToast("Modification Booking Confirmed!", "success");
-                    return;
+                    throw new Error("Unable to obtain Stripe checkout URL from payment gateway. Please try again.");
                 }
             }
 
@@ -1457,58 +1484,60 @@ export default function ModificationPage() {
                                                     <Camera className="w-3.5 h-3.5 text-[#E8AF66]" />
                                                     <span>Upload Vehicle / Build Photo (Optional)</span>
                                                 </span>
-                                                {heroCarImage && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold cursor-pointer"
-                                                    >
-                                                        Remove
-                                                    </button>
+                                                {heroMediaPreviews.length > 0 && (
+                                                    <span className="text-[11px] text-[#E8AF66] font-semibold">
+                                                        {heroMediaPreviews.length} photo{heroMediaPreviews.length > 1 ? "s" : ""} selected
+                                                    </span>
                                                 )}
                                             </div>
 
-                                            {heroImagePreview ? (
-                                                <div className="relative rounded-xl border border-zinc-700 bg-zinc-900/80 p-2 flex items-center gap-3">
-                                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-zinc-700 shrink-0 bg-black">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img
-                                                            src={heroImagePreview}
-                                                            alt="Vehicle Preview"
-                                                            className="w-full h-full object-cover"
+                                            {heroMediaPreviews.length > 0 && (
+                                                <div className="grid grid-cols-4 gap-2 pt-1">
+                                                    {heroMediaPreviews.map((preview, idx) => (
+                                                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-zinc-700 bg-black group shadow-sm">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img
+                                                                src={preview}
+                                                                alt={`Vehicle Photo ${idx + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveHeroMedia(idx)}
+                                                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 hover:bg-red-600 text-white flex items-center justify-center transition-colors cursor-pointer"
+                                                                title="Remove photo"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+
+                                                    <label className="aspect-square border border-dashed border-zinc-700 hover:border-[#E8AF66] rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-[#1B1C20]/50 hover:bg-[#1B1C20] group">
+                                                        <Upload className="w-4 h-4 text-[#E8AF66] mb-1 group-hover:scale-110 transition-transform" />
+                                                        <span className="text-[10px] text-zinc-400 font-bold group-hover:text-white">+ Add</span>
+                                                        <input
+                                                            type="file"
+                                                            multiple
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={handleHeroMediaChange}
                                                         />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1 text-xs">
-                                                        <p className="text-white font-medium truncate">{heroCarImage?.name}</p>
-                                                        <p className="text-[10px] text-zinc-400 mt-0.5">
-                                                            {heroCarImage ? (heroCarImage.size / 1024).toFixed(0) + " KB" : ""} • Attached for quote
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setHeroCarImage(null);
-                                                            setHeroImagePreview(null);
-                                                        }}
-                                                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                                    >
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </button>
+                                                    </label>
                                                 </div>
-                                            ) : (
+                                            )}
+
+                                            {heroMediaPreviews.length === 0 && (
                                                 <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-zinc-700 hover:border-[#E8AF66]/70 rounded-xl bg-[#1B1C20]/60 hover:bg-[#1B1C20] cursor-pointer transition-colors group">
                                                     <input
                                                         type="file"
+                                                        multiple
                                                         accept="image/*"
                                                         className="hidden"
-                                                        onChange={handleHeroImageChange}
+                                                        onChange={handleHeroMediaChange}
                                                     />
                                                     <CloudUpload className="w-4 h-4 text-[#E8AF66]" />
                                                     <span className="text-xs font-semibold text-zinc-300 group-hover:text-white">
-                                                        Attach vehicle / part photo
+                                                        Attach vehicle / part photos
                                                     </span>
                                                     <span className="text-[10px] text-zinc-500">(JPG, PNG)</span>
                                                 </label>

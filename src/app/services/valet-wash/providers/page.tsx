@@ -461,7 +461,7 @@ function ProvidersContent() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success";
+          : "https://mmcclub.co.uk/booking-success";
 
       const bookingRes = await sendValetBookingRequest({
         service_id: selectedServiceId,
@@ -470,7 +470,7 @@ function ProvidersContent() {
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
-        callback: "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+        callback: callbackUrl,
         service_schedule: formattedSchedule,
         service_address_id: "6",
         service_location: bookingLocationType,

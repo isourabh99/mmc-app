@@ -357,6 +357,7 @@ export interface CreateQuotationRequestParams {
   car_registration_number?: string;
   damage_description?: string;
   car_image?: File | null;
+  car_images?: File[];
 }
 
 export interface CreateQuotationResponse {
@@ -413,8 +414,24 @@ export const sendQuotationRequest = async (
   if (params.damage_description) {
     formData.append("damage_description", params.damage_description);
   }
-  if (params.car_image) {
+
+  // Handle single or multiple image uploads for admin & provider inspection
+  if (params.car_images && params.car_images.length > 0) {
+    formData.append("car_image", params.car_images[0]);
+    params.car_images.forEach((img) => {
+      formData.append("attachments[]", img);
+      formData.append("car_images[]", img);
+      formData.append("images[]", img);
+      formData.append("attachment[]", img);
+      formData.append("car_image[]", img);
+    });
+  } else if (params.car_image) {
     formData.append("car_image", params.car_image);
+    formData.append("attachments[]", params.car_image);
+    formData.append("car_images[]", params.car_image);
+    formData.append("images[]", params.car_image);
+    formData.append("attachment[]", params.car_image);
+    formData.append("car_image[]", params.car_image);
   }
 
   const zoneId = DEFAULT_ZONE_ID;
@@ -737,6 +754,7 @@ export interface SendBookingRequestParams {
   selected_slot_id?: string;
   notes?: string;
   car_image?: File | null;
+  car_images?: File[];
   answers?: BookingAnswerItem[] | Record<string, any>;
   payment_platform?: string;
   callback?: string;
@@ -1028,7 +1046,9 @@ export const sendBookingRequest = async (
       : "[Service Mode: Workshop Bay Drop-Off]";
   }
 
-  if (params.car_image) {
+  const hasImages = (params.car_images && params.car_images.length > 0) || Boolean(params.car_image);
+
+  if (hasImages || params.selected_slot_id || isOnline) {
     const formData = new FormData();
     formData.append("post_id", params.post_id);
     formData.append("provider_id", params.provider_id);
@@ -1078,6 +1098,25 @@ export const sendBookingRequest = async (
       formData.append("fcm_token", fcmToken);
     }
 
+    // Append single or multiple images
+    if (params.car_images && params.car_images.length > 0) {
+      formData.append("car_image", params.car_images[0]);
+      params.car_images.forEach((img) => {
+        formData.append("attachments[]", img);
+        formData.append("car_images[]", img);
+        formData.append("images[]", img);
+        formData.append("attachment[]", img);
+        formData.append("car_image[]", img);
+      });
+    } else if (params.car_image) {
+      formData.append("car_image", params.car_image);
+      formData.append("attachments[]", params.car_image);
+      formData.append("car_images[]", params.car_image);
+      formData.append("images[]", params.car_image);
+      formData.append("attachment[]", params.car_image);
+      formData.append("car_image[]", params.car_image);
+    }
+
     const response = await apiClient.post<SendBookingRequestResponse>(
       "/customer/booking/request/send",
       formData,
@@ -1088,7 +1127,11 @@ export const sendBookingRequest = async (
         },
       }
     );
-    return response.data;
+    const responseData = response.data;
+    if (isOnline || effectivePaymentMethod === "stripe") {
+      await resolveAlloyPaymentUrl(responseData, params, effectivePaymentMethod);
+    }
+    return responseData;
   } else {
     const fcmToken = typeof window !== "undefined" ? localStorage.getItem("fcm_token") : null;
     const payload: Record<string, any> = {
@@ -1139,6 +1182,136 @@ export const sendBookingRequest = async (
         },
       }
     );
-    return response.data;
+    const responseData = response.data;
+    if (isOnline || effectivePaymentMethod === "stripe") {
+      await resolveAlloyPaymentUrl(responseData, params, effectivePaymentMethod);
+    }
+    return responseData;
   }
 };
+
+/**
+ * Helper to ensure Stripe redirect URL is resolved for alloy wheel bookings
+ */
+async function resolveAlloyPaymentUrl(
+  responseData: SendBookingRequestResponse,
+  params: SendBookingRequestParams,
+  effectivePaymentMethod: string
+) {
+  const content = responseData?.content;
+  let redirectLink =
+    content?.redirect_link ||
+    content?.redirect_url ||
+    content?.payment_url ||
+    content?.url ||
+    content?.link ||
+    (responseData as any)?.redirect_link ||
+    (responseData as any)?.redirect_url ||
+    (responseData as any)?.payment_url ||
+    (responseData as any)?.url;
+
+  const rawBookingId = content?.booking_id;
+  const bookingUuid =
+    (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+    (typeof rawBookingId === "string" ? rawBookingId : null) ||
+    content?.id ||
+    content?.payment_id ||
+    (responseData as any)?.booking_id ||
+    content?.readable_id;
+
+  const isUuid = (val: any) =>
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+  if (!redirectLink && bookingUuid) {
+    const payloadsToTry = [
+      {
+        booking_id: String(bookingUuid),
+        payment_method: "stripe",
+        is_partial: params.is_partial ?? 0,
+        payment_platform: "app",
+        callback:
+          params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success"),
+      },
+      {
+        booking_id: String(bookingUuid),
+        payment_method: "stripe",
+        is_partial: params.is_partial ?? 0,
+        payment_platform: "web",
+        callback:
+          params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success"),
+      },
+    ];
+
+    for (const p of payloadsToTry) {
+      if (redirectLink) break;
+      try {
+        console.log("[AlloyPayment] Requesting switch-payment-method:", p);
+        const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
+        const sData = switchRes.data;
+        const sContent = sData?.content;
+        const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
+
+        if (typeof sContent === "string" && sContent.startsWith("http")) {
+          redirectLink = sContent;
+          break;
+        }
+
+        const candidateUrl =
+          sRaw?.redirect_url ||
+          sRaw?.redirect_link ||
+          sRaw?.payment_url ||
+          sRaw?.url ||
+          sRaw?.link ||
+          sRaw?.stripe_url ||
+          sRaw?.data?.redirect_url ||
+          sRaw?.data?.url;
+
+        if (candidateUrl && String(candidateUrl).startsWith("http")) {
+          redirectLink = String(candidateUrl);
+          break;
+        }
+
+        const pId =
+          sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
+        if (pId) {
+          redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+            String(pId)
+          )}&is_partial=${params.is_partial ?? 0}`;
+          break;
+        }
+      } catch (switchErr: any) {
+        const errData = switchErr?.response?.data;
+        if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+          redirectLink = String(errData.content.redirect_url);
+          break;
+        }
+        console.warn("[AlloyPayment] switch-payment-method notice:", errData?.message || switchErr.message);
+      }
+    }
+  }
+
+  // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
+  const effectiveId = bookingUuid || params.post_id;
+  if (!redirectLink && effectiveId) {
+    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+      String(effectiveId)
+    )}&is_partial=${params.is_partial ?? 0}`;
+  }
+
+  if (redirectLink) {
+    if (!responseData.content || typeof responseData.content !== "object") {
+      responseData.content = {};
+    }
+    responseData.content.redirect_link = redirectLink;
+    responseData.content.redirect_url = redirectLink;
+    responseData.content.payment_url = redirectLink;
+    responseData.content.url = redirectLink;
+  }
+}

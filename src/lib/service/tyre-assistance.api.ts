@@ -594,7 +594,11 @@ export async function sendBookingRequestToBackend(
     service_location: "customer",
     booking_type: payload.booking_type || "normal",
     selected_slot_id: (payload as any).selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-    callback: payload.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+    callback:
+      payload.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success"),
     car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
     car_model: payload.car_model || "",
     car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
@@ -1027,7 +1031,11 @@ export async function confirmQuoteAndAssignTechnician(
             payment_method: "stripe",
             is_partial: paymentOptions?.is_partial ?? 1,
             payment_platform: pPlatform,
-            callback: paymentOptions?.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+            callback:
+              paymentOptions?.callback ||
+              (typeof window !== "undefined"
+                ? `${window.location.origin}/booking-success`
+                : "https://mmcclub.co.uk/booking-success"),
           });
           const sData = switchRes.data;
           const sContent = sData?.content;

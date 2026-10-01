@@ -11,6 +11,10 @@ import {
 import { CarDetailsView } from "@/components/car-hire/CarDetailsView";
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 
+export function generateStaticParams() {
+  return [{ id: "view" }];
+}
+
 export default function CarDetailPage() {
   const params = useParams();
   const router = useRouter();

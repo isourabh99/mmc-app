@@ -210,8 +210,9 @@ export const addMechanicalToCart = async (payload: {
   quantity?: number;
   is_terms_accepted?: number;
   guest_id?: string;
+  zone_id?: string;
 }): Promise<any> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = payload.zone_id || DEFAULT_ZONE_ID;
   const guestId = payload.guest_id || getOrCreateGuestId();
 
   const response = await apiClient.post(
@@ -293,6 +294,7 @@ export const sendMechanicalBookingRequest = async (payload: {
   category_id?: string;
   payment_method: string;
   is_partial?: number | 0 | 1;
+  amount?: number;
   service_schedule: string;
   service_address_id?: string;
   service_address?: string;
@@ -306,6 +308,7 @@ export const sendMechanicalBookingRequest = async (payload: {
   answers?: Record<string, string>;
   postcode?: string;
   car_image?: File | null;
+  car_images?: File[];
   zone_id?: string;
   guest_id?: string;
   payment_platform?: string;
@@ -395,7 +398,23 @@ export const sendMechanicalBookingRequest = async (payload: {
       formData.append(`answers[${key}]`, String(value));
     });
   }
-  if (payload.car_image) formData.append("car_image", payload.car_image);
+  if (payload.car_images && payload.car_images.length > 0) {
+    formData.append("car_image", payload.car_images[0]);
+    payload.car_images.forEach((img) => {
+      formData.append("attachments[]", img);
+      formData.append("car_images[]", img);
+      formData.append("images[]", img);
+      formData.append("attachment[]", img);
+      formData.append("car_image[]", img);
+    });
+  } else if (payload.car_image) {
+    formData.append("car_image", payload.car_image);
+    formData.append("attachments[]", payload.car_image);
+    formData.append("car_images[]", payload.car_image);
+    formData.append("images[]", payload.car_image);
+    formData.append("attachment[]", payload.car_image);
+    formData.append("car_image[]", payload.car_image);
+  }
   formData.append("is_terms_accepted", "1");
   formData.append("is_provider_terms_accepted", "1");
   formData.append("terms_and_conditions", "1");

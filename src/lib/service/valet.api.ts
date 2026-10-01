@@ -165,6 +165,7 @@ export interface SendValetBookingPayload {
   car_registration_number: string;
   car_model?: string;
   car_color?: string;
+  car_manufacture_year?: string;
   special_conditions?: string;
   notes?: string;
   postcode?: string;
@@ -777,7 +778,11 @@ export const sendValetBookingRequest = async (
     service_location: "customer",
     booking_type: "normal",
     selected_slot_id: payload.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-    callback: payload.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+    callback:
+      payload.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success"),
     car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
     car_model: payload.car_model || "",
     car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
@@ -832,6 +837,11 @@ export const sendValetBookingRequest = async (
       res?.data?.booking_id ||
       content?.readable_id;
 
+    const defaultSuccessCallback =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success";
+
     if (!redirectLink && bookingUuid) {
       const payloadsToTry = [
         {
@@ -839,14 +849,14 @@ export const sendValetBookingRequest = async (
           payment_method: "stripe",
           is_partial: payload.is_partial ?? 1,
           payment_platform: "app",
-          callback: payload.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+          callback: payload.callback || defaultSuccessCallback,
         },
         {
           booking_id: String(bookingUuid),
           payment_method: "stripe",
           is_partial: payload.is_partial ?? 1,
           payment_platform: "web",
-          callback: payload.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+          callback: payload.callback || defaultSuccessCallback,
         },
       ];
 

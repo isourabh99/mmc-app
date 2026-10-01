@@ -41,6 +41,10 @@ import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput"
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
 
+export function generateStaticParams() {
+  return [{ id: "view" }];
+}
+
 export default function CarHireBookingPage() {
   const params = useParams();
   const router = useRouter();

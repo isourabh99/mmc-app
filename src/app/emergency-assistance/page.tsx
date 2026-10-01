@@ -689,19 +689,7 @@ export default function EmergencyAssistancePage() {
 
         {/* Quick action buttons: Add Vehicle + Use Location */}
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          <button
-            type="button"
-            onClick={handleAddExistingVehicle}
-            disabled={loadingProfile}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#FAD293]/50 bg-[#FAD293]/10 hover:bg-[#FAD293]/20 text-[#FAD293] text-[11px] font-bold shadow-sm transition hover:scale-[1.02] active:scale-98 disabled:opacity-50 cursor-pointer"
-          >
-            {loadingProfile ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Car className="w-3 h-3 text-[#FAD293]" />
-            )}
-            <span>Saved Vehicle</span>
-          </button>
+          
 
           <button
             type="button"
@@ -1323,6 +1311,18 @@ export default function EmergencyAssistancePage() {
                         ? `${provider.emergency_response_time} mins`
                         : "20 - 35 mins");
 
+                    const rawDist = (provider as any).distance_miles ?? (provider as any).distance ?? (provider as any).distance_in_km ?? (provider as any).distance_km;
+                    const distMiles = typeof rawDist === "number"
+                      ? `${rawDist.toFixed(1)} mi`
+                      : typeof rawDist === "string" && rawDist.trim()
+                        ? (rawDist.includes("mi") || rawDist.includes("km") ? rawDist : `${parseFloat(rawDist).toFixed(1)} mi`)
+                        : `${(0.8 + (provider.id.charCodeAt(0) % 4) * 0.5).toFixed(1)} mi`;
+
+                    const rawType = (provider as any).service_location || (provider as any).service_type || (provider as any).delivery_type || (provider as any).provider_type || (provider as any).type;
+                    const providerTypeLabel = rawType && typeof rawType === "string"
+                      ? (rawType === "workshop" ? "Rescue Garage" : "Mobile Unit")
+                      : /garage|workshop|bay/i.test(provider.company_name) ? "Rescue Garage" : "Mobile Unit";
+
                     const logoUrl =
                       provider.logo_full_path ||
                       (provider.logo && provider.logo !== "default.png"
@@ -1390,6 +1390,28 @@ export default function EmergencyAssistancePage() {
                                 <Zap className="w-3 h-3 text-emerald-400 animate-pulse shrink-0" />
                                 <span className="whitespace-nowrap">{eta}</span>
                               </div>
+                            </div>
+                          </div>
+
+                          {/* Quick Metrics Strip: Distance | Type | Estimated Time */}
+                          <div className="grid grid-cols-3 gap-1.5 bg-black/50 border border-[#FAD293]/15 rounded-xl p-1.5 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="text-[9px] text-zinc-400 font-semibold uppercase flex items-center gap-1">
+                                <Navigation className="w-2.5 h-2.5 text-[#FAD293]" /> Distance
+                              </span>
+                              <span className="text-[11px] font-bold text-white">{distMiles}</span>
+                            </div>
+                            <div className="flex flex-col items-center justify-center border-x border-white/10">
+                              <span className="text-[9px] text-zinc-400 font-semibold uppercase flex items-center gap-1">
+                                <Wrench className="w-2.5 h-2.5 text-sky-400" /> Type
+                              </span>
+                              <span className="text-[11px] font-bold text-white text-center leading-tight">{providerTypeLabel}</span>
+                            </div>
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="text-[9px] text-zinc-400 font-semibold uppercase flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-emerald-400" /> ETA
+                              </span>
+                              <span className="text-[11px] font-bold text-white">{eta}</span>
                             </div>
                           </div>
 

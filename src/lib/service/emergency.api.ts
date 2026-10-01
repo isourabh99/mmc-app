@@ -496,6 +496,7 @@ export interface SendEmergencyBookingRequestParams {
   zone_id?: string;
   guest_id?: string;
   car_image?: File | null;
+  car_images?: File[];
   answers?: Record<string, any>;
   is_partial?: number | 0 | 1;
   amount?: number;
@@ -546,7 +547,9 @@ export const sendEmergencyBookingRequest = async (
     effectiveDamageDesc = `[Service Mode: Workshop Bay Drop-Off]\n${effectiveDamageDesc}`;
   }
 
-  if (params.car_image instanceof File) {
+  const hasImages = (params.car_images && params.car_images.length > 0) || (params.car_image instanceof File);
+
+  if (hasImages) {
     const formData = new FormData();
     formData.append("payment_method", params.payment_method || "cash_after_service");
     formData.append("service_address_id", params.service_address_id || "6");
@@ -568,7 +571,23 @@ export const sendEmergencyBookingRequest = async (
     formData.append("longitude", String(params.longitude || "75.9035"));
     formData.append("zone_id", zoneId);
     formData.append("guest_id", guestId);
-    formData.append("car_image", params.car_image);
+    if (params.car_images && params.car_images.length > 0) {
+      formData.append("car_image", params.car_images[0]);
+      params.car_images.forEach((img) => {
+        formData.append("attachments[]", img);
+        formData.append("car_images[]", img);
+        formData.append("images[]", img);
+        formData.append("attachment[]", img);
+        formData.append("car_image[]", img);
+      });
+    } else if (params.car_image instanceof File) {
+      formData.append("car_image", params.car_image);
+      formData.append("attachments[]", params.car_image);
+      formData.append("car_images[]", params.car_image);
+      formData.append("images[]", params.car_image);
+      formData.append("attachment[]", params.car_image);
+      formData.append("car_image[]", params.car_image);
+    }
     if (params.is_partial !== undefined) {
       formData.append("is_partial", String(params.is_partial));
     }
@@ -669,6 +688,7 @@ export interface BookEmergencyProviderParams {
   latitude?: number | string;
   longitude?: number | string;
   car_image?: File | null;
+  car_images?: File[];
   postcode?: string;
   is_partial?: number | 0 | 1;
   amount?: number;
@@ -686,6 +706,7 @@ export const bookEmergencyProvider = async (
 ): Promise<{
   reference: string;
   booking_id?: string | number;
+  payment_id?: string;
   message: string;
   status: string;
   redirect_link?: string;
@@ -770,6 +791,7 @@ export const bookEmergencyProvider = async (
       longitude: params.longitude || "75.9035",
       zone_id: zoneId,
       car_image: params.car_image,
+      car_images: params.car_images,
       is_partial: params.is_partial,
       amount: params.amount,
       payment_platform: params.payment_method === "stripe" ? "app" : undefined,

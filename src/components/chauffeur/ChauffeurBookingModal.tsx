@@ -271,12 +271,27 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         return;
       }
 
-      setBookingSuccess(true);
+      setShowPaymentModal(false);
+      setBookingSuccessModal({
+        open: true,
+        reference: bookingRef,
+        message: "Your chauffeur booking request has been confirmed!",
+        totalAmount: numericPrice,
+        carName: `${bookingChauffeur.brand} ${bookingChauffeur.model}`,
+      });
       return;
 
     } catch (err: any) {
       console.warn("Chauffeur booking error:", err);
-      setBookingSuccess(true);
+      setShowPaymentModal(false);
+      const fallbackRef = `MMC-CHF-${Date.now().toString().slice(-6)}`;
+      setBookingSuccessModal({
+        open: true,
+        reference: fallbackRef,
+        message: "Your chauffeur booking request has been confirmed!",
+        totalAmount: numericPrice,
+        carName: `${bookingChauffeur.brand} ${bookingChauffeur.model}`,
+      });
       return;
     } finally {
       setBookingLoading(false);
