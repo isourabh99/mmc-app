@@ -5,6 +5,20 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Car, Sparkles } from "lucide-react";
 
+export function generateStaticParams() {
+  return [
+    { slug: "valet-wash" },
+    { slug: "tyre-fittings" },
+    { slug: "car-hire" },
+    { slug: "Chauffeur" },
+    { slug: "emergency-assistance" },
+    { slug: "modification" },
+    { slug: "alloy-wheel" },
+    { slug: "mechanical" },
+    { slug: "bodywork" },
+  ];
+}
+
 export default function ServiceCategorySlugPage() {
   const params = useParams();
   const router = useRouter();

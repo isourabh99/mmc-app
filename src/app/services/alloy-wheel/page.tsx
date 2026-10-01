@@ -79,7 +79,7 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/alloy.api";
-import { saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import AlloyStepHeader, { type ActiveView } from "./components/AlloyStepHeader";
 import AlloyServicesPageView from "./components/AlloyServicesPageView";
 import AlloyAssessmentPageView from "./components/AlloyAssessmentPageView";
@@ -310,6 +310,7 @@ export default function AlloyWheelPage() {
             damageDesc: string;
             serviceDesc: string;
             carImage: File | null;
+            carImages?: File[];
         },
         overrideProviderIds?: string[]
     ) => {
@@ -356,6 +357,12 @@ export default function AlloyWheelPage() {
                 .filter(Boolean)
                 .join("\n");
 
+            const allImages = (formData.carImages && formData.carImages.length > 0)
+                ? formData.carImages
+                : (heroMediaFiles.length > 0
+                    ? heroMediaFiles
+                    : (formData.carImage ? [formData.carImage] : []));
+
             const res = await sendQuotationRequest({
                 service_id: formData.selectedServiceIds[0] || "3e8b192f-c32a-4219-946f-6ce98b9a88b6",
                 service_ids: formData.selectedServiceIds,
@@ -370,7 +377,8 @@ export default function AlloyWheelPage() {
                 car_model: formData.carModel || "Vehicle 2022",
                 car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
                 damage_description: combinedDamageDesc || "Alloy wheel damage inspection",
-                car_image: formData.carImage,
+                car_image: allImages[0] || formData.carImage || heroCarImage || null,
+                car_images: allImages,
             });
 
             const newPostId = res?.content?.post_id;
@@ -448,6 +456,7 @@ export default function AlloyWheelPage() {
                 damageDesc: damageDesc || "Alloy wheel refurbishment and repair",
                 serviceDesc: selectedServices.join(", ") || "Alloy Wheel Refurbishment",
                 carImage: heroMediaFiles[0] || heroCarImage || null,
+                carImages: heroMediaFiles.length > 0 ? heroMediaFiles : (heroCarImage ? [heroCarImage] : []),
             },
             ids
         );
@@ -967,6 +976,13 @@ export default function AlloyWheelPage() {
                 answer: String(questionAnswers[q.id]),
             }));
 
+        const totalBookingPrice = Number(
+            bookingBidOffer?.offered_price ||
+            bookingProviderModal?.total_selected_services_price ||
+            0
+        );
+        const depositAmount = isPartialPayment ? Math.round(totalBookingPrice * 0.2) : totalBookingPrice;
+
         try {
             const res = await sendBookingRequest({
                 post_id: effectivePostId,
@@ -980,7 +996,7 @@ export default function AlloyWheelPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                amount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || depositAmount,
+                amount: totalBookingPrice || depositAmount,
                 payment_platform: bookingPaymentMethod === "stripe" ? "app" : undefined,
                 callback:
                     bookingPaymentMethod === "stripe"
@@ -1006,18 +1022,33 @@ export default function AlloyWheelPage() {
                 (res as any).payment_url ||
                 (typeof res.content === "string" && res.content.startsWith("http") ? res.content : null);
 
-            const isUuidStr = (str: any): boolean =>
-                typeof str === "string" &&
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
-
-            if (!redirectUrl && bookingPaymentMethod === "stripe" && isUuidStr(confirmedRefId)) {
+            if (!redirectUrl && bookingPaymentMethod === "stripe" && confirmedRefId) {
                 const payRef = confirmedRefId;
                 redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
                     String(payRef)
-                )}`;
+                )}&is_partial=${isPartialPayment ? 1 : 0}`;
             }
 
-            if (confirmedRefId && bookingPaymentMethod !== "stripe") {
+            const effectivePrice = Number(
+                bookingBidOffer?.offered_price ||
+                bookingProviderModal?.total_selected_services_price ||
+                res.content?.amount ||
+                depositAmount ||
+                0
+            );
+
+            if (confirmedRefId) {
+                saveBookingMeta(confirmedRefId, {
+                    price: effectivePrice,
+                    serviceTitle: "Alloy Wheel Refurbishment & Repair",
+                    serviceCategoryName: "Alloy Wheel Repair",
+                    serviceType: "alloy",
+                    providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    isPaid: false,
+                    paymentStatus: "Pending Payment",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                });
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
                     rawId: confirmedRefId,
@@ -1026,10 +1057,10 @@ export default function AlloyWheelPage() {
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
-                    totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
+                    totalAmount: effectivePrice,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
-                    paymentMethod: bookingPaymentMethod,
+                    paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : bookingPaymentMethod,
                     status: "accepted",
                     statusDisplay: "Accepted",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1050,9 +1081,10 @@ export default function AlloyWheelPage() {
                                 readable_id: res.content?.readable_id || confirmedRefId,
                                 provider: bookingProviderModal,
                                 schedule: formattedSchedule,
-                                price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
+                                price: effectivePrice,
                                 is_partial: isPartialPayment ? 1 : 0,
                                 deposit_amount: res.content?.amount || depositAmount,
+                                service_name: "Alloy Wheel Refurbishment & Repair",
                             })
                         );
                     } catch { }
@@ -1062,12 +1094,10 @@ export default function AlloyWheelPage() {
                         window.location.href = redirectUrl;
                         return;
                     } else {
-                        setIsPaymentModalOpen(false);
-                        setSuccessBookingId(String(confirmedRefId || `MMC-ALL-${Date.now().toString().slice(-6)}`));
-                        setIsBookingSuccessOpen(true);
-                        showToast("Alloy Wheel Booking Confirmed!", "success");
-                        return;
+                        throw new Error("Unable to obtain Stripe checkout URL from payment gateway. Please try again.");
                     }
+                } else {
+                    throw new Error("Unable to obtain Stripe checkout URL from payment gateway. Please try again.");
                 }
             }
 
@@ -1125,9 +1155,9 @@ export default function AlloyWheelPage() {
             console.error("Booking submission error:", err);
             if (bookingPaymentMethod === "stripe") {
                 const payRef = `MMC-ALL-${Date.now().toString().slice(-6)}`;
-                setIsPaymentModalOpen(false);
-                setSuccessBookingId(payRef);
-                setIsBookingSuccessOpen(true);
+                setShowPaymentSheet(false);
+                setBookingApiResult({ readable_id: payRef, booking_id: payRef });
+                setBookingConfirmed(true);
                 showToast("Alloy Wheel Booking Confirmed!", "success");
                 return;
             }

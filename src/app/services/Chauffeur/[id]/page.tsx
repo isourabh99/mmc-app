@@ -8,6 +8,10 @@ import { getCarDetails } from "@/lib/service/car.api";
 import { ChauffeurDetailsView } from "@/components/chauffeur/ChauffeurDetailsView";
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 
+export function generateStaticParams() {
+  return [{ id: "view" }];
+}
+
 export default function ChauffeurDetailPage() {
   const params = useParams();
   const chauffeurId = params?.id as string;

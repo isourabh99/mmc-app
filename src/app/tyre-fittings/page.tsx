@@ -130,18 +130,22 @@ export default function TyreAssistancePage() {
       );
     }
 
-    // Restore active booking from localStorage if in-progress
-    const existing = getActiveBooking();
-    if (existing) {
-      if (existing.status === "confirmed" || existing.status === "cancelled") {
-        // Order completed, start clean and fresh
-        setActiveBookingId(null);
-        setCurrentBooking(null);
-        setCurrentStep("category");
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("mmc_active_tyre_booking_id");
-        }
-      } else {
+    // Check if user explicitly came with resume query (?resume=true or ?booking_id=...)
+    const urlParams =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : null;
+    const shouldResume =
+      urlParams?.get("resume") === "true" ||
+      Boolean(urlParams?.get("booking_id"));
+
+    if (shouldResume) {
+      const existing = getActiveBooking();
+      if (
+        existing &&
+        existing.status !== "confirmed" &&
+        existing.status !== "cancelled"
+      ) {
         setCurrentBooking(existing);
         setSelectedCategory(existing.category);
         setSelectedAssistanceType(existing.assistanceType);
@@ -151,7 +155,17 @@ export default function TyreAssistancePage() {
         } else if (existing.status === "quote_ready") {
           setCurrentStep("provider_quote");
         }
+        return;
       }
+    }
+
+    // Default: Always start clean and fresh from Step 1 (Category selection)
+    setActiveBookingId(null);
+    setCurrentBooking(null);
+    setCurrentStep("category");
+    setMaxStepReached(1);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mmc_active_tyre_booking_id");
     }
   }, []);
 
@@ -268,7 +282,7 @@ export default function TyreAssistancePage() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success";
+          : "https://mmcclub.co.uk/booking-success";
 
       const numericFare = Number(currentBooking.quote?.fareAmount || 0);
       const depositVal = (numericFare * 0.25).toFixed(2);
@@ -277,7 +291,7 @@ export default function TyreAssistancePage() {
         is_partial: isPartial ? 1 : 0,
         payment_method: "stripe",
         payment_platform: "app",
-        callback: "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+        callback: callbackUrl,
       });
 
       const confirmedRefId =
@@ -484,8 +498,25 @@ export default function TyreAssistancePage() {
             </span>
           </div>
 
-          {/* Right Helpline */}
-          <div className="flex items-center space-x-3">
+          {/* Right Actions & Helpline */}
+          <div className="flex items-center space-x-2.5">
+            {currentStep !== "category" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBookingId(null);
+                  setCurrentBooking(null);
+                  setCurrentStep("category");
+                  setMaxStepReached(1);
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("mmc_active_tyre_booking_id");
+                  }
+                }}
+                className="text-xs text-[#FAD293] hover:text-white bg-[#FAD293]/10 hover:bg-[#FAD293]/20 border border-[#FAD293]/30 px-3 py-1 rounded-full flex items-center gap-1.5 transition cursor-pointer font-bold"
+              >
+                <span>↺ Start Over</span>
+              </button>
+            )}
             <a
               href="tel:+448001234567"
               className="text-xs text-white/80 hover:text-white bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-1.5 transition"

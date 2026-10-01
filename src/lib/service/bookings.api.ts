@@ -3,6 +3,7 @@ import apiClient from "@/lib/http/apiClient";
 export type BookingServiceType =
   | "all"
   | "chauffeur"
+  | "car"
   | "tyre"
   | "emergency"
   | "valet"
@@ -102,14 +103,30 @@ export function saveBookingMeta(
     vehicleReg?: string;
     providerName?: string;
     price?: number;
+    totalAmount?: number;
     isPaid?: boolean;
     paymentStatus?: string;
+    scheduleDate?: string;
+    scheduleTime?: string;
   }
 ) {
   if (typeof window === "undefined" || !bookingId) return;
   try {
     const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
-    existing[String(bookingId).toLowerCase().trim()] = meta;
+    const key = String(bookingId).toLowerCase().trim();
+    const prev = existing[key] || {};
+    const priceVal =
+      meta.price !== undefined
+        ? Number(meta.price)
+        : meta.totalAmount !== undefined
+        ? Number(meta.totalAmount)
+        : prev.price;
+
+    existing[key] = {
+      ...prev,
+      ...meta,
+      price: priceVal,
+    };
     localStorage.setItem("mmc_bookings_metadata", JSON.stringify(existing));
   } catch (e) {
     console.warn("Could not save booking metadata:", e);
@@ -124,7 +141,13 @@ export function getBookingMeta(bookingId: string | number) {
   try {
     const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
     const key = String(bookingId).toLowerCase().trim();
-    return existing[key] || null;
+    if (existing[key]) return existing[key];
+    for (const [k, v] of Object.entries(existing)) {
+      if (k === key || (key.length >= 6 && (k.includes(key) || key.includes(k)))) {
+        return v as any;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -162,6 +185,22 @@ export function saveConfirmedBooking(booking: any) {
     }
     const cleaned = list.filter((b) => b && !isFakeDummyId(b.id || b.rawId || b.booking_id));
     localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(cleaned.slice(0, 50)));
+
+    // Also auto-sync to mmc_bookings_metadata
+    saveBookingMeta(bId, {
+      serviceTitle: booking.serviceTitle,
+      serviceCategoryName: booking.serviceCategoryName,
+      serviceType: booking.serviceType,
+      vehicleModel: booking.vehicleModel,
+      vehicleReg: booking.vehicleReg,
+      providerName: booking.providerName,
+      price: Number(booking.totalAmount || booking.price || 0),
+      isPaid: booking.isPaid,
+      paymentStatus: booking.paymentStatus,
+      scheduleDate: booking.scheduleDate,
+      scheduleTime: booking.scheduleTime,
+    });
+
     window.dispatchEvent(new CustomEvent("mmc-bookings-updated"));
   } catch (err) {
     console.warn("Could not save confirmed booking locally:", err);
@@ -371,8 +410,77 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   const rawId = raw.booking_id || raw.id || raw.readable_id || `MMC-${Date.now()}`;
   const idStr = String(raw.booking_id || raw.id || raw.readable_id || rawId);
 
+  // Retrieve cached local metadata or confirmed booking records for this item
+  const localIdCandidates = [
+    idStr,
+    String(rawId),
+    raw.readable_id ? String(raw.readable_id) : "",
+    raw.booking_id ? String(raw.booking_id) : "",
+    raw.id ? String(raw.id) : "",
+    raw.post_id ? String(raw.post_id) : "",
+  ]
+    .filter(Boolean)
+    .map((s) => s.toLowerCase().trim());
+
+  let meta: any = null;
+  let localConfirmed: any = null;
+  let pendingSession: any = null;
+
+  if (typeof window !== "undefined") {
+    // 1. Check mmc_bookings_metadata
+    for (const key of localIdCandidates) {
+      const m = getBookingMeta(key);
+      if (m) {
+        meta = m;
+        break;
+      }
+    }
+
+    // 2. Check mmc_confirmed_bookings
+    try {
+      const rawConfirmed = localStorage.getItem("mmc_confirmed_bookings");
+      if (rawConfirmed) {
+        const list: any[] = JSON.parse(rawConfirmed);
+        localConfirmed = list.find((b: any) => {
+          if (!b) return false;
+          const bCandidates = [
+            b.id,
+            b.rawId,
+            b.readableId,
+            b.booking_id,
+            b.post_id,
+          ]
+            .filter(Boolean)
+            .map((s: any) => String(s).toLowerCase().trim());
+          return localIdCandidates.some((c) => bCandidates.includes(c));
+        });
+      }
+    } catch {}
+
+    // 3. Check mmc_pending_booking in sessionStorage
+    try {
+      const rawPending = sessionStorage.getItem("mmc_pending_booking");
+      if (rawPending) {
+        const p = JSON.parse(rawPending);
+        if (p) {
+          const pCandidates = [
+            p.booking_id,
+            p.readable_id,
+            p.id,
+            p.post_id,
+          ]
+            .filter(Boolean)
+            .map((s: any) => String(s).toLowerCase().trim());
+          if (localIdCandidates.some((c) => pCandidates.includes(c))) {
+            pendingSession = p;
+          }
+        }
+      }
+    } catch {}
+  }
+
   // Status mapping
-  const rawStatus = (raw.booking_status || raw.status || "pending").toLowerCase();
+  const rawStatus = (raw.booking_status || raw.status || localConfirmed?.status || "pending").toLowerCase();
   let status: "pending" | "accepted" | "ongoing" | "completed" | "canceled" = "pending";
   if (["completed", "delivered", "done"].includes(rawStatus)) status = "completed";
   else if (["accepted", "confirmed", "assigned"].includes(rawStatus)) status = "accepted";
@@ -382,15 +490,10 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
 
   const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
 
-  // Payment info — correctly handle partial payments
-  // The API sets is_paid=1 even for deposits/partial payments.
-  // We must check due_amount: if it is > 0, the booking is NOT fully paid.
+  // Payment info — correctly handle partial payments & local confirmed payment flags
   const rawDueAmount = raw.due_amount !== undefined ? Number(raw.due_amount) : undefined;
   const rawPaidAmount = raw.paid_amount !== undefined ? Number(raw.paid_amount) : undefined;
 
-  // Fully paid only if:
-  // (a) is_paid===1 AND due_amount is 0 or absent
-  // (b) payment_status === "paid" AND due_amount is 0 or absent
   const hasDueRemaining = rawDueAmount !== undefined && rawDueAmount > 0;
 
   const isPaid = !hasDueRemaining && Boolean(
@@ -398,6 +501,8 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     raw.is_paid === "1" ||
     raw.is_paid === true ||
     raw.payment_status === "paid" ||
+    meta?.isPaid === true ||
+    localConfirmed?.isPaid === true ||
     (rawDueAmount !== undefined && rawDueAmount <= 0 && (rawPaidAmount !== undefined && rawPaidAmount > 0))
   );
 
@@ -406,24 +511,68 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     hasDueRemaining && (
       (rawPaidAmount !== undefined && rawPaidAmount > 0) ||
       raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true ||
-      raw.is_partial === 1 || raw.is_partial === "1"
+      raw.is_partial === 1 || raw.is_partial === "1" ||
+      localConfirmed?.isPartiallyPaid
     )
   );
 
   const paymentStatus = isPaid ? "Paid" : isPartiallyPaid ? "Partially Paid" : "Pending Payment";
   let paymentMethod = "Online (Stripe)";
-  if (raw.payment_method) {
-    const cleanMethod = String(raw.payment_method).replace(/_/g, " ");
+  if (raw.payment_method || localConfirmed?.paymentMethod) {
+    const cleanMethod = String(raw.payment_method || localConfirmed?.paymentMethod).replace(/_/g, " ");
     paymentMethod = /cash/i.test(cleanMethod) ? "Online Payment" : cleanMethod;
   }
 
-  // Total Amount
-  const totalAmount = Number(
-    raw.total_booking_amount ?? raw.total_amount ?? raw.price ?? raw.service_cost ?? raw.selectedTyrePrice ?? 0
-  );
+  // Calculate detail items sum if detail array exists
+  const rawDueSum = Number(raw.paid_amount || 0) + Number(raw.due_amount || 0);
+  const detailSum = Array.isArray(raw.detail)
+    ? raw.detail.reduce((sum: number, d: any) => {
+        const cost = Number(d.total_cost || d.service_cost || 0);
+        const qty = Number(d.quantity || 1);
+        return sum + (d.total_cost ? cost : cost * qty);
+      }, 0)
+    : 0;
+
+  // Resolve total amount from all possible candidates with priority
+  const rawCandidatePrices = [
+    raw.total_booking_amount,
+    raw.total_amount,
+    raw.booking_amount,
+    raw.offered_price,
+    raw.bid?.offered_price,
+    raw.bids?.[0]?.offered_price,
+    raw.post?.bids?.[0]?.offered_price,
+    raw.post_bid?.offered_price,
+    raw.price,
+    raw.service_cost,
+    raw.amount,
+    raw.selectedTyrePrice,
+    rawDueSum > 0 ? rawDueSum : null,
+    detailSum > 0 ? detailSum : null,
+    meta?.price,
+    meta?.totalAmount,
+    localConfirmed?.totalAmount,
+    localConfirmed?.price,
+    pendingSession?.price,
+    pendingSession?.deposit_amount,
+  ];
+
+  let resolvedPrice = 0;
+  for (const p of rawCandidatePrices) {
+    if (p !== undefined && p !== null && p !== "") {
+      const num = typeof p === "number" ? p : parseFloat(String(p));
+      if (!isNaN(num) && num > 0) {
+        resolvedPrice = num;
+        break;
+      }
+    }
+  }
+  const totalAmount = resolvedPrice;
 
   // Parse Raw Address Object for contact & coordinates
-  const rawAddressObj = parseJsonIfString(raw.service_address || raw.service_address_location || raw.delivery_address);
+  const rawAddressObj = parseJsonIfString(
+    raw.service_address || raw.service_address_location || raw.delivery_address || localConfirmed?.serviceAddress
+  );
 
   // Clean Locations
   const serviceAddress =
@@ -431,18 +580,21 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     extractReadableAddress(raw.service_address_location) ||
     extractReadableAddress(raw.delivery_address) ||
     extractReadableAddress(raw.locationAddress) ||
+    localConfirmed?.serviceAddress ||
     "";
 
   const pickupLocation =
     extractReadableAddress(raw.pickup_location) ||
     extractReadableAddress(raw.delivery_address) ||
     serviceAddress ||
+    localConfirmed?.pickupLocation ||
     "";
 
-  const destinationLocation = extractReadableAddress(raw.drop_location) || "";
+  const destinationLocation = extractReadableAddress(raw.drop_location) || localConfirmed?.destinationLocation || "";
   const postcode =
     raw.postcode ||
     raw.locationPostcode ||
+    localConfirmed?.postcode ||
     (typeof rawAddressObj === "object" ? rawAddressObj?.zip_code || rawAddressObj?.postcode : "") ||
     "";
 
@@ -461,12 +613,21 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
         : "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80");
   } else {
     // 1. Check local metadata store
-    const meta = getBookingMeta(idStr) || getBookingMeta(String(rawId));
     if (meta?.serviceTitle) {
       serviceTitle = meta.serviceTitle;
     }
 
-    // 2. Check detail items array from backend
+    // 2. Check local confirmed booking
+    if (!serviceTitle && localConfirmed?.serviceTitle) {
+      serviceTitle = localConfirmed.serviceTitle;
+    }
+
+    // 3. Check pending session
+    if (!serviceTitle && (pendingSession?.service_name || pendingSession?.serviceTitle)) {
+      serviceTitle = pendingSession.service_name || pendingSession.serviceTitle;
+    }
+
+    // 4. Check detail items array from backend
     if (!serviceTitle && raw.detail && Array.isArray(raw.detail) && raw.detail.length > 0) {
       const firstDetail = raw.detail[0];
       const name = firstDetail.service_name || firstDetail.service?.name;
@@ -478,18 +639,22 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
       image = firstDetail.service?.thumbnail_full_path || firstDetail.service?.cover_image_full_path || "";
     }
 
-    // 3. Check direct API fields
+    // 5. Check direct API fields
     if (!serviceTitle) {
       serviceTitle =
         raw.service_name ||
         raw.service?.name ||
         raw.serviceTitle ||
         raw.serviceName ||
+        raw.post?.service_description ||
+        raw.post?.damage_description ||
+        raw.service_description ||
+        raw.damage_description ||
         raw.sub_category?.name ||
         raw.category?.name;
     }
 
-    // 4. Extract from special_conditions, notes, damage_description tags
+    // 6. Extract from special_conditions, notes, damage_description tags
     if (!serviceTitle) {
       const combinedText = [
         raw.special_conditions,
@@ -524,7 +689,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
       }
     }
 
-    // 5. Provider-based intelligence (e.g. TATA ROHIT is a Valet provider)
+    // 7. Provider-based intelligence
     if (!serviceTitle && raw.provider?.company_name) {
       const pName = raw.provider.company_name.toLowerCase();
       if (pName.includes("rohit") || pName.includes("valet") || pName.includes("wash") || pName.includes("detail")) {
@@ -532,19 +697,19 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
       }
     }
 
-    // 6. Category-based fallback (Never use generic car model string as service title)
+    // 8. Category-based fallback
     if (!serviceTitle) {
       serviceTitle = getServiceCategoryLabel(serviceType);
     }
 
     // Clean Subtitle
-    let rawNotesStr = cleanReadableText(raw.notes || raw.instructions || raw.special_conditions);
+    let rawNotesStr = cleanReadableText(raw.notes || raw.instructions || raw.special_conditions || localConfirmed?.notes);
     if (rawNotesStr.startsWith("[")) {
       rawNotesStr = rawNotesStr.replace(/^\[[^\]]+\]\s*/, "");
     }
     serviceSubtitle = rawNotesStr || (raw.car_registration_number ? `Vehicle: ${raw.car_registration_number}` : "");
     if (!image) {
-      image = raw.category?.image_full_path || raw.image || "";
+      image = raw.category?.image_full_path || raw.image || localConfirmed?.image || "";
     }
   }
 
@@ -554,11 +719,11 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   let scheduleEndDate = "";
   let scheduleEndTime = "";
 
-  if (raw.service_schedule) {
+  if (raw.service_schedule && String(raw.service_schedule).toLowerCase() !== "null") {
     const parts = String(raw.service_schedule).split(" ");
     scheduleDate = parts[0] || "";
     scheduleTime = parts[1] ? parts[1].slice(0, 5) : "";
-  } else if (raw.start_date) {
+  } else if (raw.start_date && String(raw.start_date).toLowerCase() !== "null") {
     scheduleDate = raw.start_date;
     scheduleTime = raw.pickup_time || "";
     scheduleEndDate = raw.end_date || "";
@@ -566,8 +731,15 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   } else if (raw.scheduledDate) {
     scheduleDate = raw.scheduledDate;
     scheduleTime = raw.scheduledTimeSlot || "";
-  } else if (raw.created_at) {
-    scheduleDate = String(raw.created_at).split("T")[0] || String(raw.created_at).split(" ")[0];
+  } else if (meta?.scheduleDate || localConfirmed?.scheduleDate) {
+    scheduleDate = meta?.scheduleDate || localConfirmed?.scheduleDate;
+    scheduleTime = meta?.scheduleTime || localConfirmed?.scheduleTime || "";
+  } else if (pendingSession?.schedule) {
+    const parts = String(pendingSession.schedule).split(" ");
+    scheduleDate = parts[0] || "";
+    scheduleTime = parts[1] ? parts[1].slice(0, 5) : "";
+  } else if (raw.created_at || raw.createdAt) {
+    scheduleDate = String(raw.created_at || raw.createdAt).split("T")[0] || String(raw.created_at || raw.createdAt).split(" ")[0];
   }
 
   const fullScheduleDisplay = scheduleEndDate && scheduleEndDate !== scheduleDate
@@ -580,26 +752,28 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
       raw.pickup_coordinates?.latitude ||
       raw.latitude ||
       raw.delivery_latitude ||
+      localConfirmed?.coordinates?.latitude ||
       (typeof rawAddressObj === "object" ? rawAddressObj?.lat || rawAddressObj?.latitude : undefined),
     longitude:
       raw.pickup_coordinates?.longitude ||
       raw.longitude ||
       raw.delivery_longitude ||
+      localConfirmed?.coordinates?.longitude ||
       (typeof rawAddressObj === "object" ? rawAddressObj?.lon || rawAddressObj?.longitude : undefined),
   };
 
   const destinationCoordinates = {
-    latitude: raw.drop_coordinates?.latitude,
-    longitude: raw.drop_coordinates?.longitude,
+    latitude: raw.drop_coordinates?.latitude || localConfirmed?.destinationCoordinates?.latitude,
+    longitude: raw.drop_coordinates?.longitude || localConfirmed?.destinationCoordinates?.longitude,
   };
 
   // Vehicle info
-  const vehicleReg = raw.car_registration_number || raw.vehicleRegistration || raw.car?.registration_number || raw.vehicleReg;
-  const vehicleModel = raw.car_model || raw.vehicleMakeModel || (raw.car ? `${raw.car.brand} ${raw.car.model}` : "");
+  const vehicleReg = raw.car_registration_number || raw.vehicleRegistration || raw.car?.registration_number || raw.vehicleReg || meta?.vehicleReg || localConfirmed?.vehicleReg;
+  const vehicleModel = raw.car_model || raw.vehicleMakeModel || (raw.car ? `${raw.car.brand} ${raw.car.model}` : "") || meta?.vehicleModel || localConfirmed?.vehicleModel;
 
   // Provider info
-  const providerName = raw.provider?.company_name || raw.car?.provider?.company_name;
-  const providerPhone = raw.provider?.company_phone || raw.car?.provider?.company_phone;
+  const providerName = raw.provider?.company_name || raw.car?.provider?.company_name || meta?.providerName || localConfirmed?.providerName || pendingSession?.provider?.company_name;
+  const providerPhone = raw.provider?.company_phone || raw.car?.provider?.company_phone || localConfirmed?.providerPhone || pendingSession?.provider?.company_phone;
 
   // Serviceman
   const servicemanName = raw.serviceman?.user
@@ -743,12 +917,37 @@ export async function fetchAllCustomerBookings(
   }
 
   /**
-   * Add a raw booking item to the unified map (avoids duplicates)
-   */
+   * Add a raw booking item to the unified map (avoids duplicates    */
   function addToMap(item: any, hintType?: BookingServiceType) {
     if (!item) return;
     const norm = normalizeBooking(item, hintType);
-    unifiedMap.set(norm.id, norm);
+    const key = norm.id.toLowerCase().trim();
+
+    if (unifiedMap.has(key)) {
+      const existing = unifiedMap.get(key)!;
+      // Merge best fields: never lose price or title if current is better
+      const bestAmount = norm.totalAmount > 0 ? norm.totalAmount : existing.totalAmount;
+      const bestTitle =
+        norm.serviceTitle && norm.serviceTitle !== "Specialist Vehicle Service"
+          ? norm.serviceTitle
+          : existing.serviceTitle;
+      const bestPaid = norm.isPaid || existing.isPaid;
+      const bestProvider = norm.providerName || existing.providerName;
+      const bestSchedule = norm.scheduleDate || existing.scheduleDate;
+
+      unifiedMap.set(key, {
+        ...existing,
+        ...norm,
+        totalAmount: bestAmount,
+        serviceTitle: bestTitle,
+        isPaid: bestPaid,
+        providerName: bestProvider,
+        scheduleDate: bestSchedule,
+        paidAmount: bestPaid ? bestAmount : norm.paidAmount > 0 ? norm.paidAmount : existing.paidAmount,
+      });
+    } else {
+      unifiedMap.set(key, norm);
+    }
   }
 
   // Strategy 1: Single call with booking_status=all (most efficient, avoids 429)
@@ -800,7 +999,7 @@ export async function fetchAllCustomerBookings(
     console.warn("[Bookings] car fetch failed:", err?.response?.status || err?.message);
   }
 
-  // Read locally saved bookings as fallback
+  // Read locally saved bookings to merge or backfill any missing items
   if (typeof window !== "undefined") {
     try {
       const localRaw = localStorage.getItem("mmc_confirmed_bookings");
@@ -808,7 +1007,7 @@ export async function fetchAllCustomerBookings(
         const localList: any[] = JSON.parse(localRaw);
         localList.forEach((b: any) => {
           const bId = String(b.id || b.rawId || "").trim();
-          if (bId && !isFakeDummyId(bId) && !unifiedMap.has(bId.toLowerCase())) {
+          if (bId && !isFakeDummyId(bId)) {
             addToMap({ ...b, ...(b.raw || {}) });
           }
         });
@@ -822,7 +1021,7 @@ export async function fetchAllCustomerBookings(
       if (pendingRaw) {
         const pending = JSON.parse(pendingRaw);
         const pId = String(pending.booking_id || pending.readable_id || "").trim();
-        if (pId && !isFakeDummyId(pId) && !unifiedMap.has(pId.toLowerCase())) {
+        if (pId && !isFakeDummyId(pId)) {
           addToMap(pending);
         }
       }
@@ -837,6 +1036,6 @@ export async function fetchAllCustomerBookings(
     return dateB - dateA;
   });
 
-  console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status})`));
+  console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status}, £${b.totalAmount})`));
   return allList;
 }

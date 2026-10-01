@@ -75,7 +75,7 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/bodywork.api";
-import { saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import BodyworkStepHeader, { type ActiveView } from "./components/BodyworkStepHeader";
 import BodyworkTechniciansView from "./components/BodyworkTechniciansView";
 import BodyworkProviderProfileView from "./components/BodyworkProviderProfileView";
@@ -773,6 +773,12 @@ export default function BodyworkPage() {
 
         const isStripe = bookingPaymentMethod === "stripe" || bookingPaymentMethod === "online";
         const effectiveIsPartial = isStripe ? (isPartialPayment ? 1 : 0) : 0;
+        const totalBookingPrice = Number(
+            bookingBidOffer?.offered_price ||
+            bookingProviderModal?.total_selected_services_price ||
+            0
+        );
+        const depositAmount = effectiveIsPartial ? Math.round(totalBookingPrice * 0.2) : totalBookingPrice;
 
         try {
             const res = await sendBookingRequest({
@@ -787,7 +793,7 @@ export default function BodyworkPage() {
                 service_address_id: serviceAddressId || "6",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
-                amount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || depositAmount,
+                amount: totalBookingPrice || depositAmount,
                 payment_platform: "app",
                 callback:
                     typeof window !== "undefined"
@@ -795,35 +801,58 @@ export default function BodyworkPage() {
                         : "https://mmcclub.co.uk/backend/booking-success",
             });
 
-            const responseContent: unknown = res.content;
+            const responseContent: any = res.content || {};
             let redirectUrl =
-                res.content?.url ||
-                res.content?.redirect_link ||
-                res.content?.redirect_url ||
-                res.content?.payment_url ||
-                res.content?.link ||
-                res.content?.payment_link ||
+                responseContent.url ||
+                responseContent.redirect_link ||
+                responseContent.redirect_url ||
+                responseContent.payment_url ||
+                responseContent.link ||
+                responseContent.payment_link ||
                 (res as any)?.url ||
                 (res as any)?.redirect_link ||
                 (res as any)?.redirect_url ||
-                (typeof responseContent === "string" && responseContent.startsWith("http") ? responseContent : null);
+                (typeof res?.content === "string" && (res.content as string).startsWith("http") ? (res.content as string) : null);
 
-            const isUuidStr = (str: any): boolean =>
-                typeof str === "string" &&
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+            const rawBookingId = responseContent.booking_id;
+            const bookingUuid =
+                (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+                (typeof rawBookingId === "string" ? rawBookingId : null) ||
+                responseContent.id ||
+                responseContent.payment_id ||
+                (res as any)?.booking_id ||
+                responseContent.readable_id ||
+                effectivePostId ||
+                bookingBidOffer?.id ||
+                bookingProviderModal?.id;
 
-            if (!redirectUrl && isStripe) {
-                const possibleUuid =
-                    isUuidStr(res.content?.payment_id) ? res.content.payment_id :
-                    isUuidStr(res.content?.booking_id) ? res.content.booking_id :
-                    null;
-                if (possibleUuid) {
-                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
-                }
+            if (!redirectUrl && isStripe && bookingUuid) {
+                redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+                    String(bookingUuid)
+                )}&is_partial=${effectiveIsPartial}`;
             }
 
-            const confirmedRefId = res.content?.readable_id || res.content?.booking_id;
-            if (confirmedRefId && !isStripe) {
+            const confirmedRefId = responseContent.readable_id || responseContent.booking_id || bookingUuid;
+            const effectivePrice = Number(
+                bookingBidOffer?.offered_price ||
+                bookingProviderModal?.total_selected_services_price ||
+                responseContent?.amount ||
+                depositAmount ||
+                0
+            );
+
+            if (confirmedRefId) {
+                saveBookingMeta(confirmedRefId, {
+                    price: effectivePrice,
+                    serviceTitle: "Bodywork & Paint Repair",
+                    serviceCategoryName: "Bodywork & Paint",
+                    serviceType: "bodywork",
+                    providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    isPaid: false,
+                    paymentStatus: "Pending Payment",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                });
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
                     rawId: confirmedRefId,
@@ -832,10 +861,10 @@ export default function BodyworkPage() {
                     serviceTitle: "Bodywork & Paint Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
-                    totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
+                    totalAmount: effectivePrice,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
-                    paymentMethod: bookingPaymentMethod,
+                    paymentMethod: isStripe ? "Online (Stripe)" : bookingPaymentMethod,
                     status: "accepted",
                     statusDisplay: "Accepted",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -845,30 +874,35 @@ export default function BodyworkPage() {
                 });
             }
 
-            if (isStripe && redirectUrl && redirectUrl.startsWith("http") && !redirectUrl.includes("payment_id=MMC-")) {
-                try {
-                    sessionStorage.setItem(
-                        "mmc_pending_booking",
-                        JSON.stringify({
-                            booking_id: res.content?.booking_id || confirmedRefId,
-                            readable_id: res.content?.readable_id || confirmedRefId,
-                            provider: bookingProviderModal,
-                            schedule: formattedSchedule,
-                            price: bookingBidOffer?.offered_price || bookingProviderModal.total_selected_services_price,
-                            is_partial: effectiveIsPartial,
-                            deposit_amount: res.content?.amount || depositAmount,
-                        })
-                    );
-                } catch { }
+            if (isStripe) {
+                if (redirectUrl && String(redirectUrl).startsWith("http")) {
+                    try {
+                        sessionStorage.setItem(
+                            "mmc_pending_booking",
+                            JSON.stringify({
+                                booking_id: responseContent.booking_id || confirmedRefId,
+                                readable_id: responseContent.readable_id || confirmedRefId,
+                                provider: bookingProviderModal,
+                                schedule: formattedSchedule,
+                                price: effectivePrice,
+                                is_partial: effectiveIsPartial,
+                                deposit_amount: responseContent.amount || depositAmount,
+                                service_name: "Bodywork & Paint Repair",
+                            })
+                        );
+                    } catch { }
 
-                showToast("Redirecting to Stripe secure checkout...", "info");
-                window.location.href = redirectUrl;
-                return;
+                    showToast("Redirecting to Stripe secure checkout...", "info");
+                    window.location.href = redirectUrl;
+                    return;
+                } else {
+                    throw new Error("Unable to obtain Stripe checkout URL from payment gateway. Please try again.");
+                }
             }
 
             setBookingApiResult(res.content || res);
             setBookingConfirmed(true);
-            const refId = res.content?.readable_id || res.content?.booking_id || confirmedRefId;
+            const refId = responseContent.readable_id || responseContent.booking_id || confirmedRefId;
             showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
 
             triggerDevicePushNotification(
@@ -876,13 +910,7 @@ export default function BodyworkPage() {
                 `Your appointment #${refId || "Reserved"} with ${bookingProviderModal?.company_name || "your specialist"} is confirmed!`
             );
         } catch (err: any) {
-            console.warn("Bodywork booking error:", err);
-            if (isStripe) {
-                const payRef = `MMC-BDY-${Date.now().toString().slice(-6)}`;
-                setBookingConfirmed(true);
-                showToast(`Booking Placed successfully! Ref: #${payRef}`, "success");
-                return;
-            }
+            console.error("Bodywork booking error:", err);
             const apiMsg = err?.response?.data?.errors || err?.response?.data?.message || err?.message || "Booking request failed";
             const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
             setBookingError(formattedMsg);
@@ -1357,7 +1385,7 @@ export default function BodyworkPage() {
                             <div className="lg:col-span-5">
                                 <div
                                     id="bodywork-hero-card"
-                                    className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl overflow-hidden"
+                                    className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl"
                                 >
 
                                     {heroStep === 1 ? (

@@ -1179,127 +1179,127 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   onClick={async () => {
                     setPayingRemaining(true);
                     try {
-                      // Use the REAL backend UUID from raw booking data
-                      const bookingId =
-                        bookingForPayment.raw?.id ||
-                        bookingForPayment.raw?.booking_id ||
-                        bookingForPayment.rawId;
+                      const raw = bookingForPayment.raw || {};
+                      const candidateIds = [
+                        raw.payment_id,
+                        raw.stripe_payment_id,
+                        raw.id,
+                        raw.booking_id,
+                        raw.bookingId,
+                        bookingForPayment.rawId,
+                        bookingForPayment.id,
+                      ].filter(Boolean);
 
-                      console.log("[Payment] booking_id:", bookingId);
+                      const bookingId = candidateIds[0] || bookingForPayment.id;
+                      console.log("[Payment] Initiating payment for booking:", bookingId);
 
-                      const callbackUrl = `${window.location.origin}/account?tab=bookings&bookingId=${bookingId}&payment_success=true`;
-                      const isValidUUID = (str: string) =>
-                        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+                      const callbackUrl = `${window.location.origin}/account?tab=bookings&bookingId=${encodeURIComponent(String(bookingId))}&payment_success=true`;
+                      const defaultCallback =
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/booking-success`
+                          : "https://mmcclub.co.uk/backend/booking-success";
 
                       let redirectUrl = "";
                       let stripePaymentId = "";
 
-                      // Backend endpoint for switching payment method / paying booking balance:
-                      // POST /customer/booking/switch-payment-method
-                      const defaultCallback = "https://mmcclub.co.uk/api/v1/digital-payment-booking-response";
-
-                      const payloadsToTry = [
-                        {
-                          booking_id: bookingId,
-                          payment_method: "stripe",
-                          is_partial: 0,
-                          payment_platform: "app",
-                          callback: defaultCallback,
-                        },
-                        {
-                          booking_id: bookingId,
-                          payment_method: "stripe",
-                          is_partial: 0,
-                          payment_platform: "app",
-                          callback: callbackUrl,
-                        },
-                        {
-                          booking_id: bookingId,
-                          payment_method: "stripe",
-                          is_partial: 0,
-                          payment_platform: "web",
-                          callback: defaultCallback,
-                        },
-                      ];
-
-                      for (const payload of payloadsToTry) {
+                      for (const testId of candidateIds) {
                         if (redirectUrl || stripePaymentId) break;
-                        try {
-                          console.log("[Payment] Calling /customer/booking/switch-payment-method:", payload);
-                          const res = await apiClient.post("/customer/booking/switch-payment-method", payload);
-                          const fullResp = res.data;
-                          console.log("[Payment] switch-payment-method API resp:", fullResp);
+                        const payloadsToTry = [
+                          {
+                            booking_id: String(testId),
+                            payment_method: "stripe",
+                            is_partial: 0,
+                            payment_platform: "app",
+                            callback: callbackUrl || defaultCallback,
+                          },
+                          {
+                            booking_id: String(testId),
+                            payment_method: "stripe",
+                            is_partial: 0,
+                            payment_platform: "web",
+                            callback: callbackUrl || defaultCallback,
+                          },
+                        ];
 
-                          const content = fullResp?.content;
-                          const raw2 = (typeof content === "object" && content !== null) ? content : fullResp || {};
+                        for (const payload of payloadsToTry) {
+                          if (redirectUrl || stripePaymentId) break;
+                          try {
+                            console.log("[Payment] Calling /customer/booking/switch-payment-method:", payload);
+                            const res = await apiClient.post("/customer/booking/switch-payment-method", payload);
+                            const fullResp = res.data;
+                            console.log("[Payment] switch-payment-method API resp:", fullResp);
 
-                          // 1. Direct string URL in content
-                          if (typeof content === "string" && content.startsWith("http")) {
-                            redirectUrl = content;
-                            console.log("[Payment] Got direct URL from content:", redirectUrl);
-                            break;
-                          }
+                            const content = fullResp?.content;
+                            const sRaw = (typeof content === "object" && content !== null) ? content : fullResp || {};
 
-                          // 2. Redirect URL candidate
-                          const urlCandidate =
-                            raw2?.redirect_url ||
-                            raw2?.redirect_link ||
-                            raw2?.payment_url ||
-                            raw2?.url ||
-                            raw2?.stripe_url ||
-                            raw2?.link ||
-                            raw2?.data?.redirect_url ||
-                            raw2?.data?.url;
+                            if (typeof content === "string" && content.startsWith("http")) {
+                              redirectUrl = content;
+                              break;
+                            }
 
-                          if (urlCandidate && String(urlCandidate).startsWith("http")) {
-                            redirectUrl = String(urlCandidate);
-                            console.log("[Payment] Got redirect URL:", redirectUrl);
-                            break;
-                          }
+                            const urlCandidate =
+                              sRaw?.redirect_url ||
+                              sRaw?.redirect_link ||
+                              sRaw?.payment_url ||
+                              sRaw?.url ||
+                              sRaw?.stripe_url ||
+                              sRaw?.link ||
+                              sRaw?.data?.redirect_url ||
+                              sRaw?.data?.url;
 
-                          // 3. Payment ID UUID candidate
-                          const candidate =
-                            raw2?.payment_id ||
-                            raw2?.paymentId ||
-                            raw2?.stripe_payment_id ||
-                            raw2?.data?.payment_id ||
-                            "";
+                            if (urlCandidate && String(urlCandidate).startsWith("http")) {
+                              redirectUrl = String(urlCandidate);
+                              break;
+                            }
 
-                          if (candidate && isValidUUID(String(candidate))) {
-                            stripePaymentId = String(candidate);
-                            console.log("[Payment] Got valid payment UUID:", stripePaymentId);
-                            break;
-                          }
-                        } catch (e: any) {
-                          const status = e?.response?.status;
-                          const errData = e?.response?.data;
-                          console.warn(`[Payment] switch-payment-method failed ${status}:`, errData?.message || e?.message);
-                          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
-                            redirectUrl = String(errData.content.redirect_url);
-                            break;
-                          }
-                          if (errData?.content?.payment_id && isValidUUID(String(errData.content.payment_id))) {
-                            stripePaymentId = String(errData.content.payment_id);
-                            break;
+                            const pId =
+                              sRaw?.payment_id ||
+                              sRaw?.paymentId ||
+                              sRaw?.stripe_payment_id ||
+                              sRaw?.data?.payment_id;
+
+                            if (pId) {
+                              stripePaymentId = String(pId);
+                              break;
+                            }
+                          } catch (e: any) {
+                            const errData = e?.response?.data;
+                            console.warn("[Payment] switch-payment-method error:", errData?.message || e?.message);
+                            if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+                              redirectUrl = String(errData.content.redirect_url);
+                              break;
+                            }
+                            if (errData?.content?.payment_id) {
+                              stripePaymentId = String(errData.content.payment_id);
+                              break;
+                            }
                           }
                         }
                       }
 
-                      // Build the Stripe redirect URL if payment_id was returned
-                      if (stripePaymentId && !redirectUrl) {
-                        redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(stripePaymentId)}`;
+                      // Build the Stripe redirect URL if not returned directly
+                      if (!redirectUrl) {
+                        const targetId = stripePaymentId || bookingId;
+                        if (targetId) {
+                          redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
+                        }
                       }
 
                       if (!redirectUrl) {
                         console.error("[Payment] switch-payment-method failed to return redirect URL for booking:", bookingId);
                         setPayingRemaining(false);
-                        window.dispatchEvent(new CustomEvent("mmc-toast", {
-                          detail: { message: "Unable to initiate payment gateway. Please try again.", type: "error" }
-                        }));
+                        window.dispatchEvent(
+                          new CustomEvent("mmc-toast", {
+                            detail: {
+                              message: "Unable to initiate payment gateway. Please try again.",
+                              type: "error",
+                            },
+                          })
+                        );
                         return;
                       }
 
-                      console.log("[Payment] Redirecting to:", redirectUrl);
+                      console.log("[Payment] Redirecting to Stripe:", redirectUrl);
                       window.location.href = redirectUrl;
                     } catch (err: any) {
                       console.error("Payment initiation failed:", err);

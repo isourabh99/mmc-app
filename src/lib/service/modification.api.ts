@@ -288,7 +288,7 @@ export const getModificationServices = async (): Promise<
       if (Array.isArray(items) && items.length > 0) {
         return items;
       }
-    } catch {}
+    } catch { }
 
     // 2. Try /customer/service/sub-category/${categoryId}
     try {
@@ -302,7 +302,7 @@ export const getModificationServices = async (): Promise<
       if (Array.isArray(items) && items.length > 0) {
         return items;
       }
-    } catch {}
+    } catch { }
 
     return FALLBACK_MODIFICATION_SERVICES;
   } catch (error) {
@@ -312,72 +312,7 @@ export const getModificationServices = async (): Promise<
 };
 
 export const FALLBACK_MODIFICATION_PROVIDERS: ProviderItem[] = [
-  {
-    id: "prov-mod-1",
-    user_id: "usr-mod-1",
-    company_name: "Apex Performance & Custom ECU Tuning",
-    company_phone: "+44 20 7946 0888",
-    company_address: "Unit 8, Speed Motorsport Hub, Park Royal, London NW10 7TR",
-    company_email: "tune@apexperformance.co.uk",
-    logo: "",
-    logo_full_path: "",
-    contact_person_name: "Callum Evans",
-    contact_person_phone: "+44 7700 900582",
-    contact_person_email: "callum@apexperformance.co.uk",
-    avg_rating: 4.9,
-    rating_count: 94,
-    is_active: 1,
-    is_emergency_active: 1,
-    delivery_type: "customer",
-    service_location: "customer",
-    about_us: "Premier dyno-tuning and performance modifications facility. Specialising in custom ECU remaps, valved exhaust systems, lowering coilover suspension, and carbon fiber aero styling.",
-    selected_services: [],
-    total_selected_services_price: 250,
-  },
-  {
-    id: "prov-mod-2",
-    user_id: "usr-mod-2",
-    company_name: "Urban Velocity Motorsport & Styling",
-    company_phone: "+44 20 7946 0411",
-    company_address: "Apex Trade Park, Acton Lane, London W3 7TJ",
-    company_email: "contact@urbanvelocity.co.uk",
-    logo: "",
-    logo_full_path: "",
-    contact_person_name: "Jordan Reed",
-    contact_person_phone: "+44 7700 900319",
-    contact_person_email: "jordan@urbanvelocity.co.uk",
-    avg_rating: 4.8,
-    rating_count: 76,
-    is_active: 1,
-    is_emergency_active: 0,
-    delivery_type: "customer",
-    service_location: "customer",
-    about_us: "Bespoke vehicle customization, custom cold-air intakes, high performance brake upgrades, lowering springs, and OEM+ aesthetic modifications.",
-    selected_services: [],
-    total_selected_services_price: 280,
-  },
-  {
-    id: "prov-mod-3",
-    user_id: "usr-mod-3",
-    company_name: "Kahn & Prestige Bespoke Performance",
-    company_phone: "+44 20 7946 0992",
-    company_address: "Kensington Auto Works, Cromwell Rd, London SW7 4EA",
-    company_email: "enquiries@prestigebespoke.co.uk",
-    logo: "",
-    logo_full_path: "",
-    contact_person_name: "Dominic Black",
-    contact_person_phone: "+44 7700 900744",
-    contact_person_email: "dominic@prestigebespoke.co.uk",
-    avg_rating: 5.0,
-    rating_count: 61,
-    is_active: 1,
-    is_emergency_active: 1,
-    delivery_type: "customer",
-    service_location: "customer",
-    about_us: "Supercar & luxury vehicle enhancement centre. Specialising in titanium exhausts, Stage 1/2 performance calibration, carbon splitters, and custom interior lighting.",
-    selected_services: [],
-    total_selected_services_price: 350,
-  },
+
 ];
 
 export interface SearchModificationProvidersParams {
@@ -467,8 +402,8 @@ export const searchModificationProviders = async (
         const list = Array.isArray(res.data?.content)
           ? res.data.content
           : Array.isArray(res.data?.content?.data)
-          ? res.data.content.data
-          : [];
+            ? res.data.content.data
+            : [];
         if (list.length > 0) {
           return mapRawModificationProviders(list);
         }
@@ -498,8 +433,8 @@ export const searchModificationProviders = async (
       const list = Array.isArray(res.data?.content?.data)
         ? res.data.content.data
         : Array.isArray(res.data?.content)
-        ? res.data.content
-        : [];
+          ? res.data.content
+          : [];
       if (list.length > 0) {
         return mapRawModificationProviders(list);
       }
@@ -586,6 +521,7 @@ export const sendModificationQuotationRequest = async (params: {
   booking_schedule: string;
   service_address_id: string;
   car_image?: File | null;
+  car_images?: File[];
 }): Promise<any> => {
   const zoneId = DEFAULT_ZONE_ID;
   const formData = new FormData();
@@ -607,8 +543,23 @@ export const sendModificationQuotationRequest = async (params: {
     formData.append("provider_ids[]", id);
   });
 
-  if (params.car_image) {
+  // Handle single or multiple image uploads
+  if (params.car_images && params.car_images.length > 0) {
+    formData.append("car_image", params.car_images[0]);
+    params.car_images.forEach((img) => {
+      formData.append("attachments[]", img);
+      formData.append("car_images[]", img);
+      formData.append("images[]", img);
+      formData.append("attachment[]", img);
+      formData.append("car_image[]", img);
+    });
+  } else if (params.car_image) {
     formData.append("car_image", params.car_image);
+    formData.append("attachments[]", params.car_image);
+    formData.append("car_images[]", params.car_image);
+    formData.append("images[]", params.car_image);
+    formData.append("attachment[]", params.car_image);
+    formData.append("car_image[]", params.car_image);
   }
 
   const response = await apiClient.post("/customer/post", formData, {
@@ -740,12 +691,14 @@ export interface SendModificationBookingRequestParams {
   payment_method: string;
   question_answers?: Record<string, any>;
   car_image?: File | null;
+  car_images?: File[];
   payment_platform?: string;
   callback?: string;
   latitude?: number | string;
   longitude?: number | string;
   postcode?: string;
   is_partial?: number | 0 | 1;
+  amount?: number;
 }
 
 export const sendModificationBookingRequest = async (
@@ -796,7 +749,9 @@ export const sendModificationBookingRequest = async (
       : "[Service Mode: Workshop Bay Drop-Off]";
   }
 
-  if (params.car_image) {
+  const hasImages = (params.car_images && params.car_images.length > 0) || Boolean(params.car_image);
+
+  if (hasImages || params.selected_slot_id || isOnline) {
     const formData = new FormData();
     formData.append("provider_id", params.provider_id);
     formData.append("post_id", params.post_id);
@@ -829,12 +784,30 @@ export const sendModificationBookingRequest = async (
       formData.append(
         "callback",
         params.callback ||
-          (typeof window !== "undefined"
-            ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/backend/booking-success")
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/backend/booking-success")
       );
     }
-    formData.append("car_image", params.car_image);
+
+    // Append single or multiple images
+    if (params.car_images && params.car_images.length > 0) {
+      formData.append("car_image", params.car_images[0]);
+      params.car_images.forEach((img) => {
+        formData.append("attachments[]", img);
+        formData.append("car_images[]", img);
+        formData.append("images[]", img);
+        formData.append("attachment[]", img);
+        formData.append("car_image[]", img);
+      });
+    } else if (params.car_image) {
+      formData.append("car_image", params.car_image);
+      formData.append("attachments[]", params.car_image);
+      formData.append("car_images[]", params.car_image);
+      formData.append("images[]", params.car_image);
+      formData.append("attachment[]", params.car_image);
+      formData.append("car_image[]", params.car_image);
+    }
 
     const response = await apiClient.post("/customer/booking/request/send", formData, {
       headers: {
@@ -843,7 +816,11 @@ export const sendModificationBookingRequest = async (
       },
     });
 
-    return response.data;
+    const responseData = response.data;
+    if (isOnline || effectivePaymentMethod === "stripe") {
+      await resolveModificationPaymentUrl(responseData, params, effectivePaymentMethod);
+    }
+    return responseData;
   } else {
     const payload: Record<string, any> = {
       provider_id: params.provider_id,
@@ -890,6 +867,136 @@ export const sendModificationBookingRequest = async (
       },
     });
 
-    return response.data;
+    const responseData = response.data;
+    if (isOnline || effectivePaymentMethod === "stripe") {
+      await resolveModificationPaymentUrl(responseData, params, effectivePaymentMethod);
+    }
+    return responseData;
   }
 };
+
+/**
+ * Helper to ensure Stripe redirect URL is resolved for modification bookings
+ */
+async function resolveModificationPaymentUrl(
+  responseData: any,
+  params: SendModificationBookingRequestParams,
+  effectivePaymentMethod: string
+) {
+  const content = responseData?.content;
+  let redirectLink =
+    content?.redirect_link ||
+    content?.redirect_url ||
+    content?.payment_url ||
+    content?.url ||
+    content?.link ||
+    (responseData as any)?.redirect_link ||
+    (responseData as any)?.redirect_url ||
+    (responseData as any)?.payment_url ||
+    (responseData as any)?.url;
+
+  const rawBookingId = content?.booking_id;
+  const bookingUuid =
+    (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+    (typeof rawBookingId === "string" ? rawBookingId : null) ||
+    content?.id ||
+    content?.payment_id ||
+    (responseData as any)?.booking_id ||
+    content?.readable_id;
+
+  const isUuid = (val: any) =>
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+  if (!redirectLink && bookingUuid) {
+    const payloadsToTry = [
+      {
+        booking_id: String(bookingUuid),
+        payment_method: "stripe",
+        is_partial: params.is_partial ?? 0,
+        payment_platform: "app",
+        callback:
+          params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success"),
+      },
+      {
+        booking_id: String(bookingUuid),
+        payment_method: "stripe",
+        is_partial: params.is_partial ?? 0,
+        payment_platform: "web",
+        callback:
+          params.callback ||
+          (typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success"),
+      },
+    ];
+
+    for (const p of payloadsToTry) {
+      if (redirectLink) break;
+      try {
+        console.log("[ModificationPayment] Requesting switch-payment-method:", p);
+        const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
+        const sData = switchRes.data;
+        const sContent = sData?.content;
+        const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
+
+        if (typeof sContent === "string" && sContent.startsWith("http")) {
+          redirectLink = sContent;
+          break;
+        }
+
+        const candidateUrl =
+          sRaw?.redirect_url ||
+          sRaw?.redirect_link ||
+          sRaw?.payment_url ||
+          sRaw?.url ||
+          sRaw?.link ||
+          sRaw?.stripe_url ||
+          sRaw?.data?.redirect_url ||
+          sRaw?.data?.url;
+
+        if (candidateUrl && String(candidateUrl).startsWith("http")) {
+          redirectLink = String(candidateUrl);
+          break;
+        }
+
+        const pId =
+          sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
+        if (pId) {
+          redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+            String(pId)
+          )}&is_partial=${params.is_partial ?? 0}`;
+          break;
+        }
+      } catch (switchErr: any) {
+        const errData = switchErr?.response?.data;
+        if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+          redirectLink = String(errData.content.redirect_url);
+          break;
+        }
+        console.warn("[ModificationPayment] switch-payment-method notice:", errData?.message || switchErr.message);
+      }
+    }
+  }
+
+  // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
+  const effectiveId = bookingUuid || params.post_id;
+  if (!redirectLink && effectiveId) {
+    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+      String(effectiveId)
+    )}&is_partial=${params.is_partial ?? 0}`;
+  }
+
+  if (redirectLink) {
+    if (!responseData.content || typeof responseData.content !== "object") {
+      responseData.content = {};
+    }
+    responseData.content.redirect_link = redirectLink;
+    responseData.content.redirect_url = redirectLink;
+    responseData.content.payment_url = redirectLink;
+    responseData.content.url = redirectLink;
+  }
+}
