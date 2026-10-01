@@ -45,9 +45,15 @@ import {
   addValetToCart,
   sendValetBookingRequest,
 } from "@/lib/service/valet.api";
-import { saveBookingMeta } from "@/lib/service/bookings.api";
+import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
+import { isAuthenticated } from "@/lib/auth.api";
+import {
+  saveServiceFormDraft,
+  getServiceFormDraft,
+  clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 export default function VehicleWashValetPage() {
   const router = useRouter();
@@ -157,6 +163,29 @@ export default function VehicleWashValetPage() {
   const totalAmountFormatted = numericPrice.toFixed(2);
 
   const handleOpenBookingModal = (provider: ValetProvider) => {
+    if (!isAuthenticated()) {
+      saveServiceFormDraft("valet", {
+        locationAddress,
+        registrationNo,
+        selectedServiceId,
+        currentServiceName,
+        searchRadius,
+        serviceTypeFilter,
+        sortBy,
+        bookingVehicleModel,
+        bookingVehicleColor,
+        bookingSpecialConditions,
+        bookingAdditionalNotes,
+        selectedSlot,
+        bookingDate,
+        bookingTime,
+        targetProviderId: provider.id,
+      });
+      showToast("Please log in to book your valet service", "info");
+      router.push(`/login?redirect=${encodeURIComponent("/services/valet-wash")}`);
+      return;
+    }
+
     setSelectedProviderForBooking(provider);
     setIsBookingSuccess(false);
 
@@ -184,16 +213,47 @@ export default function VehicleWashValetPage() {
     const initData = async () => {
       try {
         setLoading(true);
+
+        // Check if user just logged in and has a saved draft
+        const draft = isAuthenticated() ? getServiceFormDraft("valet") : null;
+        if (draft) {
+          if (draft.locationAddress) setLocationAddress(draft.locationAddress);
+          if (draft.registrationNo) setRegistrationNo(draft.registrationNo);
+          if (draft.searchRadius) setSearchRadius(draft.searchRadius);
+          if (draft.serviceTypeFilter) setServiceTypeFilter(draft.serviceTypeFilter);
+          if (draft.sortBy) setSortBy(draft.sortBy);
+          if (draft.bookingVehicleModel) setBookingVehicleModel(draft.bookingVehicleModel);
+          if (draft.bookingVehicleColor) setBookingVehicleColor(draft.bookingVehicleColor);
+          if (draft.bookingSpecialConditions) setBookingSpecialConditions(draft.bookingSpecialConditions);
+          if (draft.bookingAdditionalNotes) setBookingAdditionalNotes(draft.bookingAdditionalNotes);
+          if (draft.selectedSlot) setSelectedSlot(draft.selectedSlot);
+          if (draft.bookingDate) setBookingDate(draft.bookingDate);
+          if (draft.bookingTime) setBookingTime(draft.bookingTime);
+        }
+
         const types = await getWashTypes(10, 1);
 
         if (types && types.length > 0) {
           setWashTypes(types);
-          const found = types.find((t) => t.id === selectedServiceId) || types[0];
+          const targetId = draft?.selectedServiceId || selectedServiceId;
+          const found = types.find((t) => t.id === targetId) || types[0];
           setSelectedServiceId(found.id);
           setCurrentServiceName(found.name);
 
           const providerList = await searchProvidersByService(found.id, 10, 1);
           setProviders(providerList || []);
+
+          if (draft) {
+            clearServiceFormDraft("valet");
+            showToast("Welcome back! Your valet details have been restored.", "success");
+
+            if (draft.targetProviderId && providerList && providerList.length > 0) {
+              const matchedProvider = providerList.find((p) => p.id === draft.targetProviderId);
+              if (matchedProvider) {
+                setSelectedProviderForBooking(matchedProvider);
+              }
+            }
+          }
         } else {
           setWashTypes([]);
           setProviders([]);
@@ -338,6 +398,29 @@ export default function VehicleWashValetPage() {
 
   // Final Booking Dispatch to API with Stripe Payment
   const executeValetBooking = async () => {
+    if (!isAuthenticated()) {
+      saveServiceFormDraft("valet", {
+        locationAddress,
+        registrationNo,
+        selectedServiceId,
+        currentServiceName,
+        searchRadius,
+        serviceTypeFilter,
+        sortBy,
+        bookingVehicleModel,
+        bookingVehicleColor,
+        bookingSpecialConditions,
+        bookingAdditionalNotes,
+        selectedSlot,
+        bookingDate,
+        bookingTime,
+        targetProviderId: selectedProviderForBooking?.id,
+      });
+      showToast("Please log in to complete your valet booking", "info");
+      router.push(`/login?redirect=${encodeURIComponent("/services/valet-wash")}`);
+      return;
+    }
+
     if (!selectedProviderForBooking) return;
 
     try {
@@ -360,7 +443,7 @@ export default function VehicleWashValetPage() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : "https://mmcclub.co.uk/backend/booking-success";
 
       const bookingRes = await sendValetBookingRequest({
         service_id: selectedServiceId,
@@ -368,7 +451,7 @@ export default function VehicleWashValetPage() {
         variant_key: chosenVarKey,
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
-        callback: "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
+        callback: "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
         service_schedule: formattedSchedule,
         service_address_id: "6",
         service_location: bookingLocationType,
@@ -392,11 +475,20 @@ export default function VehicleWashValetPage() {
         (bookingRes as any)?.redirect_link ||
         (bookingRes as any)?.redirect_url;
 
+      const content = bookingRes?.content;
       const ref =
-        bookingRes?.content?.readable_id ||
-        bookingRes?.content?.id ||
-        bookingRes?.booking_reference ||
-        bookingRes?.content?.booking_id;
+        content?.readable_id ||
+        content?.id ||
+        (Array.isArray(content?.booking_id) ? content.booking_id[0] : content?.booking_id) ||
+        bookingRes?.booking_reference;
+
+      if (!bookingRes || (bookingRes.response_code && bookingRes.response_code !== "default_200" && !redirectLink)) {
+        showToast(
+          bookingRes?.message || "Valet booking request could not be completed. Please try again.",
+          "error"
+        );
+        return;
+      }
 
       const confirmedId = String(ref || `MMC-VAL-${Date.now().toString().slice(-6)}`);
       setConfirmedBookingRef(confirmedId);
@@ -405,18 +497,17 @@ export default function VehicleWashValetPage() {
         typeof val === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
-      const content = bookingRes?.content;
       const possibleUuid =
         (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
-        (content && isUuidStr(content.id) ? content.id : null) ||
         (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
         (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
+        (content && isUuidStr(content.id) ? content.id : null) ||
         (isUuidStr(confirmedId) ? confirmedId : null);
 
       if (!redirectLink && possibleUuid) {
-        redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(possibleUuid)
-        )}`;
+        )}&is_partial=${isPartialPayment ? 1 : 0}`;
       }
 
       try {
@@ -446,7 +537,30 @@ export default function VehicleWashValetPage() {
         price: numericPrice,
       });
 
-      // ONLY redirect if we have a valid URL and it does NOT use MMC-VAL-...
+      saveConfirmedBooking({
+        id: confirmedId,
+        rawId: possibleUuid || confirmedId,
+        readableId: confirmedId,
+        serviceType: "valet",
+        serviceTitle: `Valet: ${currentServiceName} (${chosenVarName})`,
+        serviceCategoryName: "Valet & Detailing",
+        providerName: selectedProviderForBooking.company_name,
+        providerPhone: selectedProviderForBooking.company_phone,
+        totalAmount: numericPrice,
+        isPaid: false,
+        paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
+        paymentMethod: "Stripe (Online)",
+        status: "pending",
+        statusDisplay: "Pending",
+        scheduleDate: bookingDate,
+        scheduleTime: scheduleTime,
+        fullScheduleDisplay: formattedSchedule,
+        vehicleModel: bookingVehicleModel.trim() || "Audi A4",
+        vehicleReg: registrationNo || "AB24 MMC",
+        createdAt: new Date().toISOString(),
+      });
+
+      // ALWAYS redirect directly to Stripe URL for payment
       if (
         redirectLink &&
         typeof redirectLink === "string" &&
@@ -901,7 +1015,14 @@ export default function VehicleWashValetPage() {
               <div className="grid grid-cols-2 gap-3 sm:gap-6 items-stretch">
                 {filteredAndSortedProviders.map((provider, index) => {
                   const isBestValue = index === 0;
-                  const price = provider.total_selected_services_price ?? 0;
+                  const price =
+                    provider.total_selected_services_price && provider.total_selected_services_price > 0
+                      ? provider.total_selected_services_price
+                      : (activeVariation?.price && activeVariation.price > 0
+                          ? activeVariation.price
+                          : (activeServiceItem?.price && activeServiceItem.price > 0
+                              ? activeServiceItem.price
+                              : 45));
                   const distance = provider.distance_miles || (1.2 + index * 0.6).toFixed(1);
                   const timeEstimate = provider.estimated_time || "1 hours";
                   const serviceType = provider.service_type || "Mobile";

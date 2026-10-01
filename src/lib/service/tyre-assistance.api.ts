@@ -88,7 +88,7 @@ export const getOrCreateGuestId = (): string => {
       const u = JSON.parse(userStr);
       if (u?.id) return String(u.id);
     }
-  } catch {}
+  } catch { }
   const storedUserId = localStorage.getItem("user_id") || localStorage.getItem("userId");
   if (storedUserId) return storedUserId;
 
@@ -594,7 +594,7 @@ export async function sendBookingRequestToBackend(
     service_location: "customer",
     booking_type: payload.booking_type || "normal",
     selected_slot_id: (payload as any).selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-    callback: payload.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
+    callback: payload.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
     car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
     car_model: payload.car_model || "",
     car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
@@ -961,10 +961,12 @@ export async function confirmQuoteAndAssignTechnician(
   // 2. Step 2: Real backend booking dispatch (matching mobile app)
   const response = await sendBookingRequestToBackend({
     guest_id: getOrCreateGuestId(),
+    provider_id: effectiveProviderId,
     payment_method: effectivePaymentMethod,
     zone_id: zoneId,
     service_schedule: validSchedule,
     service_address_id: "6",
+    service_address: booking.locationAddress || "Customer Location, United Kingdom",
     service_location: "customer",
     booking_type: isEmergency ? "emergency" : "normal",
     car_registration_number: booking.vehicleRegistration || "",
@@ -1007,50 +1009,58 @@ export async function confirmQuoteAndAssignTechnician(
   // If backend didn't supply direct redirectLink in booking response, call switch-payment-method
   const candidateIds = [
     realBookingUuid,
-    realReadableId,
     (response as any)?.content?.booking_id,
     (response as any)?.content?.id,
+    realReadableId,
     booking.id,
   ].filter(Boolean);
 
   if (!redirectLink) {
     for (const cid of candidateIds) {
       if (redirectLink) break;
-      try {
-        console.log("[TyrePayment] Calling switch-payment-method with candidate booking_id:", cid);
-        const switchRes = await apiClient.post("/customer/booking/switch-payment-method", {
-          booking_id: String(cid),
-          payment_method: "stripe",
-          is_partial: paymentOptions?.is_partial ?? 0,
-          payment_platform: "app",
-          callback: paymentOptions?.callback || "https://mmcclub.co.uk/api/v1/digital-payment-booking-response",
-        });
-        const sData = switchRes.data;
-        const sContent = sData?.content;
-        const sRaw = (typeof sContent === "object" && sContent !== null) ? sContent : sData || {};
+      for (const pPlatform of ["app", "web"]) {
+        if (redirectLink) break;
+        try {
+          console.log("[TyrePayment] Calling switch-payment-method with candidate booking_id:", cid, pPlatform);
+          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", {
+            booking_id: String(cid),
+            payment_method: "stripe",
+            is_partial: paymentOptions?.is_partial ?? 1,
+            payment_platform: pPlatform,
+            callback: paymentOptions?.callback || "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response",
+          });
+          const sData = switchRes.data;
+          const sContent = sData?.content;
+          const sRaw = (typeof sContent === "object" && sContent !== null) ? sContent : sData || {};
 
-        if (typeof sContent === "string" && sContent.startsWith("http")) {
-          redirectLink = sContent;
-          break;
-        } else {
-          const u = sRaw.redirect_url || sRaw.redirect_link || sRaw.payment_url || sRaw.url || sRaw.link || sRaw.data?.redirect_url;
-          if (u && String(u).startsWith("http")) {
-            redirectLink = String(u);
+          if (typeof sContent === "string" && sContent.startsWith("http")) {
+            redirectLink = sContent;
             break;
-          } else if (sRaw.payment_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(sRaw.payment_id))) {
-            redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(String(sRaw.payment_id))}`;
+          } else {
+            const u = sRaw.redirect_url || sRaw.redirect_link || sRaw.payment_url || sRaw.url || sRaw.link || sRaw.stripe_url || sRaw.data?.redirect_url;
+            if (u && String(u).startsWith("http")) {
+              redirectLink = String(u);
+              break;
+            } else if (sRaw.payment_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(sRaw.payment_id))) {
+              redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(sRaw.payment_id))}&is_partial=${paymentOptions?.is_partial ?? 1}`;
+              break;
+            }
+          }
+        } catch (sErr: any) {
+          const errData = sErr?.response?.data;
+          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+            redirectLink = String(errData.content.redirect_url);
             break;
           }
+          console.warn("[TyrePayment] switch-payment-method notice for cid:", cid, sErr?.message);
         }
-      } catch (sErr: any) {
-        console.warn("[TyrePayment] switch-payment-method error for cid:", cid, sErr?.response?.data || sErr.message);
       }
     }
   }
 
   // If still no direct link, construct Demandium Stripe gateway link ONLY if it's a valid UUID
   if (!redirectLink && realBookingUuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(realBookingUuid)) {
-    redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(realBookingUuid)}`;
+    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(realBookingUuid)}&is_partial=${paymentOptions?.is_partial ?? 1}`;
   }
 
   booking.status = redirectLink ? "quote_ready" : "quote_ready";

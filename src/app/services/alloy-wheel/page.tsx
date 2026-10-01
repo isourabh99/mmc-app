@@ -88,6 +88,11 @@ import QuotationFormPageView from "./components/QuotationFormPageView";
 import ProviderProfilePageView from "./components/ProviderProfilePageView";
 import QuotesPageView from "./components/QuotesPageView";
 import BookingPageView from "./components/BookingPageView";
+import {
+    saveServiceFormDraft,
+    getServiceFormDraft,
+    clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 export default function AlloyWheelPage() {
     const router = useRouter();
@@ -147,8 +152,10 @@ export default function AlloyWheelPage() {
     const [userLat, setUserLat] = useState<string>("");
     const [userLon, setUserLon] = useState<string>("");
 
-    // Vehicle Year & Work Location State
-    const [carYear, setCarYear] = useState<string>("2022");
+    // Vehicle Brand & Work Location State
+    const [carBrand, setCarBrand] = useState<string>("");
+    const carModel = carBrand;
+    const carYear = "2024";
     const [workLocation, setWorkLocation] = useState<"workshop" | "mobile">("workshop");
 
     // Media upload state for Hero Form (Supports multiple media files)
@@ -404,7 +411,7 @@ export default function AlloyWheelPage() {
     const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
         if (!isAuthenticated()) {
             showToast("Please login to request a quotation.", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
             return;
         }
 
@@ -690,6 +697,27 @@ export default function AlloyWheelPage() {
         }
     }, []);
 
+    useEffect(() => {
+        if (isAuthenticated()) {
+            const draft = getServiceFormDraft("alloy-wheel");
+            if (draft) {
+                if (draft.postcode) setPostcode(draft.postcode);
+                if (draft.regNo) setRegNo(draft.regNo);
+                if (draft.carModel) setCarBrand(draft.carModel);
+                if (draft.userLat) setUserLat(draft.userLat);
+                if (draft.userLon) setUserLon(draft.userLon);
+                if (Array.isArray(draft.selectedServices) && draft.selectedServices.length > 0) {
+                    setSelectedServices(draft.selectedServices);
+                }
+                if (draft.targetView) {
+                    navigateToView(draft.targetView as ActiveView);
+                }
+                clearServiceFormDraft("alloy-wheel");
+                showToast("Welcome back! Your vehicle details have been restored.", "success");
+            }
+        }
+    }, []);
+
     const handleCopyAnyId = (id: string) => {
         navigator.clipboard.writeText(id);
         setCopiedAnyId(id);
@@ -762,17 +790,20 @@ export default function AlloyWheelPage() {
 
     const notifyNewBids = (bids: PostBidItem[], post?: CustomerQuotationPostItem | null) => {
         if (!bids || bids.length === 0) return;
-        bids.forEach((b) => {
-            const seenKey = `mmc_bid_push_${b.id}`;
-            if (typeof window !== "undefined" && !sessionStorage.getItem(seenKey)) {
-                sessionStorage.setItem(seenKey, "1");
-                const price = typeof b.offered_price === "number" ? `£${b.offered_price}` : `£${b.offered_price}`;
-                const title = `New Offer: ${price} from ${b.provider?.company_name || "Specialist"}! 🚗`;
-                const desc = b.provider_note || `${b.provider?.company_name || "Specialist"} sent an offer for your vehicle. Tap to view & book.`;
-                triggerDevicePushNotification(title, desc, `/services/alloy-wheel?view=quotes`);
-                showToast(`New offer received: ${price} from ${b.provider?.company_name || "Specialist"}`, "info");
-            }
-        });
+        // Only notify the latest single new bid to prevent duplicate notification spam
+        const latestBid = bids[0];
+        if (!latestBid) return;
+
+        const seenKey = `mmc_bid_push_${latestBid.id}`;
+        if (typeof window !== "undefined" && !localStorage.getItem(seenKey)) {
+            localStorage.setItem(seenKey, "1");
+            const price = typeof latestBid.offered_price === "number" ? `£${latestBid.offered_price}` : `£${latestBid.offered_price}`;
+            const title = `New Offer: ${price} from ${latestBid.provider?.company_name || "Specialist"}! 🚗`;
+            const desc = latestBid.provider_note || `${latestBid.provider?.company_name || "Specialist"} sent an offer for your vehicle. Tap to view & book.`;
+            triggerDevicePushNotification(title, desc, `/services/alloy-wheel?view=quotes`, seenKey);
+            showToast(`New offer received: ${price} from ${latestBid.provider?.company_name || "Specialist"}`, "info");
+        }
+
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
         }
@@ -810,7 +841,7 @@ export default function AlloyWheelPage() {
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to book this quotation offer.", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
             return;
         }
 
@@ -868,7 +899,7 @@ export default function AlloyWheelPage() {
 
         if (!isAuthenticated()) {
             showToast("Please login to proceed with booking.", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
             return;
         }
 
@@ -955,7 +986,7 @@ export default function AlloyWheelPage() {
                     bookingPaymentMethod === "stripe"
                         ? (typeof window !== "undefined"
                             ? `${window.location.origin}/booking-success`
-                            : "https://mmcclub.co.uk/booking-success")
+                            : "https://mmcclub.co.uk/backend/booking-success")
                         : undefined,
             });
 
@@ -981,7 +1012,7 @@ export default function AlloyWheelPage() {
 
             if (!redirectUrl && bookingPaymentMethod === "stripe" && isUuidStr(confirmedRefId)) {
                 const payRef = confirmedRefId;
-                redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+                redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
                     String(payRef)
                 )}`;
             }
@@ -1025,16 +1056,18 @@ export default function AlloyWheelPage() {
                             })
                         );
                     } catch { }
-                if (redirectUrl && String(redirectUrl).startsWith("http") && !String(redirectUrl).includes("payment_id=MMC-")) {
-                    showToast("Redirecting to Stripe secure checkout...", "info");
-                    window.location.href = redirectUrl;
-                    return;
-                } else {
-                    setIsPaymentModalOpen(false);
-                    setSuccessBookingId(String(confirmedRefId || `MMC-ALL-${Date.now().toString().slice(-6)}`));
-                    setIsBookingSuccessOpen(true);
-                    showToast("Alloy Wheel Booking Confirmed!", "success");
-                    return;
+
+                    if (String(redirectUrl).startsWith("http") && !String(redirectUrl).includes("payment_id=MMC-")) {
+                        showToast("Redirecting to Stripe secure checkout...", "info");
+                        window.location.href = redirectUrl;
+                        return;
+                    } else {
+                        setIsPaymentModalOpen(false);
+                        setSuccessBookingId(String(confirmedRefId || `MMC-ALL-${Date.now().toString().slice(-6)}`));
+                        setIsBookingSuccessOpen(true);
+                        showToast("Alloy Wheel Booking Confirmed!", "success");
+                        return;
+                    }
                 }
             }
 
@@ -1212,6 +1245,22 @@ export default function AlloyWheelPage() {
             showToast("Please agree to the privacy policy to proceed", "error");
             return;
         }
+
+        // Require authentication before advancing
+        if (!isAuthenticated()) {
+            saveServiceFormDraft("alloy-wheel", {
+                postcode,
+                regNo,
+                carModel: carBrand,
+                userLat,
+                userLon,
+                targetView: "choose_services",
+            });
+            showToast("Please log in to continue booking your service", "info");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
+            return;
+        }
+
         navigateToView("choose_services");
     };
 
@@ -1220,6 +1269,23 @@ export default function AlloyWheelPage() {
     // ---------------------------------------------------------------------------
     const handleQuoteSubmit = async (e?: React.FormEvent) => {
         if (e && e.preventDefault) e.preventDefault();
+
+        // Require authentication
+        if (!isAuthenticated()) {
+            saveServiceFormDraft("alloy-wheel", {
+                postcode,
+                regNo,
+                carModel: carBrand,
+                selectedServices,
+                userLat,
+                userLon,
+                targetView: "technicians",
+            });
+            showToast("Please log in to continue booking your service", "info");
+            router.push(`/login?redirect=${encodeURIComponent("/services/alloy-wheel")}`);
+            return;
+        }
+
         if (!postcode) {
             showToast("Please enter your postcode", "error");
             navigateToView("landing");
@@ -1517,17 +1583,16 @@ export default function AlloyWheelPage() {
                                             />
                                         </div>
 
-                                        {/* Row 3: Vehicle Registration / Manufacturing Year */}
+                                        {/* Row 3: Car Brand Name */}
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                <Calendar className="w-4 h-4 text-[#E8AF66]" />
+                                                <Car className="w-4 h-4 text-[#E8AF66]" />
                                             </div>
                                             <input
                                                 type="text"
-                                                value={carYear}
-                                                onChange={(e) => setCarYear(e.target.value)}
-                                                placeholder="Vehicle Year (e.g. 2022)"
-                                                maxLength={4}
+                                                value={carBrand}
+                                                onChange={(e) => setCarBrand(e.target.value)}
+                                                placeholder="Car Brand Name (e.g. BMW, Audi, Mercedes)"
                                                 className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                                             />
                                         </div>
@@ -1973,6 +2038,7 @@ export default function AlloyWheelPage() {
                     }
                     allServices={services}
                     initialRegNo={regNo}
+                    initialCarModel={carBrand}
                     initialDamageDesc={damageDesc}
                     initialCarImage={heroCarImage}
                     initialCarImagePreview={heroImagePreview}

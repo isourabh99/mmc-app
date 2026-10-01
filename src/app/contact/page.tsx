@@ -189,27 +189,7 @@ export default function ContactPage() {
             </div>
 
             {/* Phone Support Card */}
-            <div className="bg-[#141210] border border-white/10 rounded-3xl p-6 sm:p-7 hover:border-[#FAD293]/40 transition-all duration-300 shadow-xl group">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5 text-[#FAD293] border border-[#FAD293]/20 shadow-md group-hover:scale-105 transition-transform"
-                style={{
-                  background: "linear-gradient(135deg, rgba(250,210,147,0.15), rgba(206,164,107,0.05))",
-                }}
-              >
-                <Phone size={22} />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-1">Direct Phone</h3>
-              <p className="text-white/50 text-xs sm:text-sm mb-3">
-                Available Mon–Sun for emergency callouts and general bookings.
-              </p>
-              <a
-                href="tel:08001234567"
-                className="text-[#FAD293] font-semibold text-sm hover:underline flex items-center gap-1.5"
-              >
-                <span>0800 123 4567</span>
-                <ArrowRight size={13} />
-              </a>
-            </div>
+
 
             {/* Headquarters Card */}
             <div className="bg-[#141210] border border-white/10 rounded-3xl p-6 sm:p-7 hover:border-[#FAD293]/40 transition-all duration-300 shadow-xl group">

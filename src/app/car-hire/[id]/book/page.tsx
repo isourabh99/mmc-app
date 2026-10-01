@@ -39,6 +39,7 @@ import {
 } from "@/lib/service/car.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
+import { isAuthenticated } from "@/lib/auth.api";
 
 export default function CarHireBookingPage() {
   const params = useParams();
@@ -171,6 +172,12 @@ export default function CarHireBookingPage() {
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
 
+    if (!isAuthenticated()) {
+      showToast("Please log in to proceed with your vehicle hire reservation", "info");
+      router.push(`/login?redirect=${encodeURIComponent(`/car-hire/${carId}/book`)}`);
+      return;
+    }
+
     if (!agreeTerms) {
       showToast(
         "Please agree to the vehicle hire terms & conditions to proceed.",
@@ -189,13 +196,18 @@ export default function CarHireBookingPage() {
 
   // Final Booking Dispatch to API with Stripe Payment
   const executeCarBooking = async () => {
+    if (!isAuthenticated()) {
+      showToast("Please log in to proceed with your vehicle hire reservation", "info");
+      router.push(`/login?redirect=${encodeURIComponent(`/car-hire/${carId}/book`)}`);
+      return;
+    }
     try {
       setSubmitting(true);
 
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : "https://mmcclub.co.uk/backend/booking-success";
 
       const payload: CarBookingPayload = {
         car_id: car!.id,
@@ -238,7 +250,7 @@ export default function CarHireBookingPage() {
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectLink && isUuidStr(bookingRef)) {
-        redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bookingRef)
         )}`;
       }

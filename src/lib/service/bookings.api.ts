@@ -78,6 +78,7 @@ export interface FetchBookingsParams {
   booking_status?: string;
   service_type?: string;
   booking_type?: string;
+  forceRefresh?: boolean;
 }
 
 // Known Category IDs in MMC platform
@@ -641,6 +642,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   return {
     id: idStr,
     rawId,
+    readableId: raw.readable_id || raw.booking_id || rawId,
     serviceType,
     serviceCategoryName: getServiceCategoryLabel(serviceType),
     serviceTitle,
@@ -693,9 +695,9 @@ export async function fetchAllCustomerBookings(
   const unifiedMap = new Map<string, UnifiedBookingItem>();
 
   const baseParams = {
-    limit: 50,
-    offset: 1,
-    service_type: "all", // match the working curl command
+    limit: params.limit || 50,
+    offset: params.offset || 1,
+    service_type: params.service_type || "all",
   };
 
   /**
@@ -746,24 +748,43 @@ export async function fetchAllCustomerBookings(
   function addToMap(item: any, hintType?: BookingServiceType) {
     if (!item) return;
     const norm = normalizeBooking(item, hintType);
-    // Prefer API data over local data — always overwrite with fresh API data
     unifiedMap.set(norm.id, norm);
   }
 
-  // Fetch bookings for each status — this matches the working curl command pattern
-  const statuses = ["accepted", "pending", "ongoing", "completed", "canceled"];
+  // Strategy 1: Single call with booking_status=all (most efficient, avoids 429)
+  let gotResults = false;
+  try {
+    const res = await apiClient.get("/customer/booking", {
+      params: { ...baseParams, booking_status: "all" },
+    });
+    const content = res.data?.content;
+    const items = extractBookingsFromContent(content);
+    console.log(`[Bookings] booking_status=all: found ${items.length} items`);
+    items.forEach((item) => addToMap(item));
+    if (items.length > 0) gotResults = true;
+  } catch (err: any) {
+    console.warn("[Bookings] booking_status=all failed:", err?.response?.status || err?.message);
+  }
 
-  for (const status of statuses) {
-    try {
-      const res = await apiClient.get("/customer/booking", {
-        params: { ...baseParams, booking_status: status },
-      });
-      const content = res.data?.content;
-      const items = extractBookingsFromContent(content);
-      console.log(`[Bookings] status=${status}: found ${items.length} items`);
-      items.forEach((item) => addToMap(item));
-    } catch (err: any) {
-      console.warn(`[Bookings] status=${status} fetch failed:`, err?.response?.status || err?.message);
+  // Strategy 2: If "all" returned nothing, try individual statuses as fallback
+  if (!gotResults) {
+    const statuses = ["accepted", "pending", "ongoing", "completed", "canceled"];
+    for (const status of statuses) {
+      try {
+        const res = await apiClient.get("/customer/booking", {
+          params: { ...baseParams, booking_status: status },
+        });
+        const content = res.data?.content;
+        const items = extractBookingsFromContent(content);
+        console.log(`[Bookings] status=${status}: found ${items.length} items`);
+        items.forEach((item) => addToMap(item));
+      } catch (err: any) {
+        console.warn(`[Bookings] status=${status} fetch failed:`, err?.response?.status || err?.message);
+        if (err?.response?.status === 429) {
+          console.warn("[Bookings] Rate limited, stopping individual status fetches");
+          break;
+        }
+      }
     }
   }
 
@@ -779,7 +800,7 @@ export async function fetchAllCustomerBookings(
     console.warn("[Bookings] car fetch failed:", err?.response?.status || err?.message);
   }
 
-  // Read locally saved bookings as fallback (for bookings not yet synced from API)
+  // Read locally saved bookings as fallback
   if (typeof window !== "undefined") {
     try {
       const localRaw = localStorage.getItem("mmc_confirmed_bookings");
@@ -787,7 +808,6 @@ export async function fetchAllCustomerBookings(
         const localList: any[] = JSON.parse(localRaw);
         localList.forEach((b: any) => {
           const bId = String(b.id || b.rawId || "").trim();
-          // Only add local bookings that don't already exist in API results
           if (bId && !isFakeDummyId(bId) && !unifiedMap.has(bId.toLowerCase())) {
             addToMap({ ...b, ...(b.raw || {}) });
           }
@@ -796,6 +816,17 @@ export async function fetchAllCustomerBookings(
     } catch (e) {
       console.warn("[Bookings] Could not read local bookings:", e);
     }
+
+    try {
+      const pendingRaw = sessionStorage.getItem("mmc_pending_booking");
+      if (pendingRaw) {
+        const pending = JSON.parse(pendingRaw);
+        const pId = String(pending.booking_id || pending.readable_id || "").trim();
+        if (pId && !isFakeDummyId(pId) && !unifiedMap.has(pId.toLowerCase())) {
+          addToMap(pending);
+        }
+      }
+    } catch {}
   }
 
   // Sort: newest first
@@ -809,4 +840,3 @@ export async function fetchAllCustomerBookings(
   console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status})`));
   return allList;
 }
-

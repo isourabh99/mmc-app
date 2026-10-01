@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/ToastProvider";
 
 import {
@@ -13,9 +13,11 @@ import {
 } from "@/lib/auth.api";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 
-export default function GetStartedPage() {
+function GetStartedContent() {
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get("redirect");
 
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
@@ -199,6 +201,16 @@ export default function GetStartedPage() {
           String(loginResponse.content?.is_active ?? 1)
         );
 
+        // Purge any guest/stale dummy bookings from storage
+        localStorage.removeItem("mmc_confirmed_bookings");
+        localStorage.removeItem("mmc_bookings_metadata");
+        localStorage.removeItem("mmc_tyre_assistance_bookings");
+        localStorage.removeItem("mmc_active_tyre_booking_id");
+        localStorage.removeItem("mmc_custom_notifications");
+        try {
+          sessionStorage.removeItem("mmc_pending_booking");
+        } catch {}
+
         // Pre-fetch customer profile
         try {
           const profileRes = await getCustomerProfile();
@@ -214,7 +226,8 @@ export default function GetStartedPage() {
         window.dispatchEvent(new CustomEvent("auth-change"));
 
         showToast("Successfully logged in! Welcome to MMC.", "success");
-        router.push("/account");
+        const targetUrl = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/";
+        router.push(targetUrl);
       } else {
         showToast(loginResponse?.message || "Invalid OTP.", "error");
       }
@@ -609,5 +622,19 @@ export default function GetStartedPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function GetStartedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full min-h-[calc(100vh-5rem)] flex items-center justify-center bg-[#090706] text-white">
+          <div className="w-6 h-6 border-2 border-[#E8AF66] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <GetStartedContent />
+    </Suspense>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Chauffeur } from "@/lib/service/chauffeur.api";
 import { isAuthenticated } from "@/lib/auth.api";
+import { useToast } from "@/components/ToastProvider";
 
 interface ChauffeurCardProps {
   chauffeur: Chauffeur;
@@ -32,6 +33,7 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
   onBookNow,
 }) => {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const carPhoto =
     chauffeur.image_full_paths?.[0] ||
@@ -209,7 +211,8 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
           type="button"
           onClick={() => {
             if (!isAuthenticated()) {
-              router.push("/login");
+              showToast("Please log in to book a chauffeur", "info");
+              router.push(`/login?redirect=${encodeURIComponent(`/services/Chauffeur/${chauffeur.id}`)}`);
               return;
             }
             if (onBookNow) {

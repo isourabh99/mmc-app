@@ -89,6 +89,11 @@ import ModificationQuoteFormView from "./components/ModificationQuoteFormView";
 import ModificationProviderProfileView from "./components/ModificationProviderProfileView";
 import ModificationQuotesView from "./components/ModificationQuotesView";
 import ModificationBookingView from "./components/ModificationBookingView";
+import {
+    saveServiceFormDraft,
+    getServiceFormDraft,
+    clearServiceFormDraft,
+} from "@/lib/serviceFormDraft";
 
 export default function ModificationPage() {
     const router = useRouter();
@@ -273,7 +278,7 @@ export default function ModificationPage() {
     const handleStartMultiQuote = async (targetProviderIds?: string[]) => {
         if (!isAuthenticated()) {
             showToast("Please login to request a quotation.", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/modification")}`);
             return;
         }
 
@@ -410,6 +415,27 @@ export default function ModificationPage() {
         return () => {
             isMounted = false;
         };
+    }, []);
+
+    useEffect(() => {
+        if (isAuthenticated()) {
+            const draft = getServiceFormDraft("modification");
+            if (draft) {
+                if (draft.postcode) setPostcode(draft.postcode);
+                if (draft.regNo) setRegNo(draft.regNo);
+                if (draft.carModel) setCarModel(draft.carModel);
+                if (draft.userLat) setUserLat(draft.userLat);
+                if (draft.userLon) setUserLon(draft.userLon);
+                if (Array.isArray(draft.selectedServices) && draft.selectedServices.length > 0) {
+                    setSelectedServices(draft.selectedServices);
+                }
+                if (draft.targetView) {
+                    navigateToView(draft.targetView as ActiveView);
+                }
+                clearServiceFormDraft("modification");
+                showToast("Welcome back! Your vehicle details have been restored.", "success");
+            }
+        }
     }, []);
 
     // Auto-fetch providers once when in technicians view or after services load
@@ -689,7 +715,7 @@ export default function ModificationPage() {
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to proceed with booking", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/modification")}`);
             return;
         }
         if (!bid.provider) {
@@ -757,7 +783,7 @@ export default function ModificationPage() {
     const handleExecuteBooking = async () => {
         if (!isAuthenticated()) {
             showToast("Please login to complete your booking", "info");
-            router.push("/login");
+            router.push(`/login?redirect=${encodeURIComponent("/services/modification")}`);
             return;
         }
 
@@ -805,7 +831,7 @@ export default function ModificationPage() {
                     bookingPaymentMethod === "stripe"
                         ? (typeof window !== "undefined"
                             ? `${window.location.origin}/booking-success`
-                            : "https://mmcclub.co.uk/booking-success")
+                            : "https://mmcclub.co.uk/backend/booking-success")
                         : undefined,
             });
 
@@ -836,7 +862,7 @@ export default function ModificationPage() {
                     isUuidStr(confirmedRefId) ? confirmedRefId :
                     null;
                 if (possibleUuid) {
-                    redirectUrl = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
+                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(possibleUuid))}`;
                 }
             }
 
@@ -990,6 +1016,22 @@ export default function ModificationPage() {
         }
         if (!privacyAgreed) {
             showToast("Please agree to the privacy policy to proceed", "error");
+            return;
+        }
+
+        // Require authentication before advancing
+        if (!isAuthenticated()) {
+            saveServiceFormDraft("modification", {
+                postcode,
+                regNo,
+                carModel,
+                selectedServices,
+                userLat,
+                userLon,
+                targetView: "technicians",
+            });
+            showToast("Please log in to continue booking your service", "info");
+            router.push(`/login?redirect=${encodeURIComponent("/services/modification")}`);
             return;
         }
 

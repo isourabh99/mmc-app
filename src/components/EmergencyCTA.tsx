@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 export default function EmergencyCTA() {
   return (
@@ -57,8 +58,8 @@ export default function EmergencyCTA() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <a
-                  href="#emergency-request"
+                <Link
+                  href="/emergency-assistance"
                   id="emergency-request-btn"
                   className="inline-flex items-center gap-3 px-7 py-4 rounded-full font-semibold text-black text-sm transition-all duration-300 hover:shadow-[0_0_30px_rgba(250,210,147,0.4)] hover:scale-105"
                   style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
@@ -67,7 +68,7 @@ export default function EmergencyCTA() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   Request Assistance
-                </a>
+                </Link>
               </div>
             </div>
 

@@ -171,7 +171,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : "https://mmcclub.co.uk/backend/booking-success";
 
       const payload = {
         car_id: chauffeur.id,
@@ -215,7 +215,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectLink && isUuidStr(bookingRef)) {
-        redirectLink = `https://mmcclub.co.uk/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bookingRef)
         )}`;
       }

@@ -166,7 +166,7 @@ export default function AlloyServicesPageView({
                             Alloy Wheel Refurbishment
                         </div>
                         <h3 className="text-base sm:text-lg font-black text-white truncate">
-                            {regNo ? `Vehicle ${regNo}` : "Custom Vehicle"} {carYear ? `(${carYear})` : ""}
+                            {regNo ? `Vehicle ${regNo}` : "Custom Vehicle"} {carYear && !carYear.match(/^\d{4}$/) ? `• ${carYear}` : ""}
                         </h3>
                         <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1 flex-wrap">
                             {regNo && (

@@ -57,8 +57,8 @@ export const getAlloyServices = async (
     const rawList = Array.isArray(content)
       ? content
       : content?.data && Array.isArray(content.data)
-      ? content.data
-      : [];
+        ? content.data
+        : [];
 
     if (rawList.length > 0) {
       return rawList.map((item: any) => ({
@@ -571,8 +571,45 @@ export const getMyQuotationRequests = async (
       }
     );
 
-    if (response.data?.content?.data && Array.isArray(response.data.content.data)) {
-      return response.data.content.data;
+    const data = response.data?.content?.data;
+    if (Array.isArray(data)) {
+      const userIds = new Set<string>();
+      const userSavedQuoteIds = new Set<string>();
+      if (typeof window !== "undefined") {
+        try {
+          const rawUser = localStorage.getItem("user");
+          if (rawUser) {
+            const u = JSON.parse(rawUser);
+            if (u.id) userIds.add(String(u.id).toLowerCase().trim());
+            if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
+            if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
+            if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
+            if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
+          }
+          const savedIds = JSON.parse(localStorage.getItem("saved_quote_post_ids") || "[]");
+          if (Array.isArray(savedIds)) {
+            savedIds.forEach((id: string) => userSavedQuoteIds.add(String(id).trim()));
+          }
+        } catch {}
+      }
+
+      return data.filter((p: any) => {
+        if (!p) return false;
+        const pid = String(p.id || "").trim();
+        if (userSavedQuoteIds.has(pid)) return true;
+        if (userIds.size === 0) return false;
+        const candidates = [
+          p.customer_user_id,
+          p.customer_id,
+          p.user_id,
+          p.customer?.id,
+          p.customer?.user_id,
+          p.customer?.phone,
+        ]
+          .filter(Boolean)
+          .map((x) => String(x).toLowerCase().trim());
+        return candidates.some((c) => userIds.has(c));
+      });
     }
     return [];
   } catch (error) {
@@ -1021,9 +1058,9 @@ export const sendBookingRequest = async (
       formData.append(
         "callback",
         params.callback ||
-          (typeof window !== "undefined"
-            ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success")
+        (typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/backend/booking-success")
       );
     }
     if (params.is_partial !== undefined) {
@@ -1088,7 +1125,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success");
+          : "https://mmcclub.co.uk/backend/booking-success");
     }
 
     const response = await apiClient.post<SendBookingRequestResponse>(

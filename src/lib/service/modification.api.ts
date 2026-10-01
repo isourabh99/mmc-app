@@ -831,7 +831,7 @@ export const sendModificationBookingRequest = async (
         params.callback ||
           (typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success")
+            : "https://mmcclub.co.uk/backend/booking-success")
       );
     }
     formData.append("car_image", params.car_image);
@@ -879,7 +879,7 @@ export const sendModificationBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success");
+          : "https://mmcclub.co.uk/backend/booking-success");
     }
 
     const response = await apiClient.post("/customer/booking/request/send", payload, {
