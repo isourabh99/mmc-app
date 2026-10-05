@@ -79,6 +79,7 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/alloy.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import AlloyStepHeader, { type ActiveView } from "./components/AlloyStepHeader";
 import AlloyServicesPageView from "./components/AlloyServicesPageView";
@@ -1002,7 +1003,7 @@ export default function AlloyWheelPage() {
                     bookingPaymentMethod === "stripe"
                         ? (typeof window !== "undefined"
                             ? `${window.location.origin}/booking-success`
-                            : "https://mmcclub.co.uk/backend/booking-success")
+                            : `${getBackendRootUrl()}/booking-success`)
                         : undefined,
             });
 
@@ -1024,7 +1025,7 @@ export default function AlloyWheelPage() {
 
             if (!redirectUrl && bookingPaymentMethod === "stripe" && confirmedRefId) {
                 const payRef = confirmedRefId;
-                redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+                redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
                     String(payRef)
                 )}&is_partial=${isPartialPayment ? 1 : 0}`;
             }
@@ -1038,12 +1039,15 @@ export default function AlloyWheelPage() {
             );
 
             if (confirmedRefId) {
+                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 saveBookingMeta(confirmedRefId, {
                     price: effectivePrice,
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
                     serviceCategoryName: "Alloy Wheel Repair",
                     serviceType: "alloy",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    vehicleReg: regNo || "Vehicle",
+                    vehicleModel: carBrand || "Vehicle",
                     isPaid: false,
                     paymentStatus: "Pending Payment",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1057,6 +1061,11 @@ export default function AlloyWheelPage() {
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
+                    serviceAddress: resolvedAddr,
+                    pickupLocation: resolvedAddr,
+                    postcode: postcode || "",
+                    vehicleReg: regNo || "",
+                    vehicleModel: carBrand || "",
                     totalAmount: effectivePrice,
                     isPaid: false,
                     paymentStatus: "Pending Payment",

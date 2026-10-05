@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import {
   TyreAssistanceBooking,
   TyreCategory,
@@ -598,7 +598,7 @@ export async function sendBookingRequestToBackend(
       payload.callback ||
       (typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/booking-success"),
+        : `${getBackendRootUrl()}/booking-success`),
     car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
     car_model: payload.car_model || "",
     car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
@@ -1035,7 +1035,7 @@ export async function confirmQuoteAndAssignTechnician(
               paymentOptions?.callback ||
               (typeof window !== "undefined"
                 ? `${window.location.origin}/booking-success`
-                : "https://mmcclub.co.uk/booking-success"),
+                : `${getBackendRootUrl()}/booking-success`),
           });
           const sData = switchRes.data;
           const sContent = sData?.content;
@@ -1050,7 +1050,7 @@ export async function confirmQuoteAndAssignTechnician(
               redirectLink = String(u);
               break;
             } else if (sRaw.payment_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(sRaw.payment_id))) {
-              redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(sRaw.payment_id))}&is_partial=${paymentOptions?.is_partial ?? 1}`;
+              redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(sRaw.payment_id))}&is_partial=${paymentOptions?.is_partial ?? 1}`;
               break;
             }
           }
@@ -1066,9 +1066,8 @@ export async function confirmQuoteAndAssignTechnician(
     }
   }
 
-  // If still no direct link, construct Demandium Stripe gateway link ONLY if it's a valid UUID
   if (!redirectLink && realBookingUuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(realBookingUuid)) {
-    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(realBookingUuid)}&is_partial=${paymentOptions?.is_partial ?? 1}`;
+    redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(realBookingUuid)}&is_partial=${paymentOptions?.is_partial ?? 1}`;
   }
 
   booking.status = redirectLink ? "quote_ready" : "quote_ready";

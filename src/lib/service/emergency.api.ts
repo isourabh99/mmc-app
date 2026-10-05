@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface EmergencyServiceItem {
   id: string;
@@ -771,10 +771,10 @@ export const bookEmergencyProvider = async (
       params.callback ||
       (typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/backend/booking-success");
+        : `${(process.env.NEXT_PUBLIC_API_URL).replace("/api/v1", "").replace(/\/+$/, "")}/booking-success`);
 
     const bookingRes = await sendEmergencyBookingRequest({
-      payment_method: params.payment_method || "cash_after_service",
+      payment_method: params.payment_method ,
       service_address_id: "6",
       service_address: fullAddress,
       service_schedule: nowSchedule,
@@ -876,7 +876,7 @@ export const bookEmergencyProvider = async (
 
           const pId = sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
           if (pId) {
-            redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${params.is_partial ?? 1}`;
+            redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${params.is_partial ?? 1}`;
             break;
           }
         } catch (switchErr: any) {
@@ -894,12 +894,12 @@ export const bookEmergencyProvider = async (
       const pId = isUuid(bookingContent?.payment_id)
         ? bookingContent.payment_id
         : isUuid(bookingContent?.booking_id)
-        ? bookingContent.booking_id
-        : isUuid(bookingUuid)
-        ? bookingUuid
-        : null;
+          ? bookingContent.booking_id
+          : isUuid(bookingUuid)
+            ? bookingUuid
+            : null;
       if (pId) {
-        redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(pId)
         )}&is_partial=${params.is_partial ?? 1}`;
       }

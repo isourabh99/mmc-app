@@ -109,11 +109,10 @@ export const CarHireMobileDrawer: React.FC<CarHireMobileDrawerProps> = ({
                     key={cat.id}
                     type="button"
                     onClick={() => onSelectCategory(cat.id)}
-                    className={`p-2 rounded-xl text-xs font-medium text-left truncate transition border ${
-                      isSelected
+                    className={`p-2 rounded-xl text-xs font-medium text-left truncate transition border ${isSelected
                         ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                         : "bg-white/5 text-white/70 border-white/10"
-                    }`}
+                      }`}
                   >
                     {cat.name}
                   </button>
@@ -134,11 +133,10 @@ export const CarHireMobileDrawer: React.FC<CarHireMobileDrawerProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectCarType("all")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
-                  selectedCarTypeId === "all"
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${selectedCarTypeId === "all"
                     ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                     : "bg-white/5 text-white/70 border-white/10"
-                }`}
+                  }`}
               >
                 All
               </button>
@@ -149,11 +147,10 @@ export const CarHireMobileDrawer: React.FC<CarHireMobileDrawerProps> = ({
                     key={type.id}
                     type="button"
                     onClick={() => onSelectCarType(type.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
-                      isSelected
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${isSelected
                         ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                         : "bg-white/5 text-white/70 border-white/10"
-                    }`}
+                      }`}
                   >
                     {type.name}
                   </button>
@@ -181,11 +178,10 @@ export const CarHireMobileDrawer: React.FC<CarHireMobileDrawerProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => onTransmissionChange(item.id)}
-                  className={`py-2 rounded-xl text-xs font-medium transition border text-center ${
-                    isSelected
+                  className={`py-2 rounded-xl text-xs font-medium transition border text-center ${isSelected
                       ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                       : "bg-white/5 text-white/70 border-white/10"
-                  }`}
+                    }`}
                 >
                   {item.label}
                 </button>

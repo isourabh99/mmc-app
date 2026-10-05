@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface CategoryZone {
   id: string;
@@ -150,6 +150,11 @@ export interface CarDetailResponse {
   errors: unknown[];
 }
 
+export const getDigitalPaymentCallbackUrl = (): string => {
+  const apiBase = getApiBaseUrl();
+  return `${apiBase}/digital-payment-booking-response`;
+};
+
 export interface CarBookingPayload {
   car_id: number | string;
   start_date: string;
@@ -168,9 +173,44 @@ export interface CarBookingPayload {
   callback?: string;
   description?: string;
   note?: string;
+  pricing_type?: "hourly" | "daily" | string;
+  hours?: number;
+  rent_amount?: number;
+  total_amount?: number;
+}
+
+export interface CarBookingItemDetail {
+  id?: number;
+  booking_id?: string;
+  car_id?: number;
+  user_id?: string;
+  start_date?: string;
+  end_date?: string;
+  pickup_type?: string;
+  pickup_time?: string;
+  drop_time?: string;
+  description?: string;
+  rent_amount?: number;
+  delivery_fee?: number;
+  security_deposit?: number;
+  total_amount?: number;
+  payment_method?: string;
+  payment_status?: string;
+  booking_status?: string;
+  is_paid?: number;
+  created_at?: string;
+  updated_at?: string;
+  booking?: {
+    id?: string;
+    readable_id?: number | string;
+    [key: string]: unknown;
+  };
+  car?: CarItem;
+  [key: string]: unknown;
 }
 
 export interface CarBookingContent {
+  booking?: CarBookingItemDetail;
   id?: number;
   booking_id?: string;
   car_id?: number;
@@ -186,6 +226,7 @@ export interface CarBookingContent {
   delivery_address?: string;
   redirect_link?: string;
   redirect_url?: string;
+  amount?: number;
   [key: string]: unknown;
 }
 
@@ -208,17 +249,74 @@ export const getCarCategories = async (
   offset: number = 1
 ): Promise<Category[]> => {
   try {
-    const response = await apiClient.get<CategoryResponse>(
+    const response = await apiClient.get<any>(
       "/customer/category",
       {
         params: { limit, offset },
       }
     );
-    return response.data?.content?.data || [];
+    const data = response.data?.content?.data || response.data?.content || response.data?.data || [];
+    return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error("Failed to fetch car categories:", error);
+    console.warn("Notice: getCarCategories fetch:", error);
     return [];
   }
+};
+
+export const mapBackendItemToCarItem = (item: any, defaultCatId?: string): CarItem => {
+  if (!item) return item;
+  return {
+    id: item.id,
+    service_category: item.service_category || item.category?.name || "Car Hire",
+    provider_id: item.provider_id || item.provider?.id || "",
+    category_id: item.category_id || defaultCatId || "35f3a758-c66b-444e-83fb-9325a345e2db",
+    car_type_id: Number(item.car_type_id || item.type?.id || 1),
+    features: item.features || null,
+    brand: item.brand || item.name || item.service_name || "Vehicle",
+    model: item.model || item.short_description || null,
+    manufacture_year: item.manufacture_year || item.year || 2024,
+    year: item.year || item.manufacture_year || 2024,
+    fuel_type: item.fuel_type || "Petrol",
+    transmission_type: item.transmission_type || item.transmission || "Automatic",
+    transmission: item.transmission || item.transmission_type || "Automatic",
+    registration_number: item.registration_number || "",
+    air_conditioning: item.air_conditioning !== undefined ? Number(item.air_conditioning) : 1,
+    service_type: item.service_type || "car_hire",
+    available_hours_start: item.available_hours_start || "09:00:00",
+    available_hours_end: item.available_hours_end || "18:00:00",
+    preferred_areas: item.preferred_areas || null,
+    seating_capacity: item.seating_capacity ? Number(item.seating_capacity) : 5,
+    daily_rate: String(item.daily_rate || item.min_bidding_price || item.price || "0"),
+    hourly_rate: String(item.hourly_rate || item.min_bidding_price || item.price || "0"),
+    security_deposit: item.security_deposit ? String(item.security_deposit) : "0",
+    postcode: item.postcode || item.provider?.postcode || item.address || null,
+    address: item.address || item.provider?.company_address || null,
+    available_for: item.available_for || "hire",
+    terms_conditions: item.terms_conditions || item.description || null,
+    pricing_type: item.pricing_type || "hourly",
+    description: item.description || item.short_description || "",
+    images: Array.isArray(item.images) ? item.images : typeof item.images === "string" ? [item.images] : [],
+    image_full_paths: Array.isArray(item.image_full_paths)
+      ? item.image_full_paths
+      : typeof item.image_full_paths === "string"
+      ? [item.image_full_paths]
+      : [],
+    status: item.status !== undefined ? Number(item.status) : 1,
+    created_at: item.created_at || new Date().toISOString(),
+    updated_at: item.updated_at || new Date().toISOString(),
+    mileage_limit: item.mileage_limit || null,
+    extra_mileage_charge: item.extra_mileage_charge || null,
+    fuel_policy: item.fuel_policy || null,
+    delivery_fee: item.delivery_fee ? String(item.delivery_fee) : "0",
+    min_driver_age: item.min_driver_age || 21,
+    min_booking_hours: item.min_booking_hours || 1,
+    luggage_capacity: item.luggage_capacity || 2,
+    amenities: item.amenities || null,
+    chauffeur_tier: item.chauffeur_tier || null,
+    type: item.type || (item.car_type ? item.car_type : undefined),
+    category: item.category || undefined,
+    provider: item.provider || undefined,
+  };
 };
 
 /**
@@ -228,30 +326,73 @@ export const getCarList = async (
   categoryId?: string,
   params?: { limit?: number; offset?: number }
 ): Promise<CarItem[]> => {
+  const catId = categoryId || "35f3a758-c66b-444e-83fb-9325a345e2db";
+  
+  // Strategy 1: Try /customer/car/list with category_id
   try {
-    const response = await apiClient.get<CarListResponse>(
-      "/customer/car/list",
-      {
-        params: {
-          category_id: categoryId,
-          limit: params?.limit || 20,
-          offset: params?.offset || 1,
-        },
-      }
-    );
+    const response = await apiClient.get<CarListResponse>("/customer/car/list", {
+      params: {
+        category_id: catId,
+        limit: params?.limit || 50,
+        offset: params?.offset || 1,
+      },
+    });
 
     const content = response.data?.content;
+    let list: any[] = [];
     if (Array.isArray(content)) {
-      return content;
+      list = content;
+    } else if (content && Array.isArray(content.data)) {
+      list = content.data;
+    } else if (Array.isArray(response.data?.data)) {
+      list = response.data.data;
     }
-    if (content && Array.isArray(content.data)) {
-      return content.data;
+
+    if (list.length > 0) {
+      return list.map((item) => mapBackendItemToCarItem(item, catId));
     }
-    return [];
-  } catch (error) {
-    console.error("Failed to fetch car list:", error);
-    return [];
+  } catch (err) {
+    console.warn("[CarHire] /customer/car/list with category_id notice:", err);
   }
+
+  // Strategy 2: Try /customer/car/list without category_id filter
+  try {
+    const generalRes = await apiClient.get<any>("/customer/car/list", {
+      params: {
+        limit: params?.limit || 50,
+        offset: params?.offset || 1,
+      },
+    });
+    const gContent = generalRes.data?.content;
+    const gList = Array.isArray(gContent)
+      ? gContent
+      : Array.isArray(gContent?.data)
+      ? gContent.data
+      : Array.isArray(generalRes.data?.data)
+      ? generalRes.data.data
+      : [];
+
+    if (gList.length > 0) {
+      return gList.map((item: any) => mapBackendItemToCarItem(item, catId));
+    }
+  } catch (err) {
+    console.warn("[CarHire] /customer/car/list general notice:", err);
+  }
+
+  // Strategy 3: Try /customer/service/category/${catId}
+  try {
+    const sRes = await apiClient.get<any>(`/customer/service/category/${catId}`, {
+      params: { limit: params?.limit || 50, offset: params?.offset || 1 },
+    });
+    const sData = sRes.data?.content?.data || sRes.data?.content || sRes.data?.data || [];
+    if (Array.isArray(sData) && sData.length > 0) {
+      return sData.map((item: any) => mapBackendItemToCarItem(item, catId));
+    }
+  } catch (err) {
+    console.warn("[CarHire] /customer/service/category notice:", err);
+  }
+
+  return [];
 };
 
 /**
@@ -260,15 +401,48 @@ export const getCarList = async (
 export const getCarDetails = async (
   carId: number | string
 ): Promise<CarItem | null> => {
+  if (!carId) return null;
+
   try {
-    const response = await apiClient.get<CarDetailResponse>(
+    const response = await apiClient.get<any>(
       `/customer/car/details/${carId}`
     );
-    return response.data?.content || null;
+    const content = response.data?.content;
+    const item =
+      content?.car ||
+      (content && typeof content === "object" && !Array.isArray(content) && content.id ? content : null) ||
+      response.data?.data;
+
+    if (item && item.id) {
+      return mapBackendItemToCarItem(
+        item,
+        item.category_id || "35f3a758-c66b-444e-83fb-9325a345e2db"
+      );
+    }
   } catch (error) {
-    console.error(`Failed to fetch car details for ID ${carId}:`, error);
-    return null;
+    console.warn(`[CarHire] /customer/car/details/${carId} notice:`, error);
   }
+
+  // Fallback 1: try finding in car list
+  try {
+    const list = await getCarList();
+    const found = list.find((c) => String(c.id) === String(carId));
+    if (found) return found;
+  } catch {}
+
+  // Fallback 2: try /customer/service/${carId}
+  try {
+    const sRes = await apiClient.get<any>(`/customer/service/${carId}`);
+    const sItem = sRes.data?.content;
+    if (sItem && sItem.id) {
+      return mapBackendItemToCarItem(
+        sItem,
+        sItem.category_id || "35f3a758-c66b-444e-83fb-9325a345e2db"
+      );
+    }
+  } catch {}
+
+  return null;
 };
 
 /**
@@ -276,12 +450,15 @@ export const getCarDetails = async (
  */
 export const getCarTypes = async (): Promise<CarType[]> => {
   try {
-    const response = await apiClient.get<CarTypesResponse>(
-      "/customer/car/types"
-    );
-    return response.data?.content || [];
+    const response = await apiClient.get<any>("/customer/car/types");
+    const raw = response.data;
+    if (Array.isArray(raw?.content)) return raw.content;
+    if (raw?.content && Array.isArray(raw.content.data)) return raw.content.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw)) return raw;
+    return [];
   } catch (error) {
-    console.error("Failed to fetch car types:", error);
+    console.warn("Failed to fetch car types:", error);
     return [];
   }
 };
@@ -312,7 +489,7 @@ export const bookCar = async (
 };
 
 // ==========================================
-// UTILITY HELPERS FOR CLEAN DISPLAY
+// UTILITY HELPERS FOR CLEAN DISPLAY & IMAGES
 // ==========================================
 
 export const formatCurrency = (val: string | number | null | undefined): string => {
@@ -322,34 +499,123 @@ export const formatCurrency = (val: string | number | null | undefined): string 
   return `£${num.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-export const getCarPrimaryImage = (car: CarItem): string => {
-  if (car.image_full_paths && car.image_full_paths.length > 0) {
-    const valid = car.image_full_paths.find((p) => p && typeof p === "string" && !p.endsWith("/"));
-    if (valid) return valid;
+export const normalizeCarImageUrl = (
+  pathOrUrl: string | null | undefined,
+  type: "car" | "service" | "provider" | "category" = "car"
+): string => {
+  if (!pathOrUrl || typeof pathOrUrl !== "string") return "";
+  const trimmed = pathOrUrl.trim().replace(/^["']|["']$/g, "");
+  if (
+    !trimmed ||
+    trimmed === "null" ||
+    trimmed === "undefined" ||
+    trimmed === "[]" ||
+    trimmed.endsWith("/") ||
+    trimmed === "def.png" ||
+    trimmed.endsWith("/def.png") ||
+    trimmed === "default.png" ||
+    trimmed.endsWith("/default.png")
+  ) {
+    return "";
   }
-  if (car.images && car.images.length > 0) {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://192.168.29.83:8000";
-    return car.images[0].startsWith("http") ? car.images[0] : `${apiBase}/storage/app/public/car/${car.images[0]}`;
+
+  const apiBase = getBackendRootUrl();
+
+  // If already a full URL, ensure domain/port matches active backend (fix localhost vs LAN IP issues)
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      const activeBase = new URL(apiBase);
+      if (
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.host !== activeBase.host
+      ) {
+        return `${activeBase.origin}${parsed.pathname}${parsed.search}`;
+      }
+    } catch {}
+    return trimmed;
   }
-  return "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+
+  // If path contains storage/
+  const cleanPath = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
+  if (cleanPath.startsWith("storage/") || cleanPath.includes("/storage/")) {
+    const withoutLeading = cleanPath.startsWith("storage/") ? cleanPath : cleanPath.slice(cleanPath.indexOf("storage/"));
+    return `${apiBase}/${withoutLeading}`;
+  }
+
+  // If subfolder already in path
+  if (cleanPath.startsWith("car/") || cleanPath.startsWith("service/") || cleanPath.startsWith("provider/") || cleanPath.startsWith("category/")) {
+    return `${apiBase}/storage/app/public/${cleanPath}`;
+  }
+
+  // Fallback to type prefix
+  return `${apiBase}/storage/app/public/${type}/${cleanPath}`;
 };
 
-export const getCarGalleryImages = (car: CarItem): string[] => {
-  const fallback = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
-  
-  if (car.image_full_paths && Array.isArray(car.image_full_paths) && car.image_full_paths.length > 0) {
-    const valid = car.image_full_paths.filter((p) => p && typeof p === "string" && !p.endsWith("/"));
-    if (valid.length > 0) return valid;
+export const getCarGalleryImages = (car: CarItem | any): string[] => {
+  const fallback =
+    "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+
+  if (!car) return [fallback];
+
+  const results: string[] = [];
+
+  const addCandidate = (
+    val: any,
+    type: "car" | "service" | "provider" | "category" = "car"
+  ) => {
+    if (!val) return;
+    if (Array.isArray(val)) {
+      val.forEach((item) => addCandidate(item, type));
+    } else if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item) => addCandidate(item, type));
+            return;
+          }
+        } catch {}
+      }
+      const normalized = normalizeCarImageUrl(trimmed, type);
+      if (normalized && !results.includes(normalized)) {
+        results.push(normalized);
+      }
+    }
+  };
+
+  // 1. image_full_paths
+  addCandidate(car.image_full_paths, "car");
+
+  // 2. images array or string
+  addCandidate(car.images, "car");
+
+  // 3. direct image fields
+  addCandidate(car.image_full_path, "car");
+  addCandidate(car.cover_image_full_path, "service");
+  addCandidate(car.thumbnail_full_path, "service");
+  addCandidate(car.cover_image, "service");
+  addCandidate(car.image, "car");
+  addCandidate(car.thumbnail, "service");
+  addCandidate(car.service_image, "service");
+  addCandidate(car.profile_image, "car");
+
+  // 4. Provider image if no other image found
+  if (results.length === 0 && car.provider) {
+    addCandidate(car.provider.cover_image_full_path, "provider");
+    addCandidate(car.provider.cover_image, "provider");
+    addCandidate(car.provider.logo_full_path, "provider");
+    addCandidate(car.provider.logo, "provider");
   }
 
-  if (car.images && Array.isArray(car.images) && car.images.length > 0) {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://192.168.29.83:8000";
-    return car.images.map((img) =>
-      img.startsWith("http") ? img : `${apiBase}/storage/app/public/car/${img}`
-    );
-  }
+  return results.length > 0 ? results : [fallback];
+};
 
-  return [fallback];
+export const getCarPrimaryImage = (car: CarItem | any): string => {
+  const images = getCarGalleryImages(car);
+  return images[0] || "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
 };
 
 export const parseTermsAndConditions = (rawTerms: string | null | undefined): string[] => {
@@ -376,3 +642,60 @@ export const formatTimeTo12Hour = (timeStr: string): string => {
   const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
   return `${formattedHour}:${min} ${ampm}`;
 };
+
+export const getCarProviderLogo = (provider?: CarProvider | null): string => {
+  if (!provider) return "";
+  const apiBase = getBackendRootUrl();
+
+  if (
+    provider.logo_full_path &&
+    typeof provider.logo_full_path === "string" &&
+    !provider.logo_full_path.endsWith("/") &&
+    provider.logo_full_path !== "null"
+  ) {
+    if (
+      provider.logo_full_path.startsWith("http://") ||
+      provider.logo_full_path.startsWith("https://")
+    ) {
+      try {
+        const parsed = new URL(provider.logo_full_path);
+        const activeBase = new URL(apiBase);
+        if (
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.host !== activeBase.host
+        ) {
+          return `${activeBase.origin}${parsed.pathname}${parsed.search}`;
+        }
+      } catch { }
+      return provider.logo_full_path;
+    }
+    const cleanPath = provider.logo_full_path.startsWith("/")
+      ? provider.logo_full_path
+      : `/${provider.logo_full_path}`;
+    return `${apiBase}${cleanPath}`;
+  }
+
+  if (
+    provider.logo &&
+    typeof provider.logo === "string" &&
+    provider.logo !== "default.png" &&
+    provider.logo !== "null" &&
+    !provider.logo.endsWith("/")
+  ) {
+    if (provider.logo.startsWith("http://") || provider.logo.startsWith("https://")) {
+      return provider.logo;
+    }
+    const cleanPath = provider.logo.startsWith("/")
+      ? provider.logo
+      : `/${provider.logo}`;
+    if (cleanPath.includes("/storage/")) {
+      return `${apiBase}${cleanPath}`;
+    }
+    return `${apiBase}/storage/app/public/provider/logo/${provider.logo}`;
+  }
+
+  return "";
+};
+
+

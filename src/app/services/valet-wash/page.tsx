@@ -45,6 +45,7 @@ import {
   addValetToCart,
   sendValetBookingRequest,
 } from "@/lib/service/valet.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
@@ -443,7 +444,7 @@ export default function VehicleWashValetPage() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : `${getBackendRootUrl()}/booking-success`;
 
       const bookingRes = await sendValetBookingRequest({
         service_id: selectedServiceId,
@@ -505,7 +506,7 @@ export default function VehicleWashValetPage() {
         (isUuidStr(confirmedId) ? confirmedId : null);
 
       if (!redirectLink && possibleUuid) {
-        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(possibleUuid)
         )}&is_partial=${isPartialPayment ? 1 : 0}`;
       }
@@ -1019,10 +1020,10 @@ export default function VehicleWashValetPage() {
                     provider.total_selected_services_price && provider.total_selected_services_price > 0
                       ? provider.total_selected_services_price
                       : (activeVariation?.price && activeVariation.price > 0
-                          ? activeVariation.price
-                          : (activeServiceItem?.price && activeServiceItem.price > 0
-                              ? activeServiceItem.price
-                              : 45));
+                        ? activeVariation.price
+                        : (activeServiceItem?.price && activeServiceItem.price > 0
+                          ? activeServiceItem.price
+                          : 45));
                   const distance = provider.distance_miles || (1.2 + index * 0.6).toFixed(1);
                   const timeEstimate = provider.estimated_time || "1 hours";
                   const serviceType = provider.service_type || "Mobile";

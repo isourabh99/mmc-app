@@ -1,16 +1,16 @@
 import axios from "axios";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+export const getApiBaseUrl = (): string => {
+  return (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+};
 
-if (!apiBaseUrl) {
-  console.warn(
-    "NEXT_PUBLIC_API_URL is not configured. Add it to your .env.local file, for example: http://localhost:8000"
-  );
-}
+export const getBackendRootUrl = (): string => {
+  return getApiBaseUrl().replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
+};
 
 const apiClient = axios.create({
-  baseURL: apiBaseUrl || undefined,
-  timeout: 10000,
+  baseURL: getApiBaseUrl(),
+  timeout: 30000,
   headers: {
     Accept: "application/json",
   },
@@ -18,11 +18,13 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
-    if (!apiBaseUrl) {
+    const baseUrl = getApiBaseUrl();
+    if (!baseUrl) {
       return Promise.reject(
-        new Error("NEXT_PUBLIC_API_URL is not configured. Set it in .env.local to your backend base URL.")
+        new Error("NEXT_PUBLIC_API_URL is not configured. Set it in .env to your backend base URL.")
       );
     }
+    config.baseURL = baseUrl;
 
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("token");
@@ -56,6 +58,34 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// Response interceptor with automatic retry on 429 Too Many Requests
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+
+    // Handle 429 Rate Limiting with automatic backoff retry
+    if (error?.response?.status === 429 && config && !config._retry429) {
+      config._retry429 = true;
+      const retryAfterHeader = error.response.headers?.["retry-after"];
+      const delayMs = retryAfterHeader ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 3000) : 1500;
+
+      console.warn(`[apiClient] Rate limited (429). Retrying request in ${delayMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return apiClient(config);
+    }
+
+    // Friendly message for 429 if retry also failed
+    if (error?.response?.status === 429) {
+      if (error.response.data && typeof error.response.data === "object") {
+        error.response.data.message = error.response.data.message || "Too many requests sent. Please wait a few moments and try again.";
+      }
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 export default apiClient;

@@ -30,7 +30,7 @@ import {
   Eye,
   RotateCcw,
 } from "lucide-react";
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
   UnifiedBookingItem,
@@ -39,6 +39,8 @@ import {
   extractReadableAddress,
   cleanReadableText,
   saveBookingMeta,
+  parseBookingTimestamp,
+  getDigitalPaymentCallbackUrl,
 } from "@/lib/service/bookings.api";
 
 interface BookingsTabProps {
@@ -107,7 +109,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
             `Payment for booking #${paidBookingId} has been confirmed.`,
             window.location.href
           );
-        } catch {}
+        } catch { }
       }
     }
   }, [onRefresh]);
@@ -285,10 +287,16 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       })
       .sort((a, b) => {
         if (sortBy === "newest") {
-          return new Date(b.createdAt || b.scheduleDate).getTime() - new Date(a.createdAt || a.scheduleDate).getTime();
+          const timeA = parseBookingTimestamp(a);
+          const timeB = parseBookingTimestamp(b);
+          if (timeB !== timeA) return timeB - timeA;
+          return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
         }
         if (sortBy === "oldest") {
-          return new Date(a.createdAt || a.scheduleDate).getTime() - new Date(b.createdAt || b.scheduleDate).getTime();
+          const timeA = parseBookingTimestamp(a);
+          const timeB = parseBookingTimestamp(b);
+          if (timeA !== timeB) return timeA - timeB;
+          return String(a.id || "").localeCompare(String(b.id || ""), undefined, { numeric: true });
         }
         if (sortBy === "amount_desc") {
           return b.totalAmount - a.totalAmount;
@@ -440,11 +448,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
             key={tab.id}
             type="button"
             onClick={() => setSelectedStatus(tab.id)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-              selectedStatus === tab.id
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${selectedStatus === tab.id
                 ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-black shadow-md shadow-[#d09a50]/20"
                 : "bg-[#17120e] text-zinc-300 hover:text-white border border-white/10 hover:border-white/20"
-            }`}
+              }`}
           >
             {tab.label}
           </button>
@@ -522,11 +529,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 key={pf.id}
                 type="button"
                 onClick={() => setSelectedPaymentStatus(pf.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                  selectedPaymentStatus === pf.id
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${selectedPaymentStatus === pf.id
                     ? "bg-[#FAD293] text-black font-bold"
                     : "bg-black/40 text-zinc-400 hover:text-white border border-white/5"
-                }`}
+                  }`}
               >
                 {pf.label}
               </button>
@@ -634,11 +640,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
               <div
                 key={item.id}
                 id={`booking-card-${item.id}`}
-                className={`rounded-3xl border p-4 sm:p-5 space-y-4 shadow-xl transition-all duration-300 ${
-                  highlightedBookingId === item.id
+                className={`rounded-3xl border p-4 sm:p-5 space-y-4 shadow-xl transition-all duration-300 ${highlightedBookingId === item.id
                     ? "border-[#FAD293] bg-[#22170d] ring-2 ring-[#FAD293]/70 shadow-[0_0_35px_rgba(250,210,147,0.35)]"
                     : "border-[#33271d] bg-[#17120e] hover:border-[#FAD293]/60"
-                }`}
+                  }`}
               >
                 {/* Top Row: Service Category Badge, Title, Status & Paid Badges */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-white/10 pb-3.5">
@@ -718,29 +723,27 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   {/* Status & Payment Badges */}
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <span
-                      className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
-                        isCompleted
+                      className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${isCompleted
                           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                           : isOngoing
-                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse"
-                          : isPending
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                          : isCanceled
-                          ? "bg-red-500/20 text-red-300 border border-red-500/40"
-                          : "bg-zinc-800 text-zinc-300 border border-zinc-700"
-                      }`}
+                            ? "bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse"
+                            : isPending
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                              : isCanceled
+                                ? "bg-red-500/20 text-red-300 border border-red-500/40"
+                                : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                        }`}
                     >
                       {item.statusDisplay}
                     </span>
 
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                        isFullyPaid
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${isFullyPaid
                           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                           : isPartiallyPaid
-                          ? "bg-orange-500/20 text-orange-300 border border-orange-500/40"
-                          : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                      }`}
+                            ? "bg-orange-500/20 text-orange-300 border border-orange-500/40"
+                            : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        }`}
                     >
                       {isFullyPaid ? "✓ Fully Paid" : isPartiallyPaid ? "⚡ Partially Paid" : "Payment Pending"}
                     </span>
@@ -764,9 +767,14 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                             {item.destinationLocation ? "Pickup Location" : "Service Location"}
                           </span>
                           <span className="text-white font-medium break-words block">
-                            {extractReadableAddress(item.pickupLocation || item.serviceAddress) || "Address on record"}
+                            {extractReadableAddress(item.pickupLocation) ||
+                              extractReadableAddress(item.serviceAddress) ||
+                              item.postcode ||
+                              (item.coordinates?.latitude && Number(item.coordinates.latitude) !== 0
+                                ? `Service Area (${Number(item.coordinates.latitude).toFixed(4)}, ${Number(item.coordinates.longitude).toFixed(4)})`
+                                : "London, UK (Customer Location)")}
                           </span>
-                          {item.coordinates?.latitude && (
+                          {item.coordinates?.latitude && Number(item.coordinates.latitude) !== 0 && (
                             <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">
                               📍 Coordinates: {Number(item.coordinates.latitude).toFixed(4)}, {Number(item.coordinates.longitude).toFixed(4)}
                             </span>
@@ -991,7 +999,12 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 <div className="space-y-1">
                   <span className="text-zinc-400 text-[10px] block font-bold">Location:</span>
                   <p className="text-white font-medium">
-                    {extractReadableAddress(selectedBookingForModal.pickupLocation || selectedBookingForModal.serviceAddress) || "Standard Service Location"}
+                    {extractReadableAddress(selectedBookingForModal.pickupLocation) ||
+                      extractReadableAddress(selectedBookingForModal.serviceAddress) ||
+                      selectedBookingForModal.postcode ||
+                      (selectedBookingForModal.coordinates?.latitude && Number(selectedBookingForModal.coordinates.latitude) !== 0
+                        ? `Service Area (${Number(selectedBookingForModal.coordinates.latitude).toFixed(4)}, ${Number(selectedBookingForModal.coordinates.longitude).toFixed(4)})`
+                        : "London, UK (Customer Location)")}
                   </p>
                   {selectedBookingForModal.destinationLocation && (
                     <div className="pt-1 mt-1 border-t border-white/10">
@@ -1193,11 +1206,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                       const bookingId = candidateIds[0] || bookingForPayment.id;
                       console.log("[Payment] Initiating payment for booking:", bookingId);
 
-                      const callbackUrl = `${window.location.origin}/account?tab=bookings&bookingId=${encodeURIComponent(String(bookingId))}&payment_success=true`;
-                      const defaultCallback =
-                        typeof window !== "undefined"
-                          ? `${window.location.origin}/booking-success`
-                          : "https://mmcclub.co.uk/backend/booking-success";
+                      const callbackUrl = getDigitalPaymentCallbackUrl();
 
                       let redirectUrl = "";
                       let stripePaymentId = "";
@@ -1210,14 +1219,14 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                             payment_method: "stripe",
                             is_partial: 0,
                             payment_platform: "app",
-                            callback: callbackUrl || defaultCallback,
+                            callback: callbackUrl,
                           },
                           {
                             booking_id: String(testId),
                             payment_method: "stripe",
                             is_partial: 0,
                             payment_platform: "web",
-                            callback: callbackUrl || defaultCallback,
+                            callback: callbackUrl,
                           },
                         ];
 
@@ -1277,11 +1286,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                         }
                       }
 
-                      // Build the Stripe redirect URL if not returned directly
                       if (!redirectUrl) {
                         const targetId = stripePaymentId || bookingId;
                         if (targetId) {
-                          redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
+                          redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
                         }
                       }
 

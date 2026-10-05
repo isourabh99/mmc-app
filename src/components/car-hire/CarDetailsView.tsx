@@ -38,6 +38,7 @@ import {
   formatCurrency,
   parseTermsAndConditions,
   getCarGalleryImages,
+  getCarProviderLogo,
 } from "@/lib/service/car.api";
 import { isAuthenticated } from "@/lib/auth.api";
 import { useToast } from "@/components/ToastProvider";
@@ -87,7 +88,7 @@ export const CarDetailsView: React.FC<CarDetailsViewProps> = ({
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       {/* Main Content Grid */}
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: Gallery, Specs, Terms, Description (8 cols) */}
@@ -540,15 +541,30 @@ export const CarDetailsView: React.FC<CarDetailsViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/8">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 bg-neutral-800 shrink-0">
-                      <img
-                        src={car.provider.logo_full_path || FALLBACK_IMAGE}
-                        alt={car.provider.company_name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE;
-                        }}
-                      />
+                    <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 bg-neutral-800 shrink-0 flex items-center justify-center">
+                      {getCarProviderLogo(car.provider) ? (
+                        <img
+                          src={getCarProviderLogo(car.provider)}
+                          alt={car.provider.company_name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent && !parent.querySelector(".fallback-initials")) {
+                              parent.classList.add("bg-gradient-to-br", "from-neutral-800", "to-neutral-900");
+                              const span = document.createElement("span");
+                              span.className = "fallback-initials text-sm font-bold text-[#FAD293]";
+                              span.innerText = (car.provider?.company_name || "MMC").slice(0, 2).toUpperCase();
+                              parent.appendChild(span);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900 text-sm font-bold text-[#FAD293]">
+                          {(car.provider.company_name || "MMC").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
                     </div>
 
                     <div className="min-w-0 flex-1">

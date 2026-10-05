@@ -21,11 +21,20 @@ export const metadata: Metadata = {
     "Connect with certified automotive service providers across Smart Repair, Denting & Painting, Modifications, Tyres, Car Wash, Chauffeur, and Car Rental. Get instant quotes from trusted professionals.",
   keywords:
     "automotive services, car repair, smart repair, denting painting, tyres, car wash, chauffeur, car rental, vehicle modifications",
+  icons: {
+    icon: [
+      { url: "/mmc-logo.jpg?v=2", type: "image/jpeg" },
+      { url: "/favicon.ico?v=2" }
+    ],
+    shortcut: "/mmc-logo.jpg?v=2",
+    apple: "/mmc-logo.jpg?v=2",
+  },
   openGraph: {
     title: "MMC — Motor Market Connect Club",
     description:
       "Premium automotive marketplace connecting you with certified service providers.",
     type: "website",
+    images: ["/mmc-logo.jpg"],
   },
 };
 
@@ -41,6 +50,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
+      <head>
+        <link rel="icon" href="/mmc-logo.jpg?v=2" type="image/jpeg" />
+        <link rel="shortcut icon" href="/mmc-logo.jpg?v=2" type="image/jpeg" />
+        <link rel="apple-touch-icon" href="/mmc-logo.jpg?v=2" />
+      </head>
       <body
         className="bg-black text-white flex flex-col min-h-screen"
         suppressHydrationWarning

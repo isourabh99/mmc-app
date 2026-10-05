@@ -37,6 +37,7 @@ import {
   TYRE_REPLACEMENT_SERVICE_ID,
   DEFAULT_PROVIDER_ID,
 } from "@/lib/service/tyre-assistance.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import { TyreCategoryStep } from "@/components/tyre-assistance/TyreCategoryStep";
 import { AssistanceTypeStep } from "@/components/tyre-assistance/AssistanceTypeStep";
@@ -282,7 +283,7 @@ export default function TyreAssistancePage() {
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+          : `${getBackendRootUrl()}/booking-success`;
 
       const numericFare = Number(currentBooking.quote?.fareAmount || 0);
       const depositVal = (numericFare * 0.25).toFixed(2);
@@ -373,7 +374,7 @@ export default function TyreAssistancePage() {
         (isUuidStr(updated?.id) ? updated.id : null);
 
       if (!targetPaymentUrl && possibleUuid) {
-        targetPaymentUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        targetPaymentUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(possibleUuid)
         )}&is_partial=${isPartial ? 1 : 0}`;
       }
@@ -584,13 +585,12 @@ export default function TyreAssistancePage() {
                 key={step.key}
                 disabled={!isAccessible}
                 onClick={() => isAccessible && setCurrentStep(step.key)}
-                className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ${
-                  isCurrent
+                className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ${isCurrent
                     ? "bg-[#FAD293] text-black font-bold"
                     : isAccessible
-                    ? "bg-white/10 text-white hover:bg-white/20 cursor-pointer"
-                    : "bg-white/5 text-white/30 cursor-not-allowed"
-                }`}
+                      ? "bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+                      : "bg-white/5 text-white/30 cursor-not-allowed"
+                  }`}
               >
                 <span>{isDone ? "✓" : step.stepNumber}</span>
                 <span>{step.label}</span>

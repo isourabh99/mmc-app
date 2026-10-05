@@ -28,7 +28,7 @@ export default function HeroSection() {
   return (
     <section
       id="hero"
-      className="relative min-h-[420px] sm:min-h-[80vh] lg:min-h-screen overflow-hidden bg-[#050505] text-white flex items-center pt-16 pb-8 sm:pt-24 sm:pb-16 lg:pt-28 lg:pb-20"
+      className="relative min-h-[300px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[500px] overflow-hidden bg-[#050505] text-white flex items-center pt-10 pb-8 sm:pt-14 sm:pb-12 lg:pt-16 lg:pb-14"
     >
       {/* =========================================================
           BACKGROUND IMAGE
@@ -108,7 +108,7 @@ export default function HeroSection() {
       {/* =========================================================
           CONTENT
       ========================================================= */}
-      <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="w-full max-w-[700px]">
           {/* Eyebrow badge */}
           <div className="mb-3 sm:mb-5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#CEA46B]/10 border border-[#CEA46B]/25 backdrop-blur-md">
@@ -122,7 +122,7 @@ export default function HeroSection() {
               HEADLINE
           ===================================================== */}
           <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-[64px] font-bold leading-[1.12] sm:leading-[1.06] tracking-[-0.03em] text-white">
-            Find the Right{" "}
+            Book trusted <br className="hidden sm:block" />
             <span
               className="inline-block"
               style={{
@@ -133,17 +133,14 @@ export default function HeroSection() {
                 backgroundClip: "text",
               }}
             >
-              Vehicle Service
+              car services
             </span>{" "}
-            <br className="hidden sm:block" />
-            Instantly.
+            near you.
           </h1>
 
           {/* Description */}
           <p className="mt-4 sm:mt-6 text-sm sm:text-base md:text-lg text-white/70 leading-relaxed max-w-[600px]">
-            Connect with certified automotive professionals across the UK. Get
-            competitive quotes, compare providers, and book with confidence —
-            all in one place.
+            Mobile repairs, detailing, tyres and vehicle upgrades — all in one place.
           </p>
         </div>
       </div>

@@ -82,6 +82,7 @@ import {
     type BookingSlotItem,
     type BookingQuestionItem,
 } from "@/lib/service/modification.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 import ModificationStepHeader, { type ActiveView } from "./components/ModificationStepHeader";
 import ModificationTechniciansView from "./components/ModificationTechniciansView";
@@ -864,7 +865,7 @@ export default function ModificationPage() {
                     bookingPaymentMethod === "stripe"
                         ? (typeof window !== "undefined"
                             ? `${window.location.origin}/booking-success`
-                            : "https://mmcclub.co.uk/backend/booking-success")
+                            : `${getBackendRootUrl()}/booking-success`)
                         : undefined,
             });
 
@@ -891,11 +892,12 @@ export default function ModificationPage() {
             if (!redirectUrl && bookingPaymentMethod === "stripe") {
                 const payRef = res.content?.payment_id || res.content?.booking_id || confirmedRefId;
                 if (payRef) {
-                    redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(payRef))}&is_partial=${isPartialPayment ? 1 : 0}`;
+                    redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(payRef))}&is_partial=${isPartialPayment ? 1 : 0}`;
                 }
             }
 
             if (confirmedRefId && bookingPaymentMethod !== "stripe") {
+                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
                     rawId: confirmedRefId,
@@ -904,6 +906,11 @@ export default function ModificationPage() {
                     serviceTitle: "Vehicle Modification & Performance",
                     providerName: bookingProviderModal?.company_name || "Specialist Garage",
                     providerPhone: bookingProviderModal?.company_phone,
+                    serviceAddress: resolvedAddr,
+                    pickupLocation: resolvedAddr,
+                    postcode: postcode || "",
+                    vehicleReg: regNo || "",
+                    vehicleModel: carBrand || "",
                     totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
                     isPaid: false,
                     paymentStatus: "Pending Payment",

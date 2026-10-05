@@ -44,8 +44,10 @@ import {
   Chauffeur,
   bookChauffeur,
   getChauffeurGalleryImages,
+  getDigitalPaymentCallbackUrl,
   ChauffeurBookingCoordinates,
 } from "@/lib/service/chauffeur.api";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 
@@ -168,10 +170,7 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
     try {
       setIsSubmitting(true);
 
-      const callbackUrl =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success";
+      const callbackUrl = getDigitalPaymentCallbackUrl();
 
       const payload = {
         car_id: chauffeur.id,
@@ -189,35 +188,68 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
         payment_platform: "app",
         callback: callbackUrl,
         note: note.trim() || undefined,
+        description: note.trim() || undefined,
       };
 
       const res = await bookChauffeur(payload);
-
-      let redirectLink =
-        (res as any)?.content?.url ||
-        (res as any)?.content?.redirect_link ||
-        (res as any)?.content?.redirect_url ||
-        (res as any)?.content?.payment_url ||
-        (res as any)?.url ||
-        (res as any)?.redirect_link ||
-        (res as any)?.redirect_url;
 
       const bookingObj = res.content?.booking;
       const bookingRef = String(
         bookingObj?.booking_id ||
         res.content?.booking_id ||
         bookingObj?.id ||
+        res.content?.id ||
         `MMC-CHF-${Date.now().toString().slice(-6)}`
       );
+
+      let redirectLink =
+        (res as any)?.content?.url ||
+        (res as any)?.content?.redirect_link ||
+        (res as any)?.content?.redirect_url ||
+        (res as any)?.content?.payment_url ||
+        (res as any)?.content?.link ||
+        (res as any)?.url ||
+        (res as any)?.redirect_link ||
+        (res as any)?.redirect_url;
+
+      // If backend didn't return URL directly, call /customer/booking/switch-payment-method to obtain Stripe gateway URL
+      if (!redirectLink && bookingRef) {
+        try {
+          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", {
+            booking_id: bookingRef,
+            payment_method: "stripe",
+            is_partial: isPartialPayment ? 1 : 0,
+            payment_platform: "app",
+            callback: callbackUrl,
+          });
+          const sContent = switchRes.data?.content;
+          const sRaw = (typeof sContent === "object" && sContent !== null) ? sContent : switchRes.data || {};
+          if (typeof sContent === "string" && sContent.startsWith("http")) {
+            redirectLink = sContent;
+          } else {
+            redirectLink =
+              sRaw?.redirect_url ||
+              sRaw?.redirect_link ||
+              sRaw?.payment_url ||
+              sRaw?.url ||
+              sRaw?.link ||
+              sRaw?.stripe_url ||
+              sRaw?.data?.redirect_url ||
+              sRaw?.data?.url;
+          }
+        } catch (switchErr) {
+          console.warn("[ChauffeurDetails] switch-payment-method notice:", switchErr);
+        }
+      }
 
       const isUuidStr = (str: any): boolean =>
         typeof str === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectLink && isUuidStr(bookingRef)) {
-        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bookingRef)
-        )}`;
+        )}&is_partial=${isPartialPayment ? 1 : 0}`;
       }
 
       try {
@@ -365,8 +397,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                       type="button"
                       onClick={() => setSelectedImageIndex(idx)}
                       className={`relative w-20 h-14 sm:w-24 sm:h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all bg-neutral-900 ${selectedImageIndex === idx
-                          ? "border-[#FAD293] scale-105 shadow-md shadow-[#FAD293]/20"
-                          : "border-white/10 opacity-60 hover:opacity-100"
+                        ? "border-[#FAD293] scale-105 shadow-md shadow-[#FAD293]/20"
+                        : "border-white/10 opacity-60 hover:opacity-100"
                         }`}
                     >
                       <img
@@ -695,8 +727,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                       type="button"
                       onClick={() => setPickupType("hourly")}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${pickupType === "hourly"
-                          ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293]"
-                          : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293]"
+                        : "border-white/10 bg-white/5 text-white/60 hover:text-white"
                         }`}
                     >
                       Hourly Chauffeur
@@ -705,8 +737,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                       type="button"
                       onClick={() => setPickupType("daily")}
                       className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${pickupType === "daily"
-                          ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293]"
-                          : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293]"
+                        : "border-white/10 bg-white/5 text-white/60 hover:text-white"
                         }`}
                     >
                       Full Day Trip
@@ -1123,8 +1155,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
               <div
                 onClick={() => setIsPartialPayment(true)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -1147,8 +1179,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
                     {isPartialPayment && (
@@ -1173,8 +1205,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
               <div
                 onClick={() => setIsPartialPayment(false)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -1192,8 +1224,8 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
                     {!isPartialPayment && (

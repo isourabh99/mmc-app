@@ -58,6 +58,7 @@ import {
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { searchPlaces, LocationSuggestion } from "@/lib/service/location.service";
 import { isAuthenticated } from "@/lib/auth.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { useToast } from "@/components/ToastProvider";
 import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import {
@@ -557,7 +558,7 @@ export default function EmergencyAssistancePage() {
       let targetUrl = res.url || res.redirect_link;
       if (!targetUrl && (isUuidStr(res.payment_id) || isUuidStr(res.booking_id))) {
         const pId = isUuidStr(res.payment_id) ? res.payment_id : res.booking_id;
-        targetUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}`;
+        targetUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}`;
       }
 
       try {
@@ -689,7 +690,7 @@ export default function EmergencyAssistancePage() {
 
         {/* Quick action buttons: Add Vehicle + Use Location */}
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          
+
 
           <button
             type="button"
@@ -1326,7 +1327,7 @@ export default function EmergencyAssistancePage() {
                     const logoUrl =
                       provider.logo_full_path ||
                       (provider.logo && provider.logo !== "default.png"
-                        ? `https://mmcclub.co.uk/backend/storage/app/public/provider/logo/${provider.logo}`
+                        ? `${getBackendRootUrl()}/storage/app/public/provider/logo/${provider.logo}`
                         : null);
 
                     const images =

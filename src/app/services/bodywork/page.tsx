@@ -75,6 +75,7 @@ import {
     type BookingQuestionItem,
     type SendBookingRequestParams,
 } from "@/lib/service/bodywork.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import BodyworkStepHeader, { type ActiveView } from "./components/BodyworkStepHeader";
 import BodyworkTechniciansView from "./components/BodyworkTechniciansView";
@@ -798,7 +799,7 @@ export default function BodyworkPage() {
                 callback:
                     typeof window !== "undefined"
                         ? `${window.location.origin}/booking-success`
-                        : "https://mmcclub.co.uk/backend/booking-success",
+                        : `${getBackendRootUrl()}/booking-success`,
             });
 
             const responseContent: any = res.content || {};
@@ -827,7 +828,7 @@ export default function BodyworkPage() {
                 bookingProviderModal?.id;
 
             if (!redirectUrl && isStripe && bookingUuid) {
-                redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+                redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
                     String(bookingUuid)
                 )}&is_partial=${effectiveIsPartial}`;
             }
@@ -842,12 +843,15 @@ export default function BodyworkPage() {
             );
 
             if (confirmedRefId) {
+                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 saveBookingMeta(confirmedRefId, {
                     price: effectivePrice,
                     serviceTitle: "Bodywork & Paint Repair",
                     serviceCategoryName: "Bodywork & Paint",
                     serviceType: "bodywork",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                    vehicleReg: regNo || "Vehicle",
+                    vehicleModel: carBrand || "Vehicle",
                     isPaid: false,
                     paymentStatus: "Pending Payment",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -861,6 +865,11 @@ export default function BodyworkPage() {
                     serviceTitle: "Bodywork & Paint Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
+                    serviceAddress: resolvedAddr,
+                    pickupLocation: resolvedAddr,
+                    postcode: postcode || "",
+                    vehicleReg: regNo || "",
+                    vehicleModel: carBrand || "",
                     totalAmount: effectivePrice,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
@@ -1074,9 +1083,13 @@ export default function BodyworkPage() {
             navigateToView("quotes");
         } catch (err: any) {
             console.error("Quotation submission error:", err);
-            const apiMsg = err?.response?.data?.message || err?.message || "Could not send quotation request. Please try again.";
-            const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
-            showToast(formattedMsg, "error");
+            if (err?.response?.status === 429) {
+                showToast("Server rate limit reached (429). Please wait 15-30 seconds before sending another quote request.", "error");
+            } else {
+                const apiMsg = err?.response?.data?.message || err?.message || "Could not send quotation request. Please try again.";
+                const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+                showToast(formattedMsg, "error");
+            }
         } finally {
             setSubmittingMultiQuote(false);
         }
@@ -1883,8 +1896,8 @@ export default function BodyworkPage() {
                                                                                             : setSingleAnswer(q.id, opt)
                                                                                     }
                                                                                     className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none active:scale-[0.98] ${isSelected
-                                                                                            ? "bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] text-zinc-950 font-black shadow-[0_4px_18px_rgba(232,175,102,0.45)] border border-[#FFF2D6] scale-[1.02]"
-                                                                                            : "bg-[#251C15] text-[#D8C7B5] hover:text-white border border-[#4E3A2A] hover:border-[#CEA46B]/70 hover:bg-[#32251B] shadow-sm"
+                                                                                        ? "bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] text-zinc-950 font-black shadow-[0_4px_18px_rgba(232,175,102,0.45)] border border-[#FFF2D6] scale-[1.02]"
+                                                                                        : "bg-[#251C15] text-[#D8C7B5] hover:text-white border border-[#4E3A2A] hover:border-[#CEA46B]/70 hover:bg-[#32251B] shadow-sm"
                                                                                         }`}
                                                                                 >
                                                                                     {isSelected && (

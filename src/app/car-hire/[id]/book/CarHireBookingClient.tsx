@@ -33,10 +33,13 @@ import {
   getCarDetails,
   formatCurrency,
   getCarPrimaryImage,
+  getCarProviderLogo,
   bookCar,
   formatTimeTo12Hour,
+  getDigitalPaymentCallbackUrl,
   CarBookingPayload,
 } from "@/lib/service/car.api";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
@@ -63,6 +66,8 @@ export default function CarHireBookingClient() {
   const [pickupType, setPickupType] = useState<"delivery" | "self">(
     "delivery"
   );
+  const [pricingType, setPricingType] = useState<"daily" | "hourly">("daily");
+  const [hoursCount, setHoursCount] = useState<number>(4);
 
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryCoords, setDeliveryCoords] = useState<{
@@ -107,6 +112,15 @@ export default function CarHireBookingClient() {
         if (details) {
           setCar(details);
 
+          // Initial pricing type preference from API
+          const carDaily = parseFloat(details.daily_rate || "0");
+          const carHourly = parseFloat(details.hourly_rate || "0");
+          if (details.pricing_type === "hourly" || (carHourly > 0 && carDaily === 0)) {
+            setPricingType("hourly");
+          } else {
+            setPricingType("daily");
+          }
+
           // Default initial address
           const initialAddress =
             details.address ||
@@ -136,22 +150,31 @@ export default function CarHireBookingClient() {
     fetchCar();
   }, [carId]);
 
-
-  // Pricing calculation
+  // Pricing calculation matching backend: Total = Rent + Delivery Fee + Security Deposit
   const dailyRate = parseFloat(car?.daily_rate || "0");
   const hourlyRate = parseFloat(car?.hourly_rate || "0");
-  const deposit = parseFloat(car?.security_deposit || "0");
+  const securityDeposit = parseFloat(car?.security_deposit || "0");
+  const rawDeliveryFee = parseFloat(car?.delivery_fee || "0");
+  const deliveryFee = pickupType === "delivery" ? rawDeliveryFee : 0;
 
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.max(0, end.getTime() - start.getTime());
-  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+
+  // Calculate rent amount dynamically based on chosen pricing_type
+  const effectiveDailyRate = dailyRate > 0 ? dailyRate : hourlyRate > 0 ? hourlyRate * 8 : 100;
+  const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : dailyRate > 0 ? dailyRate / 8 : 15;
 
   const basePrice =
-    dailyRate > 0 ? dailyRate * diffDays : hourlyRate > 0 ? hourlyRate * 4 * diffDays : 0;
-  const estimatedTotal = basePrice + deposit;
+    pricingType === "hourly"
+      ? effectiveHourlyRate * hoursCount
+      : effectiveDailyRate * diffDays;
 
-  // Deposit & Total computations
+  // Total hire package: Rent + Delivery + Security Deposit (Matches backend total_amount 100%)
+  const estimatedTotal = basePrice + deliveryFee + securityDeposit;
+
+  // 25% Advance Deposit & 75% on Arrival (Matches backend content.amount 100%)
   const numericPrice = estimatedTotal > 0 ? estimatedTotal : basePrice > 0 ? basePrice : 150;
   const depositAmount = (numericPrice * 0.25).toFixed(2);
   const remainingAmount = (numericPrice * 0.75).toFixed(2);
@@ -186,7 +209,7 @@ export default function CarHireBookingClient() {
       return;
     }
 
-    if (!deliveryAddress.trim()) {
+    if (pickupType === "delivery" && !deliveryAddress.trim()) {
       showToast("Please enter or select a valid delivery address.", "error");
       return;
     }
@@ -204,23 +227,28 @@ export default function CarHireBookingClient() {
     try {
       setSubmitting(true);
 
-      const callbackUrl =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success";
+      const callbackUrl = getDigitalPaymentCallbackUrl();
 
       const payload: CarBookingPayload = {
         car_id: car!.id,
+        pricing_type: pricingType,
+        hours: pricingType === "hourly" ? hoursCount : undefined,
+        rent_amount: basePrice,
+        total_amount: numericPrice,
         start_date: startDate,
-        end_date: endDate,
+        end_date: pricingType === "hourly" ? startDate : endDate,
         pickup_time: formatTimeTo12Hour(pickupTime),
         drop_time: formatTimeTo12Hour(dropTime),
         pickup_type: pickupType,
-        delivery_address: deliveryAddress.trim(),
-        delivery_latitude: deliveryCoords.latitude,
-        delivery_longitude: deliveryCoords.longitude,
-        pickup_location: deliveryAddress.trim(),
-        drop_location: deliveryAddress.trim(),
+        ...(pickupType === "delivery"
+          ? {
+            delivery_address: deliveryAddress.trim(),
+            delivery_latitude: deliveryCoords.latitude,
+            delivery_longitude: deliveryCoords.longitude,
+            pickup_location: deliveryAddress.trim(),
+            drop_location: deliveryAddress.trim(),
+          }
+          : {}),
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
@@ -230,42 +258,81 @@ export default function CarHireBookingClient() {
 
       const res = await bookCar(payload);
 
+      const bookingObj = res?.content?.booking;
+      const bookingRef = String(
+        bookingObj?.booking_id ||
+        bookingObj?.booking?.id ||
+        bookingObj?.booking?.readable_id ||
+        bookingObj?.id ||
+        res?.content?.booking_id ||
+        res?.content?.id ||
+        `MMC-CAR-${Date.now().toString().slice(-6)}`
+      );
+
       let redirectLink =
         (res as any)?.content?.url ||
         (res as any)?.content?.redirect_link ||
         (res as any)?.content?.redirect_url ||
         (res as any)?.content?.payment_url ||
+        (res as any)?.content?.link ||
         (res as any)?.url ||
         (res as any)?.redirect_link ||
         (res as any)?.redirect_url;
 
-      const bookingRef = String(
-        res?.content?.booking_id ||
-        res?.content?.id ||
-        `MMC-CAR-${Date.now().toString().slice(-6)}`
-      );
+      // If backend didn't return URL directly, call /customer/booking/switch-payment-method to obtain Stripe gateway URL
+      if (!redirectLink && bookingRef) {
+        try {
+          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", {
+            booking_id: bookingRef,
+            payment_method: "stripe",
+            is_partial: isPartialPayment ? 1 : 0,
+            payment_platform: "app",
+            callback: callbackUrl,
+          });
+          const sContent = switchRes.data?.content;
+          const sRaw = (typeof sContent === "object" && sContent !== null) ? sContent : switchRes.data || {};
+          if (typeof sContent === "string" && sContent.startsWith("http")) {
+            redirectLink = sContent;
+          } else {
+            redirectLink =
+              sRaw?.redirect_url ||
+              sRaw?.redirect_link ||
+              sRaw?.payment_url ||
+              sRaw?.url ||
+              sRaw?.link ||
+              sRaw?.stripe_url ||
+              sRaw?.data?.redirect_url ||
+              sRaw?.data?.url;
+          }
+        } catch (switchErr) {
+          console.warn("[CarHireBooking] switch-payment-method notice:", switchErr);
+        }
+      }
 
       const isUuidStr = (str: any): boolean =>
         typeof str === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectLink && isUuidStr(bookingRef)) {
-        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bookingRef)
-        )}`;
+        )}&is_partial=${isPartialPayment ? 1 : 0}`;
       }
+
+      const respDepositAmount = (res as any)?.content?.amount ? parseFloat((res as any).content.amount) : (isPartialPayment ? parseFloat(depositAmount) : numericPrice);
+      const respTotalAmount = (res as any)?.content?.booking?.total_amount ? parseFloat((res as any).content.booking.total_amount) : numericPrice;
 
       try {
         sessionStorage.setItem(
           "mmc_pending_booking",
           JSON.stringify({
             booking_id: bookingRef,
-            readable_id: bookingRef,
+            readable_id: (res as any)?.content?.booking?.booking?.readable_id ? String((res as any).content.booking.booking.readable_id) : bookingRef,
             provider: car?.provider,
-            schedule: `${startDate} ${pickupTime}`,
-            price: numericPrice,
+            schedule: `${startDate} ${formatTimeTo12Hour(pickupTime)}`,
+            price: respTotalAmount,
             is_partial: isPartialPayment ? 1 : 0,
-            deposit_amount: depositAmount,
+            deposit_amount: respDepositAmount,
             service_name: `Car Hire: ${car?.brand || "Vehicle"} ${car?.model || ""}`.trim(),
           })
         );
@@ -365,7 +432,7 @@ export default function CarHireBookingClient() {
         }}
       />
 
-      <div className="max-w-[1400px] mx-auto px-3 sm:px-6 pt-4 pb-2 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2 relative z-10">
         <div className="flex items-center gap-2 text-xs text-white/50">
           <Link href="/" className="hover:text-white transition">
             Home
@@ -383,7 +450,7 @@ export default function CarHireBookingClient() {
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-3 sm:px-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
             <div>
@@ -491,27 +558,97 @@ export default function CarHireBookingClient() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <LocationSearchInput
-                    label={
-                      pickupType === "delivery"
-                        ? "Delivery Destination Address"
-                        : "Collection Point / HQ Address"
-                    }
-                    placeholder="Type location, postcode or tap GPS detect..."
-                    value={deliveryAddress}
-                    coordinates={deliveryCoords}
-                    onChange={handleLocationChange}
-                    required
-                    type="pickup"
-                  />
-                  <div className="flex items-center justify-between text-[11px] text-white/40 px-1 pt-1">
-                    <span>Coordinates: Lat {deliveryCoords.latitude.toFixed(4)}, Lng {deliveryCoords.longitude.toFixed(4)}</span>
-                    <span className="text-[#FAD293]/80">Search & GPS supported</span>
+                {pickupType === "delivery" ? (
+                  <div className="space-y-1.5 animate-in fade-in duration-200">
+                    <LocationSearchInput
+                      label="Delivery Destination Address"
+                      placeholder="Type location, postcode or tap GPS detect..."
+                      value={deliveryAddress}
+                      coordinates={deliveryCoords}
+                      onChange={handleLocationChange}
+                      required
+                      type="pickup"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-white/40 px-1 pt-1">
+                      <span>Coordinates: Lat {deliveryCoords.latitude.toFixed(4)}, Lng {deliveryCoords.longitude.toFixed(4)}</span>
+                      <span className="text-[#FAD293]/80">Doorstep delivery to this address</span>
+                    </div>
                   </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-white/5 border border-[#FAD293]/20 space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Building size={14} className="text-[#FAD293]" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                          Vehicle Pickup Hub / Dealership HQ
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        Self Collection • No Delivery Charge
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/80 font-medium">
+                      {car.address || car.provider?.company_address || (car.postcode ? `${car.postcode}, London` : "Silbury House, Sydenham Hill, London, SE26 6TU")}
+                    </p>
+                    <p className="text-[11px] text-white/40">
+                      Please arrive at this location during your selected pickup time slot with your driving licence and booking reference.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Hire Pricing Option (Daily vs Hourly) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0d0d0d] border border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-[#FAD293]" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wide">
+                      Hire Pricing Option
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-bold text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-full border border-[#FAD293]/20">
+                    pricing_type: {pricingType}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setPricingType("daily")}
+                    className={`py-3 px-3.5 rounded-xl border text-xs font-semibold transition flex flex-col items-center justify-center gap-1 ${pricingType === "daily"
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293] shadow-[0_0_15px_rgba(250,210,147,0.15)]"
+                        : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Calendar size={14} />
+                      <span>Daily Hire</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-white/90">
+                      {formatCurrency(effectiveDailyRate)} / day
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPricingType("hourly")}
+                    className={`py-3 px-3.5 rounded-xl border text-xs font-semibold transition flex flex-col items-center justify-center gap-1 ${pricingType === "hourly"
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293] shadow-[0_0_15px_rgba(250,210,147,0.15)]"
+                        : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Clock size={14} />
+                      <span>Hourly Hire</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-white/90">
+                      {formatCurrency(effectiveHourlyRate)} / hr
+                    </span>
+                  </button>
                 </div>
               </div>
 
+              {/* 3. Hire Schedule */}
               <div className="p-4 sm:p-5 rounded-2xl bg-[#0d0d0d] border border-white/10 space-y-4">
                 <div className="flex items-center gap-2">
                   <Calendar size={16} className="text-[#FAD293]" />
@@ -524,32 +661,49 @@ export default function CarHireBookingClient() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
                       <Calendar size={13} className="text-[#FAD293]" />
-                      <span>Start Date</span>
+                      <span>{pricingType === "hourly" ? "Booking Date" : "Start Date"}</span>
                     </label>
                     <input
                       type="date"
                       required
                       min={todayStr}
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        if (e.target.value > endDate) {
+                          setEndDate(e.target.value);
+                        }
+                      }}
                       className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
-                      <Calendar size={13} className="text-[#FAD293]" />
-                      <span>End Date</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      min={startDate}
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
-                    />
-                  </div>
+                  {pricingType === "daily" ? (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
+                        <Calendar size={13} className="text-[#FAD293]" />
+                        <span>End Date</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        min={startDate}
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
+                        <Clock size={13} className="text-[#FAD293]" />
+                        <span>Duration</span>
+                      </label>
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-[#FAD293] font-bold">
+                        <span>{hoursCount} Hours Package</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-white/70 flex items-center justify-between">
@@ -595,13 +749,21 @@ export default function CarHireBookingClient() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
                     <FileText size={13} className="text-[#FAD293]" />
-                    <span>Delivery Instructions / Description (Optional)</span>
+                    <span>
+                      {pickupType === "delivery"
+                        ? "Delivery Instructions / Address Note (Optional)"
+                        : "Collection Note / Arrival Details (Optional)"}
+                    </span>
                   </label>
                   <textarea
                     rows={2}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="e.g. Please deliver near the main gate or call upon arrival..."
+                    placeholder={
+                      pickupType === "delivery"
+                        ? "e.g. Please deliver near the main gate or call upon arrival..."
+                        : "e.g. Arriving at 10:30 AM, please have documentation ready..."
+                    }
                     className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
                   />
                 </div>
@@ -642,24 +804,60 @@ export default function CarHireBookingClient() {
                   </div>
 
                   <div className="flex justify-between">
-                    <span>Rental Duration:</span>
+                    <span>Pricing Choice:</span>
+                    <span className="font-bold text-[#FAD293] capitalize">
+                      {pricingType === "hourly" ? "Hourly Rate" : "Daily Rate"}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span>Collection Mode:</span>
+                    <span className="font-semibold text-[#FAD293]">
+                      {pickupType === "delivery" ? "Doorstep Delivery" : "Self Collection (HQ)"}
+                    </span>
+                  </div>
+
+                  {pickupType === "delivery" && deliveryAddress && (
+                    <div className="flex justify-between">
+                      <span>Delivery To:</span>
+                      <span className="text-white/80 font-medium truncate max-w-[170px]" title={deliveryAddress}>
+                        {deliveryAddress}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between">
+                    <span>Duration:</span>
                     <span className="text-white font-medium">
-                      {diffDays} {diffDays === 1 ? "day" : "days"} ({startDate} to {endDate})
+                      {pricingType === "hourly"
+                        ? `${hoursCount} Hours (${startDate})`
+                        : `${diffDays} ${diffDays === 1 ? "day" : "days"} (${startDate} to ${endDate})`}
                     </span>
                   </div>
 
                   <div className="flex justify-between">
                     <span>Hire Rate:</span>
                     <span className="text-white font-medium">
-                      {formatCurrency(basePrice)}
+                      {pricingType === "hourly"
+                        ? `${formatCurrency(effectiveHourlyRate)} × ${hoursCount} hrs = ${formatCurrency(basePrice)}`
+                        : `${formatCurrency(effectiveDailyRate)} × ${diffDays} days = ${formatCurrency(basePrice)}`}
                     </span>
                   </div>
 
-                  {deposit > 0 && (
+                  {securityDeposit > 0 && (
                     <div className="flex justify-between">
                       <span>Refundable Security Deposit:</span>
                       <span className="font-semibold text-white font-mono">
-                        {formatCurrency(deposit)}
+                        {formatCurrency(securityDeposit)}
+                      </span>
+                    </div>
+                  )}
+
+                  {pickupType === "delivery" && rawDeliveryFee > 0 && (
+                    <div className="flex justify-between">
+                      <span>Doorstep Delivery Fee:</span>
+                      <span className="text-white font-medium">
+                        {formatCurrency(rawDeliveryFee)}
                       </span>
                     </div>
                   )}
@@ -744,15 +942,30 @@ export default function CarHireBookingClient() {
 
               {car.provider && (
                 <div className="p-4 rounded-2xl bg-[#0d0d0d] border border-white/10 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 bg-neutral-800 shrink-0">
-                    <img
-                      src={
-                        car.provider.logo_full_path ||
-                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"
-                      }
-                      alt={car.provider.company_name}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 bg-neutral-800 shrink-0 flex items-center justify-center">
+                    {getCarProviderLogo(car.provider) ? (
+                      <img
+                        src={getCarProviderLogo(car.provider)}
+                        alt={car.provider.company_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.style.display = "none";
+                          const parent = target.parentElement;
+                          if (parent && !parent.querySelector(".fallback-initials")) {
+                            parent.classList.add("bg-gradient-to-br", "from-neutral-800", "to-neutral-900");
+                            const span = document.createElement("span");
+                            span.className = "fallback-initials text-xs font-bold text-[#FAD293]";
+                            span.innerText = (car.provider?.company_name || "MMC").slice(0, 2).toUpperCase();
+                            parent.appendChild(span);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900 text-xs font-bold text-[#FAD293]">
+                        {(car.provider.company_name || "MMC").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-white truncate">
@@ -789,11 +1002,11 @@ export default function CarHireBookingClient() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left space-y-2.5 text-xs">
-              {bookingDetails?.booking_id && (
+              {(bookingDetails?.booking?.booking_id || bookingDetails?.booking_id || bookingDetails?.booking?.id) && (
                 <div className="flex justify-between items-center pb-2 border-b border-white/10">
                   <span className="text-white/50">Booking Reference:</span>
                   <span className="font-mono font-bold text-[#FAD293] truncate max-w-[200px]">
-                    {bookingDetails.booking_id}
+                    {bookingDetails?.booking?.booking_id || bookingDetails?.booking_id || bookingDetails?.booking?.id}
                   </span>
                 </div>
               )}
@@ -821,16 +1034,34 @@ export default function CarHireBookingClient() {
                   {pickupType === "delivery" ? "Doorstep Delivery" : "Self Collection"}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white/50">Delivery Address:</span>
-                <span className="text-white/90 truncate max-w-[200px]">
-                  {deliveryAddress}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-white/10 font-bold text-sm">
-                <span className="text-white/70">Estimated Total:</span>
+              {pickupType === "delivery" && deliveryAddress && (
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Delivery Address:</span>
+                  <span className="text-white/90 truncate max-w-[200px]">
+                    {deliveryAddress}
+                  </span>
+                </div>
+              )}
+              {pickupType === "self" && (
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Collection Hub:</span>
+                  <span className="text-white/90 truncate max-w-[200px]">
+                    {car.address || car.provider?.company_address || "Dealership HQ / Hub"}
+                  </span>
+                </div>
+              )}
+              {bookingDetails?.amount ? (
+                <div className="flex justify-between items-center pt-2 border-t border-white/10 font-bold text-sm">
+                  <span className="text-white/70">Partial Deposit (25%):</span>
+                  <span className="text-emerald-400">
+                    {formatCurrency(bookingDetails.amount)}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex justify-between items-center font-bold text-sm pt-1">
+                <span className="text-white/70">Total Hire Amount:</span>
                 <span className="text-[#FAD293]">
-                  {formatCurrency(bookingDetails?.total_amount || estimatedTotal)}
+                  {formatCurrency(bookingDetails?.booking?.total_amount || bookingDetails?.total_amount || estimatedTotal)}
                 </span>
               </div>
             </div>

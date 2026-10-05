@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface BodyworkServiceItem {
   id: string;
@@ -535,34 +535,44 @@ export const sendQuotationRequest = async (
     formData.append("car_image", params.car_images[0]);
     params.car_images.forEach((img) => {
       formData.append("attachments[]", img);
-      formData.append("car_images[]", img);
-      formData.append("images[]", img);
-      formData.append("attachment[]", img);
-      formData.append("car_image[]", img);
     });
   } else if (params.car_image) {
     formData.append("car_image", params.car_image);
     formData.append("attachments[]", params.car_image);
-    formData.append("car_images[]", params.car_image);
-    formData.append("images[]", params.car_image);
-    formData.append("attachment[]", params.car_image);
-    formData.append("car_image[]", params.car_image);
   }
 
   const zoneId = DEFAULT_ZONE_ID;
 
-  const response = await apiClient.post<CreateQuotationResponse>(
-    "/customer/post",
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-        zoneid: zoneId,
-      },
+  try {
+    const response = await apiClient.post<CreateQuotationResponse>(
+      "/customer/post",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          zoneid: zoneId,
+        },
+      }
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      console.warn("[sendQuotationRequest] Rate limited (429), waiting 2s before retry...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const retryResponse = await apiClient.post<CreateQuotationResponse>(
+        "/customer/post",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            zoneid: zoneId,
+          },
+        }
+      );
+      return retryResponse.data;
     }
-  );
-
-  return response.data;
+    throw error;
+  }
 };
 
 export const getOrCreateCustomerAddressId = async (
@@ -690,7 +700,7 @@ export const getMyQuotationRequests = async (
         if (Array.isArray(savedIds)) {
           savedIds.forEach((id: string) => userSavedQuoteIds.add(String(id).trim()));
         }
-      } catch {}
+      } catch { }
     }
 
     const isPostOwnedByCurrentUser = (p: any): boolean => {
@@ -1064,7 +1074,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success")
+          : `${getBackendRootUrl()}/booking-success`)
       );
     }
     formData.append("is_terms_accepted", "1");
@@ -1124,7 +1134,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success");
+          : `${getBackendRootUrl()}/booking-success`);
     }
 
     const response = await apiClient.post<SendBookingRequestResponse>(
@@ -1190,7 +1200,7 @@ async function resolveBodyworkPaymentUrl(
           params.callback ||
           (typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success"),
+            : `${getBackendRootUrl()}/booking-success`),
       },
       {
         booking_id: String(bookingUuid),
@@ -1201,7 +1211,7 @@ async function resolveBodyworkPaymentUrl(
           params.callback ||
           (typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success"),
+            : `${getBackendRootUrl()}/booking-success`),
       },
     ];
 
@@ -1237,7 +1247,7 @@ async function resolveBodyworkPaymentUrl(
         const pId =
           sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
         if (pId) {
-          redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+          redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
             String(pId)
           )}&is_partial=${params.is_partial ?? 0}`;
           break;
@@ -1254,9 +1264,8 @@ async function resolveBodyworkPaymentUrl(
   }
 
   // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
-  const effectiveId = bookingUuid || params.post_id;
   if (!redirectLink && effectiveId) {
-    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+    redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
       String(effectiveId)
     )}&is_partial=${params.is_partial ?? 0}`;
   }
