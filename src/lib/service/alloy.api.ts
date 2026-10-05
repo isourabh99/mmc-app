@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface AlloyServiceItem {
   id: string;
@@ -420,18 +420,10 @@ export const sendQuotationRequest = async (
     formData.append("car_image", params.car_images[0]);
     params.car_images.forEach((img) => {
       formData.append("attachments[]", img);
-      formData.append("car_images[]", img);
-      formData.append("images[]", img);
-      formData.append("attachment[]", img);
-      formData.append("car_image[]", img);
     });
   } else if (params.car_image) {
     formData.append("car_image", params.car_image);
     formData.append("attachments[]", params.car_image);
-    formData.append("car_images[]", params.car_image);
-    formData.append("images[]", params.car_image);
-    formData.append("attachment[]", params.car_image);
-    formData.append("car_image[]", params.car_image);
   }
 
   const zoneId = DEFAULT_ZONE_ID;
@@ -607,7 +599,7 @@ export const getMyQuotationRequests = async (
           if (Array.isArray(savedIds)) {
             savedIds.forEach((id: string) => userSavedQuoteIds.add(String(id).trim()));
           }
-        } catch {}
+        } catch { }
       }
 
       return data.filter((p: any) => {
@@ -1080,7 +1072,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success")
+          : `${getBackendRootUrl()}/booking-success`)
       );
     }
     if (params.is_partial !== undefined) {
@@ -1168,7 +1160,7 @@ export const sendBookingRequest = async (
         params.callback ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/backend/booking-success");
+          : `${getBackendRootUrl()}/booking-success`);
     }
 
     const response = await apiClient.post<SendBookingRequestResponse>(
@@ -1234,7 +1226,7 @@ async function resolveAlloyPaymentUrl(
           params.callback ||
           (typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success"),
+            : `${getBackendRootUrl()}/booking-success`),
       },
       {
         booking_id: String(bookingUuid),
@@ -1245,7 +1237,7 @@ async function resolveAlloyPaymentUrl(
           params.callback ||
           (typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/booking-success"),
+            : `${getBackendRootUrl()}/booking-success`),
       },
     ];
 
@@ -1281,7 +1273,7 @@ async function resolveAlloyPaymentUrl(
         const pId =
           sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
         if (pId) {
-          redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+          redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
             String(pId)
           )}&is_partial=${params.is_partial ?? 0}`;
           break;
@@ -1298,9 +1290,8 @@ async function resolveAlloyPaymentUrl(
   }
 
   // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
-  const effectiveId = bookingUuid || params.post_id;
   if (!redirectLink && effectiveId) {
-    redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+    redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
       String(effectiveId)
     )}&is_partial=${params.is_partial ?? 0}`;
   }

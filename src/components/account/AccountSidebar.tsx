@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import {
   Calendar,
   UserRound,
@@ -38,22 +39,32 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
       id: "bookings",
       label: "My Bookings",
       icon: Calendar,
+      href: "/account?tab=bookings",
       badge: bookingsCount > 0 ? String(bookingsCount) : undefined,
     },
     {
       id: "profile",
       label: "Personal Profile",
       icon: UserRound,
+      href: "/account?tab=profile",
     },
     {
       id: "addresses",
       label: "Saved Addresses",
       icon: MapPin,
+      href: "/account?tab=addresses",
     },
     {
       id: "quotes",
       label: "My Quotes",
       icon: FileText,
+      href: "/account?tab=quotes",
+    },
+    {
+      id: "estimates",
+      label: "Provider Estimates",
+      icon: Sparkles,
+      href: "/estimate",
     },
   ];
 
@@ -91,9 +102,9 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
           const isSelected = activeTab === item.id;
           const Icon = item.icon;
           return (
-            <button
+            <Link
               key={item.id}
-              type="button"
+              href={item.href}
               onClick={() => onSelectTab(item.id)}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${isSelected
                 ? "bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-[#140e0a] shadow-md shadow-[#d09a50]/20 font-bold"
@@ -118,7 +129,7 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
                   {item.badge}
                 </span>
               )}
-            </button>
+            </Link>
           );
         })}
 

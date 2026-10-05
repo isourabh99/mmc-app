@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface WashVariation {
   id?: number | string;
@@ -782,7 +782,7 @@ export const sendValetBookingRequest = async (
       payload.callback ||
       (typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/booking-success"),
+        : `${getBackendRootUrl()}/booking-success`),
     car_registration_number: (payload.car_registration_number || "").trim().toUpperCase(),
     car_model: payload.car_model || "",
     car_manufacture_year: payload.car_manufacture_year || new Date().getFullYear().toString(),
@@ -840,7 +840,7 @@ export const sendValetBookingRequest = async (
     const defaultSuccessCallback =
       typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/booking-success";
+        : `${getBackendRootUrl()}/booking-success`;
 
     if (!redirectLink && bookingUuid) {
       const payloadsToTry = [
@@ -891,7 +891,7 @@ export const sendValetBookingRequest = async (
 
           const pId = sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
           if (pId) {
-            redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${payload.is_partial ?? 1}`;
+            redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${payload.is_partial ?? 1}`;
             break;
           }
         } catch (switchErr: any) {
@@ -905,9 +905,8 @@ export const sendValetBookingRequest = async (
       }
     }
 
-    // Direct Demandium Stripe pay endpoint fallback if valid UUID
     if (!redirectLink && bookingUuid && isUuid(String(bookingUuid))) {
-      redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(String(bookingUuid))}&is_partial=${payload.is_partial ?? 1}`;
+      redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(bookingUuid))}&is_partial=${payload.is_partial ?? 1}`;
     }
 
     if (res.data) {

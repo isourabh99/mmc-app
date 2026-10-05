@@ -31,9 +31,11 @@ import {
 } from "lucide-react";
 import {
   bookChauffeur,
+  getDigitalPaymentCallbackUrl,
   type Chauffeur,
   type ChauffeurBookingCoordinates,
 } from "@/lib/service/chauffeur.api";
+import apiClient from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { isAuthenticated } from "@/lib/auth.api";
 
@@ -201,9 +203,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         longitude: 75.801235,
       };
 
-      const callbackUrl = typeof window !== "undefined"
-        ? `${window.location.origin}/booking-success`
-        : "https://mmcclub.co.uk/backend/booking-success";
+      const callbackUrl = getDigitalPaymentCallbackUrl();
 
       const payload = {
         car_id: bookingChauffeur.id,
@@ -221,6 +221,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         payment_platform: "app",
         callback: callbackUrl,
         note: bookingNote,
+        description: bookingNote || undefined,
       };
 
       const res = await bookChauffeur(payload);
@@ -230,6 +231,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         bookingObj?.booking_id ||
         res.content?.booking_id ||
         bookingObj?.id ||
+        res.content?.id ||
         "MMC-CHF-" + Date.now().toString().slice(-6)
       );
 
@@ -238,16 +240,50 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         (res as any)?.content?.redirect_link ||
         (res as any)?.content?.redirect_url ||
         (res as any)?.content?.payment_url ||
-        (res as any)?.url;
+        (res as any)?.content?.link ||
+        (res as any)?.url ||
+        (res as any)?.redirect_link ||
+        (res as any)?.redirect_url;
+
+      // If backend didn't return URL directly, call /customer/booking/switch-payment-method to obtain Stripe gateway URL
+      if (!redirectLink && bookingRef) {
+        try {
+          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", {
+            booking_id: bookingRef,
+            payment_method: "stripe",
+            is_partial: isPartialPayment ? 1 : 0,
+            payment_platform: "app",
+            callback: callbackUrl,
+          });
+          const sContent = switchRes.data?.content;
+          const sRaw = (typeof sContent === "object" && sContent !== null) ? sContent : switchRes.data || {};
+          if (typeof sContent === "string" && sContent.startsWith("http")) {
+            redirectLink = sContent;
+          } else {
+            redirectLink =
+              sRaw?.redirect_url ||
+              sRaw?.redirect_link ||
+              sRaw?.payment_url ||
+              sRaw?.url ||
+              sRaw?.link ||
+              sRaw?.stripe_url ||
+              sRaw?.data?.redirect_url ||
+              sRaw?.data?.url;
+          }
+        } catch (switchErr) {
+          console.warn("[ChauffeurBooking] switch-payment-method notice:", switchErr);
+        }
+      }
 
       const isUuidStr = (str: any): boolean =>
         typeof str === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectLink && isUuidStr(bookingRef)) {
-        redirectLink = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ;
+        redirectLink = `${apiBase}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bookingRef)
-        )}`;
+        )}&is_partial=${isPartialPayment ? 1 : 0}`;
       }
 
       try {
@@ -525,8 +561,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
                         type="button"
                         onClick={() => setPaymentMethod(method.id as any)}
                         className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 text-center transition ${isSelected
-                            ? "border-[#d9a85f] bg-[#221810] text-[#e7bd78] ring-1 ring-[#d9a85f]/30"
-                            : "border-[#33271d] bg-[#16120e] text-white/60 hover:border-[#4a3a2c] hover:text-white"
+                          ? "border-[#d9a85f] bg-[#221810] text-[#e7bd78] ring-1 ring-[#d9a85f]/30"
+                          : "border-[#33271d] bg-[#16120e] text-white/60 hover:border-[#4a3a2c] hover:text-white"
                           }`}
                       >
                         <Icon size={14} className={isSelected ? "text-[#e7bd78]" : "text-white/40"} />
@@ -636,8 +672,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               <div
                 onClick={() => setIsPartialPayment(true)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -660,8 +696,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
                     {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
@@ -684,8 +720,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               <div
                 onClick={() => setIsPartialPayment(false)}
                 className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -703,8 +739,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
 
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                        : "border-zinc-700 bg-zinc-900"
+                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                      : "border-zinc-700 bg-zinc-900"
                       }`}
                   >
                     {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}

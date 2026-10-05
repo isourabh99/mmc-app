@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import {
   Calendar,
   UserRound,
   MapPin,
   FileText,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 
 interface AccountMobileNavProps {
@@ -37,22 +39,32 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
       id: "bookings",
       label: "My Bookings",
       icon: Calendar,
+      href: "/account?tab=bookings",
       badge: bookingsCount > 0 ? String(bookingsCount) : undefined,
     },
     {
       id: "profile",
       label: "Profile",
       icon: UserRound,
+      href: "/account?tab=profile",
     },
     {
       id: "addresses",
       label: "Addresses",
       icon: MapPin,
+      href: "/account?tab=addresses",
     },
     {
       id: "quotes",
       label: "Quotes",
       icon: FileText,
+      href: "/account?tab=quotes",
+    },
+    {
+      id: "estimates",
+      label: "Estimates",
+      icon: Sparkles,
+      href: "/estimate",
     },
   ];
 
@@ -100,9 +112,9 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
           const isSelected = activeTab === item.id;
           const Icon = item.icon;
           return (
-            <button
+            <Link
               key={item.id}
-              type="button"
+              href={item.href}
               onClick={() => onSelectTab(item.id)}
               className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition shrink-0 ${
                 isSelected
@@ -127,7 +139,7 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
                   {item.badge}
                 </span>
               )}
-            </button>
+            </Link>
           );
         })}
       </div>

@@ -47,24 +47,24 @@ const defaultServices = [
 const companyLinks = [
   { label: "About Us", href: "/about" },
   { label: "How It Works", href: "/how-it-works" },
-  { label: "Careers", href: "/about" },
-  { label: "Press", href: "/about" },
-  { label: "Blog", href: "/how-it-works" },
+  // { label: "Careers", href: "/about" },
+  // { label: "Press", href: "/about" },
+  // { label: "Blog", href: "/how-it-works" },
 ];
 
 const supportLinks = [
-  { label: "Help Centre", href: "/faqs" },
+  // { label: "Help Centre", href: "/faqs" },
   { label: "Contact Us", href: "/contact" },
-  { label: "Dispute Resolution", href: "/contact" },
-  { label: "Safety Policy", href: "/faqs" },
-  { label: "Provider Support", href: "/contact" },
+  // { label: "Dispute Resolution", href: "/contact" },
+  // { label: "Safety Policy", href: "/faqs" },
+  // { label: "Provider Support", href: "/contact" },
 ];
 
 const legalLinks = [
   { label: "Privacy Policy", href: "/faqs" },
   { label: "Terms of Service", href: "/faqs" },
-  { label: "Cookie Policy", href: "/faqs" },
-  { label: "Accessibility", href: "/faqs" },
+  // { label: "Cookie Policy", href: "/faqs" },
+  // { label: "Accessibility", href: "/faqs" },
 ];
 
 const socials = [
@@ -263,18 +263,20 @@ export default function Footer() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
           <p>© 2025 Motor Market Connect Club Ltd. All rights reserved.</p>
           <div className="flex items-center gap-1.5">
-            <span>Made with</span>
-            <span
-              className="font-bold text-sm"
+            <span>Designed & Developed by</span>
+            <a
+              href="https://bellwayinfotech.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium hover:underline transition-colors"
               style={{
                 background: "linear-gradient(135deg, #FAD293, #CEA46B)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}
             >
-              ♥
-            </span>
-            <span>in the UK</span>
+              Bellway Infotech
+            </a>
           </div>
         </div>
       </div>

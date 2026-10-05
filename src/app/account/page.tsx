@@ -23,6 +23,7 @@ import { ProfileTab } from "@/components/account/ProfileTab";
 import { AddressesTab } from "@/components/account/AddressesTab";
 import { SecurityTab } from "@/components/account/SecurityTab";
 import { QuotesTab } from "@/components/account/QuotesTab";
+import { EstimatesTab } from "@/components/account/EstimatesTab";
 
 function AccountContent() {
   const searchParams = useSearchParams();
@@ -45,12 +46,20 @@ function AccountContent() {
 
   // Sync tab with URL search parameter
   useEffect(() => {
+    if (tabParam === "estimates") {
+      router.replace("/estimate");
+      return;
+    }
     if (tabParam) {
       setActiveTab(tabParam);
     }
-  }, [tabParam]);
+  }, [tabParam, router]);
 
   const handleSelectTab = (tab: string) => {
+    if (tab === "estimates") {
+      router.push("/estimate");
+      return;
+    }
     setActiveTab(tab);
     router.push(`/account?tab=${tab}`);
   };
@@ -217,7 +226,6 @@ function AccountContent() {
             )}
 
             {activeTab === "quotes" && <QuotesTab />}
-
             {activeTab === "security" && <SecurityTab />}
           </main>
         </div>

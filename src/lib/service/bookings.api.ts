@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 
 export type BookingServiceType =
   | "all"
@@ -87,6 +87,10 @@ export const MMC_CATEGORY_IDS = {
   VALET: "812a149b-2ccd-43ef-901a-a665f2ff78ea",
   TYRE: "5d98d5c9-509e-4ab7-859d-806174384e27",
   EMERGENCY: "860791e7-ed6d-46ca-992c-1348dd4c42ad",
+};
+
+export const getDigitalPaymentCallbackUrl = (): string => {
+  return `${getApiBaseUrl()}/digital-payment-booking-response`;
 };
 
 /**
@@ -340,10 +344,15 @@ function parseJsonIfString(val: any): any {
 
 export function extractReadableAddress(addr: any): string {
   if (!addr) return "";
+  if (typeof addr === "number") return ""; // Ignore numeric database IDs like 6
   const parsed = parseJsonIfString(addr);
 
   if (typeof parsed === "string") {
     const trimmed = parsed.trim();
+    // Ignore empty or purely numeric IDs
+    if (!trimmed || trimmed === "null" || trimmed === "undefined" || /^\d+$/.test(trimmed)) {
+      return "";
+    }
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       try {
         const nested = JSON.parse(trimmed);
@@ -356,28 +365,68 @@ export function extractReadableAddress(addr: any): string {
   }
 
   if (typeof parsed === "object" && parsed !== null) {
-    const addrStr = parsed.address || parsed.service_address || parsed.street || "";
-    const cityStr = parsed.city || "";
-    const zipStr = parsed.zip_code || parsed.postcode || parsed.zip || "";
+    const addrStr =
+      parsed.address ||
+      parsed.service_address ||
+      parsed.street ||
+      parsed.formatted_address ||
+      parsed.address_line_1 ||
+      parsed.address_label ||
+      "";
+    const cityStr = parsed.city || parsed.town || parsed.district || "";
+    const zipStr = parsed.zip_code || parsed.postcode || parsed.zip || parsed.postal_code || "";
     const countryStr = parsed.country || "";
 
     const parts = [addrStr, cityStr, zipStr, countryStr].filter(
-      (p) => Boolean(p && typeof p === "string" && p.trim().length > 0)
+      (p) => Boolean(p && typeof p === "string" && p.trim().length > 0 && p.trim() !== "null" && !/^\d+$/.test(p.trim()))
     );
 
     if (parts.length > 0) {
       return parts.join(", ");
     }
 
-    if (parsed.address_label && typeof parsed.address_label === "string") {
+    if (parsed.address_label && typeof parsed.address_label === "string" && !/^\d+$/.test(parsed.address_label)) {
       return parsed.address_label;
     }
-    if (parsed.location && typeof parsed.location === "string") {
+    if (parsed.location && typeof parsed.location === "string" && !/^\d+$/.test(parsed.location)) {
       return parsed.location;
+    }
+    if (parsed.name && typeof parsed.name === "string" && !/^\d+$/.test(parsed.name)) {
+      return parsed.name;
     }
   }
 
   return "";
+}
+
+export function parseBookingTimestamp(item: any): number {
+  if (!item) return 0;
+  // 1. Try explicit createdAt / created_at
+  const created = item.createdAt || item.created_at || item.raw?.created_at || item.raw?.createdAt;
+  if (created) {
+    const t = new Date(String(created).replace(" ", "T")).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  // 2. Try scheduleDate / service_schedule
+  const sched = item.scheduleDate || item.service_schedule || item.raw?.service_schedule || item.raw?.scheduledDate;
+  if (sched) {
+    const t = new Date(String(sched).replace(" ", "T")).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  // 3. Try timestamp inside ID (e.g. MMC-1790680687259 or MMC-MEC-123456)
+  const idStr = String(item.id || item.rawId || item.readableId || item.booking_id || "");
+  const numMatches = idStr.match(/\d{6,}/g);
+  if (numMatches && numMatches.length > 0) {
+    for (const numStr of numMatches) {
+      const val = Number(numStr);
+      if (!isNaN(val) && val > 0) {
+        if (val > 1000000000000) return val; // ms timestamp
+        if (val > 1000000000) return val * 1000; // sec timestamp
+        return val;
+      }
+    }
+  }
+  return 0;
 }
 
 export function cleanReadableText(text: any): string {
@@ -571,17 +620,80 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
 
   // Parse Raw Address Object for contact & coordinates
   const rawAddressObj = parseJsonIfString(
-    raw.service_address || raw.service_address_location || raw.delivery_address || localConfirmed?.serviceAddress
+    raw.service_address ||
+    raw.service_address_location ||
+    raw.delivery_address ||
+    raw.post?.service_address ||
+    raw.booking_post?.service_address ||
+    localConfirmed?.serviceAddress
   );
 
+  // Address candidate pool across all known Demandium / MMC fields
+  const addressCandidates = [
+    raw.service_address,
+    raw.service_address_location,
+    raw.delivery_address,
+    raw.locationAddress,
+    raw.pickup_location,
+    raw.serviceAddress,
+    raw.post?.service_address,
+    raw.post?.address,
+    raw.post?.location,
+    raw.booking_post?.service_address,
+    raw.booking_post?.address,
+    raw.service_address?.address,
+    raw.service_address?.street,
+    raw.service_address?.address_label,
+    raw.customer_address,
+    raw.customer?.address,
+    raw.customer?.addresses?.[0],
+    raw.user_address,
+    raw.address,
+    raw.location,
+    raw.postcode,
+    raw.locationPostcode,
+    localConfirmed?.serviceAddress,
+    localConfirmed?.pickupLocation,
+    localConfirmed?.postcode,
+    meta?.serviceAddress,
+    meta?.pickupLocation,
+    meta?.postcode,
+    pendingSession?.service_address,
+    pendingSession?.postcode,
+    pendingSession?.address,
+  ];
+
+  let resolvedServiceAddress = "";
+  for (const candidate of addressCandidates) {
+    const extracted = extractReadableAddress(candidate);
+    if (extracted && extracted.length > 0) {
+      resolvedServiceAddress = extracted;
+      break;
+    }
+  }
+
+  // Scan notes/special_conditions for postcode or address tags if still missing
+  if (!resolvedServiceAddress) {
+    const combinedNotes = [
+      raw.notes,
+      raw.instructions,
+      raw.special_conditions,
+      raw.damage_description,
+      localConfirmed?.notes,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const postcodeMatch =
+      combinedNotes.match(/(?:postcode|location|address|zip):\s*([^\n\],]+)/i) ||
+      combinedNotes.match(/\b([A-Z]{1,2}[0-9][A-Z0-9]?\s*[0-9][A-Z]{2})\b/i);
+    if (postcodeMatch && postcodeMatch[1]) {
+      resolvedServiceAddress = postcodeMatch[1].trim();
+    }
+  }
+
   // Clean Locations
-  const serviceAddress =
-    extractReadableAddress(raw.service_address) ||
-    extractReadableAddress(raw.service_address_location) ||
-    extractReadableAddress(raw.delivery_address) ||
-    extractReadableAddress(raw.locationAddress) ||
-    localConfirmed?.serviceAddress ||
-    "";
+  const serviceAddress = resolvedServiceAddress || localConfirmed?.serviceAddress || "";
 
   const pickupLocation =
     extractReadableAddress(raw.pickup_location) ||
@@ -590,11 +702,19 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     localConfirmed?.pickupLocation ||
     "";
 
-  const destinationLocation = extractReadableAddress(raw.drop_location) || localConfirmed?.destinationLocation || "";
+  const destinationLocation =
+    extractReadableAddress(raw.drop_location) ||
+    extractReadableAddress(raw.destination_location) ||
+    localConfirmed?.destinationLocation ||
+    "";
+
   const postcode =
     raw.postcode ||
     raw.locationPostcode ||
+    raw.post?.postcode ||
+    raw.booking_post?.postcode ||
     localConfirmed?.postcode ||
+    meta?.postcode ||
     (typeof rawAddressObj === "object" ? rawAddressObj?.zip_code || rawAddressObj?.postcode : "") ||
     "";
 
@@ -609,7 +729,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     image =
       raw.car.image_full_paths?.[0] ||
       (Array.isArray(raw.car.images) && raw.car.images[0]
-        ? `https://mmcclub.co.uk/storage/app/public/car/${raw.car.images[0]}`
+        ? `${getBackendRootUrl()}/storage/app/public/car/${raw.car.images[0]}`
         : "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80");
   } else {
     // 1. Check local metadata store
@@ -1028,12 +1148,14 @@ export async function fetchAllCustomerBookings(
     } catch {}
   }
 
-  // Sort: newest first
+  // Sort: newest bookings strictly at the top
   const allList = Array.from(unifiedMap.values());
   allList.sort((a, b) => {
-    const dateA = new Date(a.createdAt || a.scheduleDate || 0).getTime();
-    const dateB = new Date(b.createdAt || b.scheduleDate || 0).getTime();
-    return dateB - dateA;
+    const timeA = parseBookingTimestamp(a);
+    const timeB = parseBookingTimestamp(b);
+    if (timeB !== timeA) return timeB - timeA;
+    // Secondary tie-breaker: sort numeric/alphanumeric ID descending
+    return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
   });
 
   console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status}, £${b.totalAmount})`));

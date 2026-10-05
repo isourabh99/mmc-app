@@ -1,4 +1,4 @@
-import apiClient from "@/lib/http/apiClient";
+import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface CarType {
   id: number;
@@ -194,33 +194,54 @@ export const searchChauffeurs = async ({
   offset = 0,
 }: ChauffeurSearchParams): Promise<ChauffeurSearchContent> => {
   try {
-    const formData = new FormData();
-
-    formData.append("car_type_id", String(car_type_id));
-    formData.append("date", date);
-    formData.append("limit", String(limit));
-    formData.append("offset", String(offset));
-
+    // Try JSON payload first (standard REST API)
     const response = await apiClient.post<ChauffeurSearchResponse>(
       "/customer/car/chauffeur/search",
-      formData
+      {
+        car_type_id: Number(car_type_id),
+        date,
+        limit: Number(limit),
+        offset: Number(offset),
+      }
     );
 
-    return response.data.content;
-  } catch (error) {
+    return response.data?.content;
+  } catch (error: any) {
+    // If backend requires FormData specifically, retry with FormData
+    if (error?.response?.status === 422 || error?.response?.status === 400) {
+      try {
+        const formData = new FormData();
+        formData.append("car_type_id", String(car_type_id));
+        formData.append("date", date);
+        formData.append("limit", String(limit));
+        formData.append("offset", String(offset));
+
+        const formResponse = await apiClient.post<ChauffeurSearchResponse>(
+          "/customer/car/chauffeur/search",
+          formData
+        );
+        return formResponse.data?.content;
+      } catch (formErr) {
+        console.error("Failed to search chauffeurs with FormData:", formErr);
+      }
+    }
     console.error("Failed to search chauffeurs:", error);
     throw error;
   }
 };
 
-export interface ChauffeurBookingCoordinates {
+export const getDigitalPaymentCallbackUrl = (): string => {
+  const apiBase = getApiBaseUrl();
+  return `${apiBase}/digital-payment-booking-response`;
+};
 
+export interface ChauffeurBookingCoordinates {
   latitude: number;
   longitude: number;
 }
 
 export interface ChauffeurBookingPayload {
-  car_id: number;
+  car_id: number | string;
   start_date: string;
   end_date: string;
   pickup_time: string;
@@ -235,6 +256,7 @@ export interface ChauffeurBookingPayload {
   payment_platform?: string;
   callback?: string;
   note?: string;
+  description?: string;
 }
 
 export interface ChauffeurBookingDetail {
@@ -392,35 +414,109 @@ export const getCustomerBookings = async ({
   }
 };
 
-export const getChauffeurGalleryImages = (chauffeur: Chauffeur): string[] => {
-  const fallback =
-    "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=1200&q=80";
+export const normalizeBackendImageUrl = (pathOrUrl: string | null | undefined): string => {
+  if (!pathOrUrl || typeof pathOrUrl !== "string") return "";
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined" || trimmed.endsWith("/") || trimmed === "[]") return "";
 
-  if (
-    chauffeur.image_full_paths &&
-    Array.isArray(chauffeur.image_full_paths) &&
-    chauffeur.image_full_paths.length > 0
-  ) {
-    const valid = chauffeur.image_full_paths.filter(
-      (p) => p && typeof p === "string" && !p.endsWith("/")
-    );
-    if (valid.length > 0) return valid;
+  const apiBase = getBackendRootUrl();
+
+  // If already a full URL, ensure domain/port matches active backend (fix localhost vs LAN IP issues)
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      const activeBase = new URL(apiBase);
+      if (
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.host !== activeBase.host
+      ) {
+        return `${activeBase.origin}${parsed.pathname}${parsed.search}`;
+      }
+    } catch { }
+    return trimmed;
   }
 
-  if (
-    chauffeur.images &&
-    Array.isArray(chauffeur.images) &&
-    chauffeur.images.length > 0
-  ) {
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ||
-      "http://192.168.29.83:8000";
-    return chauffeur.images.map((img) =>
-      img.startsWith("http") ? img : `${apiBase}/storage/app/public/car/${img}`
-    );
+  // If relative path
+  if (trimmed.startsWith("/storage/") || trimmed.startsWith("storage/")) {
+    const cleanPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    return `${apiBase}${cleanPath}`;
   }
 
-  return [fallback];
+  // If filename only
+  return `${apiBase}/storage/app/public/car/${trimmed}`;
+};
+
+export const getChauffeurGalleryImages = (chauffeur: Chauffeur | any): string[] => {
+  if (!chauffeur) return [];
+  const results: string[] = [];
+
+  // 1. Check image_full_paths
+  if (chauffeur.image_full_paths) {
+    let list = chauffeur.image_full_paths;
+    if (typeof list === "string") {
+      try {
+        const p = JSON.parse(list);
+        if (Array.isArray(p)) list = p;
+        else list = [list];
+      } catch {
+        list = [list];
+      }
+    }
+    if (Array.isArray(list)) {
+      list.forEach((p: any) => {
+        const normalized = normalizeBackendImageUrl(p);
+        if (normalized && !results.includes(normalized)) {
+          results.push(normalized);
+        }
+      });
+    }
+  }
+
+  // 2. Check images (array or JSON-encoded string)
+  if (chauffeur.images) {
+    let list = chauffeur.images;
+    if (typeof list === "string") {
+      try {
+        const p = JSON.parse(list);
+        if (Array.isArray(p)) list = p;
+        else list = [list];
+      } catch {
+        list = [list];
+      }
+    }
+    if (Array.isArray(list)) {
+      list.forEach((img: any) => {
+        const normalized = normalizeBackendImageUrl(img);
+        if (normalized && !results.includes(normalized)) {
+          results.push(normalized);
+        }
+      });
+    }
+  }
+
+  // 3. Check single image properties
+  const singleProps = [
+    chauffeur.image_full_path,
+    chauffeur.cover_image_full_path,
+    chauffeur.thumbnail_full_path,
+    chauffeur.cover_image,
+    chauffeur.image,
+    chauffeur.thumbnail,
+  ];
+
+  singleProps.forEach((prop) => {
+    if (prop) {
+      const normalized = normalizeBackendImageUrl(prop);
+      if (normalized && !results.includes(normalized)) {
+        results.push(normalized);
+      }
+    }
+  });
+
+  if (results.length > 0) return results;
+
+  return ["https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80"];
 };
 
 

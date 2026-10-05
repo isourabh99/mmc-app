@@ -1,4 +1,5 @@
 import HeroSection from "@/components/HeroSection";
+import AppDownloadBanner from "@/components/AppDownloadBanner";
 import HomePromoBanner from "@/components/HomePromoBanner";
 import ServicesSection from "@/components/ServicesSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
@@ -13,6 +14,7 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
+      <AppDownloadBanner />
       <HomePromoBanner />
       <ServicesSection />
       <EmergencyCTA />

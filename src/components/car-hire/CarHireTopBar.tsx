@@ -65,17 +65,16 @@ export const CarHireTopBar: React.FC<CarHireTopBarProps> = ({
                 type="button"
                 id={`filter-cat-${cat.id}`}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-300 border ${
-                  isSelected
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-300 border ${isSelected
                     ? "border-[#FAD293] text-black shadow-[0_0_15px_rgba(250,210,147,0.25)] scale-[1.02]"
                     : "border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20"
-                }`}
+                  }`}
                 style={
                   isSelected
                     ? {
-                        background:
-                          "linear-gradient(135deg, #FAD293, #CEA46B)",
-                      }
+                      background:
+                        "linear-gradient(135deg, #FAD293, #CEA46B)",
+                    }
                     : {}
                 }
               >

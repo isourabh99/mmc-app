@@ -13,7 +13,7 @@ import {
   Snowflake,
   ArrowRight,
 } from "lucide-react";
-import type { Chauffeur } from "@/lib/service/chauffeur.api";
+import { Chauffeur, getChauffeurGalleryImages } from "@/lib/service/chauffeur.api";
 import { isAuthenticated } from "@/lib/auth.api";
 import { useToast } from "@/components/ToastProvider";
 
@@ -35,11 +35,8 @@ export const ChauffeurCard: React.FC<ChauffeurCardProps> = ({
   const router = useRouter();
   const { showToast } = useToast();
 
-  const carPhoto =
-    chauffeur.image_full_paths?.[0] ||
-    (chauffeur.images?.[0] && !chauffeur.images[0].endsWith(".png")
-      ? chauffeur.images[0]
-      : "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80");
+  const gallery = getChauffeurGalleryImages(chauffeur);
+  const carPhoto = gallery[0] || "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80";
 
   const providerLogo =
     chauffeur.provider?.logo_full_path ||

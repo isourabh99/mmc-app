@@ -16,6 +16,7 @@ import {
   Sparkles,
   Bell,
   FileText,
+  Receipt,
 } from "lucide-react";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
@@ -152,49 +153,48 @@ export default function Navbar() {
 
   return (
     <>
-    <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 py-3 ${
-        scrolled
-          ? "bg-black/90 backdrop-blur-xl shadow-lg shadow-black/50"
-          : "bg-black/90 backdrop-blur-md"
-      }`}
-    >
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 py-3 ${scrolled
+            ? "bg-black/90 backdrop-blur-xl shadow-lg shadow-black/50"
+            : "bg-black/90 backdrop-blur-md"
+          }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
 
-        {/* =================================================
+          {/* =================================================
             LOGO
         ================================================= */}
 
-        <Link
-          href="/"
-          className="flex items-center group"
-          aria-label="Motor Market Connect home"
-        >
-          <Image
-            src="/mmc-logo.jpg"
-            alt="Motor Market Connect"
-            width={300}
-            height={134}
-            priority
-            className="h-10 w-auto sm:h-12 object-contain"
-          />
-        </Link>
+          <Link
+            href="/"
+            className="flex items-center group"
+            aria-label="Motor Market Connect home"
+          >
+            <Image
+              src="/mmc-logo.jpg"
+              alt="Motor Market Connect"
+              width={300}
+              height={134}
+              priority
+              className="h-10 w-auto sm:h-12 object-contain"
+            />
+          </Link>
 
-        {/* =================================================
+          {/* =================================================
             DESKTOP NAV
         ================================================= */}
 
-        <div className="hidden lg:flex items-center gap-8">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className="text-sm text-white/70 hover:text-white transition-colors duration-200 tracking-wide relative group"
-            >
-              {link.label}
+          <div className="hidden lg:flex items-center gap-8">
+            {navLinks.map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                className="text-sm text-white/70 hover:text-white transition-colors duration-200 tracking-wide relative group"
+              >
+                {link.label}
 
-              <span
-                className="
+                <span
+                  className="
                   absolute
                   -bottom-0.5
                   left-0
@@ -207,30 +207,30 @@ export default function Navbar() {
                   transition-all
                   duration-300
                 "
-              />
-            </Link>
-          ))}
-        </div>
+                />
+              </Link>
+            ))}
+          </div>
 
-        {/* =================================================
+          {/* =================================================
             DESKTOP RIGHT SIDE
         ================================================= */}
 
-        <div className="hidden lg:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
 
-          {/* =================================================
+            {/* =================================================
               NOTIFICATIONS
           ================================================= */}
-          
 
-          {/* =================================================
+
+            {/* =================================================
               EMERGENCY ASSISTANCE
           ================================================= */}
 
-          <Link
-            href="/emergency-assistance"
-            title="Emergency Vehicle Assistance"
-            className="
+            <Link
+              href="/emergency-assistance"
+              title="Emergency Vehicle Assistance"
+              className="
               flex
               items-center
               gap-2
@@ -248,22 +248,22 @@ export default function Navbar() {
               transition-all
               duration-300
             "
-          >
-            <Siren size={17} strokeWidth={2.2} />
-            <span>Emergency</span>
-          </Link>
-<NotificationCenter variant="desktop" />
-          {/* =================================================
+            >
+              <Siren size={17} strokeWidth={2.2} />
+              <span>Emergency</span>
+            </Link>
+            <NotificationCenter variant="desktop" />
+            {/* =================================================
               LOGIN / GET STARTED / PROFILE
           ================================================= */}
 
-          {!isLoggedIn ? (
-            <>
-              {/* LOGIN */}
+            {!isLoggedIn ? (
+              <>
+                {/* LOGIN */}
 
-              <Link
-                href="/login"
-                className="
+                <Link
+                  href="/login"
+                  className="
                   text-sm
                   text-white/70
                   hover:text-white
@@ -276,15 +276,15 @@ export default function Navbar() {
                   transition-all
                   duration-300
                 "
-              >
-                Login
-              </Link>
+                >
+                  Login
+                </Link>
 
-              {/* GET STARTED */}
+                {/* GET STARTED */}
 
-              <Link
-                href="/get-started"
-                className="
+                <Link
+                  href="/get-started"
+                  className="
                   text-sm
                   font-semibold
                   px-5
@@ -295,23 +295,23 @@ export default function Navbar() {
                   hover:shadow-[0_0_24px_rgba(250,210,147,0.3)]
                   hover:scale-105
                 "
-                style={{
-                  background:
-                    "linear-gradient(135deg, #FAD293, #CEA46B)",
-                  color: "#000",
-                }}
-              >
-                Get Started
-              </Link>
-            </>
-          ) : (
-            /* USER PROFILE ICON & DROPDOWN */
-            <div ref={dropdownRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                aria-label="Account Menu"
-                className={`
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #FAD293, #CEA46B)",
+                    color: "#000",
+                  }}
+                >
+                  Get Started
+                </Link>
+              </>
+            ) : (
+              /* USER PROFILE ICON & DROPDOWN */
+              <div ref={dropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  aria-label="Account Menu"
+                  className={`
                   flex items-center gap-2.5
                   pl-2 pr-3 py-1.5
                   rounded-full
@@ -319,154 +319,159 @@ export default function Navbar() {
                   text-[#FAD293]
                   transition-all
                   duration-300
-                  ${
-                    userDropdownOpen
+                  ${userDropdownOpen
                       ? "border-[#FAD293] bg-[#FAD293]/15 ring-2 ring-[#FAD293]/30"
                       : "border-white/10 bg-white/[0.04] hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10"
-                  }
+                    }
                 `}
-              >
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[1.5px] shadow-sm flex items-center justify-center">
-                  <div className="w-full h-full rounded-full bg-[#111] flex items-center justify-center overflow-hidden">
-                    {user?.profile_image_full_path ? (
-                      <img
-                        src={user.profile_image_full_path}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-[11px] font-bold text-[#FAD293]">
-                        {(user?.first_name?.[0] || "") + (user?.last_name?.[0] || "") || "U"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col text-left">
-                  <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
-                    {user?.first_name || "Account"}
-                  </span>
-                  
-                </div>
-                <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
-              </button>
-
-              {/* DROPDOWN MENU */}
-              {userDropdownOpen && (
-                <div className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl border border-[#d9a85f]/40 bg-[#16120e] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 z-50">
-                  {/* User Info Header */}
-                  <div className="px-3 py-2.5 border-b border-white/10 mb-1">
-                    <div className="flex items-center justify-between">
-                      
+                >
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[1.5px] shadow-sm flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-[#111] flex items-center justify-center overflow-hidden">
+                      {user?.profile_image_full_path ? (
+                        <img
+                          src={user.profile_image_full_path}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-[11px] font-bold text-[#FAD293]">
+                          {(user?.first_name?.[0] || "") + (user?.last_name?.[0] || "") || "U"}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs font-bold text-white truncate mt-0.5">
-                      {user?.first_name || user?.last_name
-                        ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-                        : "My Account"}
-                    </p>
-                    <p className="text-[11px] text-white/50 truncate">
-                      {user?.phone || user?.email || "Signed In"}
-                    </p>
                   </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
+                      {user?.first_name || "Account"}
+                    </span>
 
-                  {/* Links */}
-                  <div className="space-y-0.5">
-                    <Link
-                      href="/account?tab=bookings"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
-                    >
-                      <Calendar size={14} className="text-[#e7bd78]" />
-                      <span>My Bookings</span>
-                    </Link>
-
-                    <Link
-                      href="/notifications"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
-                    >
-                      <Bell size={14} className="text-[#e7bd78]" />
-                      <span>Notifications</span>
-                    </Link>
-
-                    <Link
-                      href="/account?tab=profile"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
-                    >
-                      <UserRound size={14} className="text-[#e7bd78]" />
-                      <span>Personal Profile</span>
-                    </Link>
-
-                    <Link
-                      href="/account?tab=addresses"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
-                    >
-                      <MapPin size={14} className="text-[#e7bd78]" />
-                      <span>Saved Addresses</span>
-                    </Link>
-
-                    <Link
-                      href="/account?tab=quotes"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
-                    >
-                      <FileText size={14} className="text-[#e7bd78]" />
-                      <span>My Quotes</span>
-                    </Link>
                   </div>
+                  <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
+                </button>
 
-                  {/* Logout */}
-                  <div className="pt-1.5 border-t border-white/10 mt-1">
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-950/40 hover:text-red-300"
-                    >
-                      <LogOut size={14} />
-                      <span>Logout</span>
-                    </button>
+                {/* DROPDOWN MENU */}
+                {userDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl border border-[#d9a85f]/40 bg-[#16120e] p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 z-50">
+                    {/* User Info Header */}
+                    <div className="px-3 py-2.5 border-b border-white/10 mb-1">
+                      <div className="flex items-center justify-between">
+
+                      </div>
+                      <p className="text-xs font-bold text-white truncate mt-0.5">
+                        {user?.first_name || user?.last_name
+                          ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+                          : "My Account"}
+                      </p>
+                      <p className="text-[11px] text-white/50 truncate">
+                        {user?.phone || user?.email || "Signed In"}
+                      </p>
+                    </div>
+
+                    {/* Links */}
+                    <div className="space-y-0.5">
+                      <Link
+                        href="/account?tab=bookings"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <Calendar size={14} className="text-[#e7bd78]" />
+                        <span>My Bookings</span>
+                      </Link>
+
+                      <Link
+                        href="/notifications"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <Bell size={14} className="text-[#e7bd78]" />
+                        <span>Notifications</span>
+                      </Link>
+
+                      <Link
+                        href="/account?tab=profile"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <UserRound size={14} className="text-[#e7bd78]" />
+                        <span>Personal Profile</span>
+                      </Link>
+
+                      <Link
+                        href="/account?tab=addresses"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <MapPin size={14} className="text-[#e7bd78]" />
+                        <span>Saved Addresses</span>
+                      </Link>
+
+                      <Link
+                        href="/account?tab=quotes"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <FileText size={14} className="text-[#e7bd78]" />
+                        <span>My Quotes</span>
+                      </Link>
+
+                      <Link
+                        href="/account?tab=estimates"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <Receipt size={14} className="text-[#e7bd78]" />
+                        <span>Provider Estimates</span>
+                      </Link>
+                    </div>
+
+                    {/* Logout */}
+                    <div className="pt-1.5 border-t border-white/10 mt-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-950/40 hover:text-red-300"
+                      >
+                        <LogOut size={14} />
+                        <span>Logout</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* =================================================
+          {/* =================================================
             MOBILE MENU & NOTIFICATION BUTTONS
         ================================================= */}
 
-        <div className="lg:hidden flex items-center gap-2">
-          <NotificationCenter variant="mobile" onCloseMobileMenu={() => setMenuOpen(false)} />
+          <div className="lg:hidden flex items-center gap-2">
+            <NotificationCenter variant="mobile" onCloseMobileMenu={() => setMenuOpen(false)} />
 
-          <button
-            id="mobile-menu-btn"
-            className="flex flex-col gap-1.5 p-2"
-            onClick={() => setMenuOpen(!menuOpen)}
-            aria-label="Toggle menu"
-          >
-            <span
-              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-                menuOpen ? "rotate-45 translate-y-2" : ""
-              }`}
-            />
+            <button
+              id="mobile-menu-btn"
+              className="flex flex-col gap-1.5 p-2"
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label="Toggle menu"
+            >
+              <span
+                className={`w-6 h-0.5 bg-white transition-all duration-300 ${menuOpen ? "rotate-45 translate-y-2" : ""
+                  }`}
+              />
 
-            <span
-              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-                menuOpen ? "opacity-0" : ""
-              }`}
-            />
+              <span
+                className={`w-6 h-0.5 bg-white transition-all duration-300 ${menuOpen ? "opacity-0" : ""
+                  }`}
+              />
 
-            <span
-              className={`w-6 h-0.5 bg-white transition-all duration-300 ${
-                menuOpen ? "-rotate-45 -translate-y-2" : ""
-              }`}
-            />
-          </button>
+              <span
+                className={`w-6 h-0.5 bg-white transition-all duration-300 ${menuOpen ? "-rotate-45 -translate-y-2" : ""
+                  }`}
+              />
+            </button>
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
 
       {/* =================================================
           MOBILE MENU — Full-screen overlay (outside <nav> to avoid stacking context trap)
@@ -482,9 +487,8 @@ export default function Navbar() {
 
       {/* Sliding panel */}
       <div
-        className={`lg:hidden fixed top-0 right-0 bottom-0 z-[10000] w-full sm:w-[360px] h-screen flex flex-col border-l border-[#FAD293]/10 transition-transform duration-300 ease-in-out ${
-          menuOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`lg:hidden fixed top-0 right-0 bottom-0 z-[10000] w-full sm:w-[360px] h-screen flex flex-col border-l border-[#FAD293]/10 transition-transform duration-300 ease-in-out ${menuOpen ? "translate-x-0" : "translate-x-full"
+          }`}
         style={{ backgroundColor: '#0c0a09' }}
       >
         {/* Panel Header */}
@@ -632,6 +636,15 @@ export default function Navbar() {
               >
                 <FileText size={17} className="text-[#FAD293]" />
                 <span>My Quotes & Offers</span>
+              </Link>
+
+              <Link
+                href="/account?tab=estimates"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 w-full py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium hover:text-white"
+              >
+                <Receipt size={17} className="text-[#FAD293]" />
+                <span>Provider Estimates</span>
               </Link>
 
               <Link

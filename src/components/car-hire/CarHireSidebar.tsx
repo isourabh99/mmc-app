@@ -90,11 +90,10 @@ export const CarHireSidebar: React.FC<CarHireSidebarProps> = ({
                   key={cat.id}
                   type="button"
                   onClick={() => onSelectCategory(cat.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition text-left ${
-                    isSelected
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition text-left ${isSelected
                       ? "bg-gradient-to-r from-[#FAD293]/20 to-transparent border border-[#FAD293]/40 text-[#FAD293]"
                       : "text-white/70 hover:bg-white/5 hover:text-white border border-transparent"
-                  }`}
+                    }`}
                 >
                   <span className="truncate">{cat.name}</span>
                   {isSelected && (
@@ -119,11 +118,10 @@ export const CarHireSidebar: React.FC<CarHireSidebarProps> = ({
             <button
               type="button"
               onClick={() => onSelectCarType("all")}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition border ${
-                selectedCarTypeId === "all"
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition border ${selectedCarTypeId === "all"
                   ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                   : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
-              }`}
+                }`}
             >
               All Types
             </button>
@@ -134,11 +132,10 @@ export const CarHireSidebar: React.FC<CarHireSidebarProps> = ({
                   key={type.id}
                   type="button"
                   onClick={() => onSelectCarType(type.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition border ${
-                    isSelected
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition border ${isSelected
                       ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                       : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
-                  }`}
+                    }`}
                 >
                   {type.name}
                 </button>
@@ -167,11 +164,10 @@ export const CarHireSidebar: React.FC<CarHireSidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onTransmissionChange(item.id)}
-                className={`py-1.5 rounded-lg text-[11px] font-medium transition border text-center ${
-                  isSelected
+                className={`py-1.5 rounded-lg text-[11px] font-medium transition border text-center ${isSelected
                     ? "bg-[#FAD293] text-black border-[#FAD293] font-bold"
                     : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
-                }`}
+                  }`}
               >
                 {item.label}
               </button>

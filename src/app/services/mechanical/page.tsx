@@ -58,6 +58,7 @@ import {
   DEFAULT_ZONE_ID,
   FALLBACK_MECHANICAL_CATEGORY_ID,
 } from "@/lib/service/mechanical.api";
+import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 import { useRouter } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth.api";
@@ -491,7 +492,7 @@ export default function MechanicalPage() {
         callback:
           typeof window !== "undefined"
             ? `${window.location.origin}/booking-success`
-            : "https://mmcclub.co.uk/backend/booking-success",
+            : `${getBackendRootUrl()}/booking-success`,
       };
 
       const res = await sendMechanicalBookingRequest(payload);
@@ -527,7 +528,7 @@ export default function MechanicalPage() {
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
       if (!redirectUrl && bId) {
-        redirectUrl = `https://mmcclub.co.uk/backend/payment/stripe/pay?payment_id=${encodeURIComponent(
+        redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bId)
         )}`;
       }
@@ -549,6 +550,7 @@ export default function MechanicalPage() {
       } catch { }
 
       const confirmedMecId = String(bId || `MMC-MEC-${Date.now().toString().slice(-6)}`);
+      const resolvedMecAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
       saveConfirmedBooking({
         id: confirmedMecId,
         rawId: bId || confirmedMecId,
@@ -558,6 +560,9 @@ export default function MechanicalPage() {
         serviceCategoryName: "Mechanical & Garage",
         providerName: selectedProvider?.company_name || "MMC Mechanical Partner",
         providerPhone: selectedProvider?.company_phone,
+        serviceAddress: resolvedMecAddr,
+        pickupLocation: resolvedMecAddr,
+        postcode: postcode || "",
         totalAmount: numericPrice,
         isPaid: false,
         paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
@@ -786,8 +791,8 @@ export default function MechanicalPage() {
                       <div
                         onClick={() => setShowServicesDropdown((prev) => !prev)}
                         className={`w-full bg-[#1B1C20] border rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white cursor-pointer transition-colors flex items-center justify-between min-h-[46px] ${showServicesDropdown
-                            ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
-                            : "border-zinc-800/90 hover:border-zinc-700"
+                          ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
+                          : "border-zinc-800/90 hover:border-zinc-700"
                           }`}
                       >
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
@@ -872,15 +877,15 @@ export default function MechanicalPage() {
                                   key={item.id}
                                   onClick={() => toggleServiceSelection(item.id)}
                                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm select-none ${isSelected
-                                      ? "bg-[#E8AF66]/15 text-[#E8AF66] font-semibold"
-                                      : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
+                                    ? "bg-[#E8AF66]/15 text-[#E8AF66] font-semibold"
+                                    : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
                                     }`}
                                 >
                                   <div className="flex items-center gap-2.5">
                                     <div
                                       className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected
-                                          ? "bg-[#E8AF66] border-[#E8AF66] text-black"
-                                          : "border-zinc-600 bg-zinc-900"
+                                        ? "bg-[#E8AF66] border-[#E8AF66] text-black"
+                                        : "border-zinc-600 bg-zinc-900"
                                         }`}
                                     >
                                       {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
@@ -1359,8 +1364,8 @@ export default function MechanicalPage() {
                               if (slot.start_time) setBookingTime(slot.start_time);
                             }}
                             className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${isSelected
-                                ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 border-transparent shadow-md"
-                                : "bg-[#18181B] border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                              ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 border-transparent shadow-md"
+                              : "bg-[#18181B] border-zinc-800 text-zinc-300 hover:border-zinc-700"
                               }`}
                           >
                             <div className="truncate">{slot.title || slot.start_time}</div>
@@ -1385,8 +1390,8 @@ export default function MechanicalPage() {
                     type="button"
                     onClick={() => setBookingPriority("normal")}
                     className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${bookingPriority === "normal"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
-                        : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
+                      ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
+                      : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
                       }`}
                   >
                     Standard / Flexible
@@ -1395,8 +1400,8 @@ export default function MechanicalPage() {
                     type="button"
                     onClick={() => setBookingPriority("emergency")}
                     className={`py-3 px-3 rounded-2xl text-center text-xs font-bold transition-all cursor-pointer ${bookingPriority === "emergency"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
-                        : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
+                      ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
+                      : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
                       }`}
                   >
                     Emergency Priority
@@ -1414,8 +1419,8 @@ export default function MechanicalPage() {
                     type="button"
                     onClick={() => setServiceLocation("customer")}
                     className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${serviceLocation === "customer"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
-                        : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
+                      ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
+                      : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
                       }`}
                   >
                     <Smartphone className="w-4 h-4" />
@@ -1425,8 +1430,8 @@ export default function MechanicalPage() {
                     type="button"
                     onClick={() => setServiceLocation("workshop")}
                     className={`py-3 px-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${serviceLocation === "workshop"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
-                        : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
+                      ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 shadow-md shadow-[#D5A054]/20"
+                      : "bg-[#18181B] border border-zinc-700 text-white hover:border-zinc-600"
                       }`}
                   >
                     <Building2 className="w-4 h-4" />
@@ -1460,8 +1465,8 @@ export default function MechanicalPage() {
                               type="button"
                               onClick={() => updateQuestionAnswer(q.id, "Yes")}
                               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${answers[q.id] === "Yes"
-                                  ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
-                                  : "bg-zinc-900 border border-zinc-700 text-zinc-300"
+                                ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
+                                : "bg-zinc-900 border border-zinc-700 text-zinc-300"
                                 }`}
                             >
                               Yes
@@ -1470,8 +1475,8 @@ export default function MechanicalPage() {
                               type="button"
                               onClick={() => updateQuestionAnswer(q.id, "No")}
                               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${answers[q.id] === "No"
-                                  ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
-                                  : "bg-zinc-900 border border-zinc-700 text-zinc-300"
+                                ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black shadow-md"
+                                : "bg-zinc-900 border border-zinc-700 text-zinc-300"
                                 }`}
                             >
                               No
@@ -1651,8 +1656,8 @@ export default function MechanicalPage() {
                   <div
                     onClick={() => setIsPartialPayment(true)}
                     className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                        ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                        : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                       }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -1675,8 +1680,8 @@ export default function MechanicalPage() {
 
                       <div
                         className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                            ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                            : "border-zinc-700 bg-zinc-900"
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
                           }`}
                       >
                         {isPartialPayment && (
@@ -1701,8 +1706,8 @@ export default function MechanicalPage() {
                   <div
                     onClick={() => setIsPartialPayment(false)}
                     className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                        ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                        : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                       }`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -1720,8 +1725,8 @@ export default function MechanicalPage() {
 
                       <div
                         className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                            ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                            : "border-zinc-700 bg-zinc-900"
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
                           }`}
                       >
                         {!isPartialPayment && (
@@ -1869,16 +1874,16 @@ export default function MechanicalPage() {
               <div
                 onClick={() => setPaymentMethod("cash_after_service")}
                 className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${paymentMethod === "cash_after_service"
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${paymentMethod === "cash_after_service"
-                          ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
-                          : "bg-zinc-900 border border-zinc-800 text-zinc-400"
+                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-400"
                         }`}
                     >
                       <Banknote className="w-6 h-6" />
@@ -1891,8 +1896,8 @@ export default function MechanicalPage() {
 
                   <div
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === "cash_after_service"
-                        ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
-                        : "border-zinc-700"
+                      ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
+                      : "border-zinc-700"
                       }`}
                   >
                     {paymentMethod === "cash_after_service" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
@@ -1908,16 +1913,16 @@ export default function MechanicalPage() {
               <div
                 onClick={() => setPaymentMethod("stripe")}
                 className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${paymentMethod === "stripe"
-                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
-                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
+                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
                   }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${paymentMethod === "stripe"
-                          ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
-                          : "bg-zinc-900 border border-zinc-800 text-zinc-400"
+                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-400"
                         }`}
                     >
                       <CreditCard className="w-6 h-6" />
@@ -1930,8 +1935,8 @@ export default function MechanicalPage() {
 
                   <div
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === "stripe"
-                        ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
-                        : "border-zinc-700"
+                      ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
+                      : "border-zinc-700"
                       }`}
                   >
                     {paymentMethod === "stripe" && <Check className="w-3.5 h-3.5 stroke-[3]" />}

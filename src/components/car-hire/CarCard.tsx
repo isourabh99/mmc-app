@@ -20,6 +20,7 @@ import {
   CarItem,
   formatCurrency,
   getCarPrimaryImage,
+  getCarGalleryImages,
 } from "@/lib/service/car.api";
 import { isAuthenticated } from "@/lib/auth.api";
 
@@ -32,6 +33,7 @@ export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
   const router = useRouter();
 
   const primaryImage = getCarPrimaryImage(car);
+  const galleryImages = getCarGalleryImages(car);
   const hourlyRateNum = parseFloat(car.hourly_rate || "0");
   const dailyRateNum = parseFloat(car.daily_rate || "0");
   const depositNum = parseFloat(car.security_deposit || "0");
@@ -56,8 +58,16 @@ export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
           alt={car.brand || "Hire Car"}
           className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src =
-              "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+            const target = e.currentTarget as HTMLImageElement;
+            const nextImg = galleryImages.find(
+              (img) => img && img !== target.src && !img.includes("photo-1549399542")
+            );
+            if (nextImg) {
+              target.src = nextImg;
+            } else {
+              target.src =
+                "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+            }
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d0d] via-transparent to-black/30" />
