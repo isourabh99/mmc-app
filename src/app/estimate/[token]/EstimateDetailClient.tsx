@@ -7,6 +7,7 @@ import Image from "next/image";
 import {
   Receipt,
   CheckCircle2,
+  BadgeCheck,
   Clock,
   Car,
   MapPin,
@@ -64,7 +65,7 @@ function EstimateDetailInner() {
     if (typeof window !== "undefined") {
       const parts = window.location.pathname.split("/").filter(Boolean);
       const last = parts[parts.length - 1];
-      if (last && !["details", "provider-estimates", "estimate"].includes(last)) {
+      if (last && !["details", "provider-estimates", "estimate", "estimates"].includes(last)) {
         return last;
       }
     }
@@ -79,8 +80,34 @@ function EstimateDetailInner() {
       setLoading(false);
       return;
     }
+
+    // 1. Instant cache check from sessionStorage
+    let cachedFound = false;
+    if (typeof window !== "undefined") {
+      try {
+        const selectedStr = sessionStorage.getItem("mmc_selected_estimate");
+        if (selectedStr) {
+          const item: EstimateItem = JSON.parse(selectedStr);
+          const link = String(item.link_token || "").toLowerCase();
+          const id = String(item.id || "").toLowerCase();
+          const readId = String(item.readable_id || "").toLowerCase();
+          const target = activeToken.toLowerCase();
+          if (link === target || id === target || readId === target || target.includes(link) || link.includes(target)) {
+            setEstimate(item);
+            cachedFound = true;
+            setLoading(false);
+            if ((item.status || "").toLowerCase() === "accepted") {
+              setAcceptedSuccess(true);
+            }
+          }
+        }
+      } catch {}
+    }
+
     try {
-      setLoading(true);
+      if (!cachedFound) {
+        setLoading(true);
+      }
       setError(null);
       const data = await getEstimateDetails(activeToken);
       if (data) {
@@ -88,27 +115,38 @@ function EstimateDetailInner() {
         if ((data.status || "").toLowerCase() === "accepted") {
           setAcceptedSuccess(true);
         }
-      } else {
+      } else if (!cachedFound) {
         setError("Estimate or Quotation not found. The link may have expired or is invalid.");
       }
     } catch (err: any) {
       console.error("[EstimateDetailClient] Error:", err);
-      setError(err?.response?.data?.message || err?.message || "Failed to load estimate.");
+      if (!cachedFound) {
+        setError(err?.response?.data?.message || err?.message || "Failed to load estimate.");
+      }
     } finally {
       setLoading(false);
     }
   }, [getToken]);
 
   useEffect(() => {
+    const authToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!authToken) {
+      const activeToken = getToken();
+      const returnPath = activeToken && activeToken !== "[token]" && activeToken !== "[id]"
+        ? `/estimate/${activeToken}`
+        : "/estimate";
+      router.push(`/login?redirect=${encodeURIComponent(returnPath)}`);
+      return;
+    }
     fetchDetail();
-  }, [fetchDetail]);
+  }, [fetchDetail, getToken, router]);
 
   const handleCopyLink = () => {
     if (typeof window !== "undefined" && navigator.clipboard) {
-      const token = estimate?.link_token || getToken();
+      const token = estimate?.link_token || estimate?.id || getToken();
       const shareUrl = token
-        ? `${window.location.origin}/provider-estimates/details/${token}`
-        : window.location.href;
+        ? `${window.location.origin}/estimate/${token}`
+        : `${window.location.origin}/estimate`;
       navigator.clipboard.writeText(shareUrl);
       showToast("Estimate link copied to clipboard!", "success");
     }
@@ -167,7 +205,7 @@ function EstimateDetailInner() {
           </div>
           <div className="pt-2 flex flex-col gap-2.5">
             <Link
-              href="/estimates"
+              href="/estimate"
               className="w-full py-3 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-lg shadow-[#d09a50]/20"
             >
               Go to Provider Estimates
@@ -205,8 +243,8 @@ function EstimateDetailInner() {
 
   const estimateRef =
     estimate.readable_id ? `EST-${estimate.readable_id}` :
-    estimate.estimate_number ? estimate.estimate_number :
-    `EST-${(estimate.id || "").slice(0, 8).toUpperCase()}`;
+      estimate.estimate_number ? estimate.estimate_number :
+        `EST-${(estimate.id || "").slice(0, 8).toUpperCase()}`;
 
   return (
     <div className="min-h-screen bg-[#090706] text-white py-8 sm:py-12 font-sans selection:bg-[#f2cb87] selection:text-black">
@@ -214,7 +252,7 @@ function EstimateDetailInner() {
         {/* Navigation & Action Bar */}
         <div className="flex items-center justify-between gap-4">
           <Link
-            href="/estimates"
+            href="/estimate"
             className="flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-[#f2cb87] transition group"
           >
             <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
@@ -273,11 +311,10 @@ function EstimateDetailInner() {
                   {estimateRef}
                 </span>
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                    isAccepted
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${isAccepted
                       ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                       : "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                  }`}
+                    }`}
                 >
                   {isAccepted ? "ACCEPTED" : (estimate.status || "PENDING").toUpperCase()}
                 </span>
@@ -560,7 +597,7 @@ function EstimateDetailInner() {
                 </p>
                 <div className="pt-2">
                   <Link
-                    href="/estimates"
+                    href="/estimate"
                     className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-xs font-black text-zinc-950 transition hover:brightness-110"
                   >
                     <span>View in Provider Estimates</span>
@@ -581,11 +618,10 @@ function EstimateDetailInner() {
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("cash_after_service")}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        paymentMethod === "cash_after_service"
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${paymentMethod === "cash_after_service"
                           ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
                           : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       <Banknote size={14} />
                       <span>Pay After Service</span>
@@ -594,11 +630,10 @@ function EstimateDetailInner() {
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("stripe")}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        paymentMethod === "stripe"
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${paymentMethod === "stripe"
                           ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
                           : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       <CreditCard size={14} />
                       <span>Pay by Card / Stripe</span>

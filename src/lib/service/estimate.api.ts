@@ -145,28 +145,95 @@ export async function getCustomerEstimates(limit = 50, offset = 1): Promise<Esti
  */
 export async function getEstimateDetails(tokenOrId: string): Promise<EstimateItem | null> {
   if (!tokenOrId) return null;
-  const cleanToken = encodeURIComponent(tokenOrId.trim());
+  const raw = tokenOrId.trim();
+  const cleanToken = encodeURIComponent(raw);
 
-  try {
-    const response = await apiClient.get<any>(`/customer/estimate/${cleanToken}`);
-    const body = response.data;
-    if (body?.content && typeof body.content === "object" && !Array.isArray(body.content)) {
-      return body.content;
-    }
-    if (body?.data && typeof body.data === "object" && !Array.isArray(body.data)) {
-      return body.data;
-    }
-    if (body && typeof body === "object" && !body.response_code) {
-      return body;
-    }
-    return body?.content || body?.data || null;
-  } catch (err: any) {
-    if (err?.response?.status === 404) {
-      return null;
-    }
-    console.warn(`[estimate.api] Failed to fetch estimate details for ${tokenOrId}:`, err?.message);
-    throw err;
+  // 0. Instant Cache Check (sessionStorage)
+  if (typeof window !== "undefined") {
+    try {
+      const selectedStr = sessionStorage.getItem("mmc_selected_estimate");
+      if (selectedStr) {
+        const item: EstimateItem = JSON.parse(selectedStr);
+        const link = String(item.link_token || "").toLowerCase();
+        const id = String(item.id || "").toLowerCase();
+        const readId = String(item.readable_id || "").toLowerCase();
+        const target = raw.toLowerCase();
+        if (link === target || id === target || readId === target || target.includes(link) || link.includes(target)) {
+          return item;
+        }
+      }
+
+      const listStr = sessionStorage.getItem("mmc_customer_estimates");
+      if (listStr) {
+        const list: EstimateItem[] = JSON.parse(listStr);
+        if (Array.isArray(list)) {
+          const matched = list.find((item) => {
+            const link = String(item.link_token || "").toLowerCase();
+            const id = String(item.id || "").toLowerCase();
+            const readId = String(item.readable_id || "").toLowerCase();
+            const target = raw.toLowerCase();
+            return link === target || id === target || readId === target || target.includes(link) || link.includes(target);
+          });
+          if (matched) return matched;
+        }
+      }
+    } catch {}
   }
+
+  // 1. Try direct estimate detail endpoint with a 5s timeout
+  const probeEndpoints = [
+    `/customer/estimate/${cleanToken}`,
+    `/customer/estimate?token=${cleanToken}`,
+    `/customer/estimate?link_token=${cleanToken}`,
+    `/customer/estimate/details/${cleanToken}`,
+    `/customer/estimate/details?token=${cleanToken}`,
+    `/customer/estimate/details?link_token=${cleanToken}`,
+    `/customer/estimate/show/${cleanToken}`,
+    `/customer/estimate/view/${cleanToken}`,
+    `/estimate/${cleanToken}`,
+    `/estimate/details/${cleanToken}`,
+  ];
+
+  for (const url of probeEndpoints) {
+    try {
+      const response = await apiClient.get<any>(url, { timeout: 4000 });
+      const body = response.data;
+      const result =
+        body?.content && typeof body.content === "object" && !Array.isArray(body.content)
+          ? body.content
+          : body?.data && typeof body.data === "object" && !Array.isArray(body.data)
+          ? body.data
+          : body && typeof body === "object" && !body.response_code
+          ? body
+          : body?.content || body?.data || null;
+
+      if (result && (result.id || result.readable_id || result.link_token || result.service_description || result.price)) {
+        return result;
+      }
+    } catch {
+      // Continue to next probe
+    }
+  }
+
+  // 2. Fallback: Search inside live customer's estimates list
+  try {
+    const list = await getCustomerEstimates(100, 1);
+    const matched = list.find((item) => {
+      const link = String(item.link_token || "").toLowerCase();
+      const id = String(item.id || "").toLowerCase();
+      const readId = String(item.readable_id || "").toLowerCase();
+      const target = raw.toLowerCase();
+      return link === target || id === target || readId === target || target.includes(link) || link.includes(target);
+    });
+
+    if (matched) {
+      return matched;
+    }
+  } catch (err: any) {
+    console.warn("[estimate.api] List search fallback failed:", err?.message);
+  }
+
+  return null;
 }
 
 /**
