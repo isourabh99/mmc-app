@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Receipt,
   RefreshCw,
@@ -39,6 +40,7 @@ import {
 import { useToast } from "@/components/ToastProvider";
 
 export const EstimatesTab: React.FC = () => {
+  const router = useRouter();
   const { showToast } = useToast();
   const [estimates, setEstimates] = useState<EstimateItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,11 @@ export const EstimatesTab: React.FC = () => {
       setLoading(true);
       const data = await getCustomerEstimates(50, 1);
       setEstimates(data || []);
+      if (data && typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("mmc_customer_estimates", JSON.stringify(data));
+        } catch {}
+      }
     } catch (err) {
       console.warn("Could not load customer estimates:", err);
     } finally {
@@ -76,25 +83,15 @@ export const EstimatesTab: React.FC = () => {
     fetchEstimates();
   };
 
-  const handleOpenDetail = async (item: EstimateItem) => {
-    // Set immediate data so UI responds instantly
-    setSelectedEstimate(item);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-
-    // Fetch full detail with all fields, images, notes
+  const handleOpenDetail = (item: EstimateItem) => {
     const token = item.link_token || item.id || String(item.readable_id);
-    if (token) {
+    if (typeof window !== "undefined") {
       try {
-        setLoadingDetail(true);
-        const detailed = await getEstimateDetails(token);
-        if (detailed) {
-          setSelectedEstimate(detailed);
-        }
-      } catch (err) {
-        console.warn("Could not fetch detailed estimate, using list data:", err);
-      } finally {
-        setLoadingDetail(false);
-      }
+        sessionStorage.setItem("mmc_selected_estimate", JSON.stringify(item));
+      } catch {}
+    }
+    if (token) {
+      router.push(`/estimate/${token}`);
     }
   };
 
@@ -102,7 +99,7 @@ export const EstimatesTab: React.FC = () => {
     if (e) e.stopPropagation();
     const token = item.link_token || item.id || String(item.readable_id);
     const origin = typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk";
-    const shareUrl = `${origin}/provider-estimates/details/${token}`;
+    const shareUrl = `${origin}/estimate/${token}`;
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareUrl);
@@ -299,7 +296,7 @@ export const EstimatesTab: React.FC = () => {
                 </button>
 
                 <Link
-                  href={`/provider-estimates/details/${selectedEstimate.link_token || selectedEstimate.id}`}
+                  href={`/estimate/${selectedEstimate.link_token || selectedEstimate.id}`}
                   target="_blank"
                   className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 transition"
                   title="Open full public page"
