@@ -94,7 +94,7 @@ export interface TyreBookingResponse {
 export const TYRE_PROVIDERS: TyreProvider[] = [
   {
     id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-    company_name: "MMC Rapid Mobile Tyres London",
+    company_name: "Motor Market Club Rapid Mobile Tyres London",
     company_phone: "+44 20 7946 0912",
     company_address: "Silbury House, Sydenham Hill, London, SE26 6TU",
     rating: 4.9,

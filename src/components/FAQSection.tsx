@@ -4,13 +4,13 @@ import { useState } from "react";
 const faqs = [
   {
     id: "faq-1",
-    q: "How does MMC match me with service providers?",
+    q: "How does Motor Market Club match me with service providers?",
     a: "Our intelligent matching algorithm analyses your service requirements, vehicle type, location, and budget to instantly surface the most relevant certified providers near you. You'll receive multiple competitive quotes to compare.",
   },
   {
     id: "faq-2",
-    q: "Are all providers on MMC vetted and insured?",
-    a: "Yes. Every provider undergoes a rigorous verification process including identity checks, trade certification verification, insurance confirmation, and a quality audit before being approved to list on MMC.",
+    q: "Are all providers on Motor Market Club vetted and insured?",
+    a: "Yes. Every provider undergoes a rigorous verification process including identity checks, trade certification verification, insurance confirmation, and a quality audit before being approved to list on Motor Market Club.",
   },
   {
     id: "faq-3",
@@ -19,27 +19,40 @@ const faqs = [
   },
   {
     id: "faq-4",
-    q: "What payment methods does MMC accept?",
+    q: "What payment methods does Motor Market Club accept?",
     a: "We accept all major credit and debit cards, Apple Pay, Google Pay, and bank transfers. All payments are processed securely through our encrypted payment gateway.",
   },
   {
     id: "faq-5",
-    q: "Can I become a service provider on MMC?",
-    a: "Absolutely. If you're an automotive business or independent trader, you can apply to join the MMC provider network. Complete our verification process and start receiving job requests from thousands of customers.",
+    q: "Can I become a service provider on Motor Market Club?",
+    a: "Absolutely. If you're an automotive business or independent trader, you can apply to join the Motor Market Club provider network. Complete our verification process and start receiving job requests from thousands of customers.",
   },
 ];
 
-export default function FAQSection() {
+interface FAQSectionProps {
+  className?: string;
+  isStandalone?: boolean;
+}
+
+export default function FAQSection({
+  className = "",
+  isStandalone = false,
+}: FAQSectionProps) {
   const [open, setOpen] = useState<string | null>("faq-1");
 
   return (
-    <section id="faqs" className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-black relative overflow-hidden">
+    <section
+      id="faqs"
+      className={`${
+        isStandalone ? "pt-6 pb-16 sm:pt-10 sm:pb-20" : "py-16 sm:py-24"
+      } bg-black relative overflow-hidden ${className}`}
+    >
       <div
         className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full blur-[120px] opacity-8 pointer-events-none"
         style={{ background: "radial-gradient(circle, #FAD293, #CEA46B)" }}
       />
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
         <div className="text-center mb-14">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
@@ -70,7 +83,7 @@ export default function FAQSection() {
             </span>
           </h2>
           <p className="text-white/50">
-            Everything you need to know about MMC. Can&apos;t find your answer?{" "}
+            Everything you need to know about Motor Market Club. Can&apos;t find your answer?{" "}
             <a href="#contact" className="text-[#FAD293] hover:underline">
               Contact us
             </a>

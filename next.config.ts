@@ -1,7 +1,8 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: "standalone",
-  trailingSlash: false,
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  ...(process.env.NODE_ENV === "production" ? { output: "export" } : {}),
+  trailingSlash: true,
 
   images: {
     unoptimized: true,
@@ -30,4 +31,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

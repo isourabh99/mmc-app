@@ -42,10 +42,10 @@ export const TyreAssistanceHeader: React.FC<TyreAssistanceHeaderProps> = ({
                 WebkitTextFillColor: "transparent",
               }}
             >
-              MMC
+              Motor Market Club
             </span>
             <span className="text-[7px] tracking-[0.25em] text-[#C29352]/80 uppercase font-semibold mt-0.5">
-              MOTOR MARKET CONNECT
+              PREMIUM AUTOMOTIVE
             </span>
           </div>
         ) : (

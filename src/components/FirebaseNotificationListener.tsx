@@ -26,7 +26,7 @@ export default function FirebaseNotificationListener() {
 
     onForegroundMessage((payload) => {
       const title =
-        payload?.notification?.title || payload?.data?.title || "MMC Notification";
+        payload?.notification?.title || payload?.data?.title || "Motor Market Club Notification";
       const body =
         payload?.notification?.body || payload?.data?.body || "";
       const targetUrl =

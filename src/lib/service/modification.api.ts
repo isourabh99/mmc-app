@@ -471,23 +471,42 @@ export const getOrCreateCustomerAddressId = async (
   latitude?: string | number,
   longitude?: string | number
 ): Promise<string> => {
-  try {
-    const lat =
-      latitude ||
-      (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) ||
-      "51.5074";
-    const lon =
-      longitude ||
-      (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) ||
-      "-0.1278";
+  const lat =
+    latitude ||
+    (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) ||
+    "51.5074";
+  const lon =
+    longitude ||
+    (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) ||
+    "-0.1278";
 
+  // 1. Try to fetch existing customer addresses first
+  try {
+    const listRes = await apiClient.get<any>("/customer/address", {
+      params: { limit: 10, offset: 1 },
+    });
+    const content = listRes.data?.content;
+    const existing = Array.isArray(content)
+      ? content
+      : Array.isArray(content?.data)
+        ? content.data
+        : [];
+    if (existing.length > 0 && existing[0]?.id) {
+      return String(existing[0].id);
+    }
+  } catch (e) {
+    // proceed to create
+  }
+
+  // 2. Create customer address
+  try {
     const response = await apiClient.post<any>("/customer/address", {
       lat: String(lat),
       lon: String(lon),
       address: customAddress || "London, UK",
       address_type: "service",
       contact_person_name: "Customer",
-      contact_person_number: "07123456789",
+      contact_person_number: "+447700900000",
       address_label: "Home",
       house: null,
       floor: null,
@@ -526,22 +545,43 @@ export const sendModificationQuotationRequest = async (params: {
   const zoneId = DEFAULT_ZONE_ID;
   const formData = new FormData();
 
-  formData.append("service_id", params.service_id);
-  formData.append("category_id", params.category_id);
-  formData.append("service_address_id", params.service_address_id);
-  formData.append("car_registration_number", params.car_registration_number);
-  formData.append("car_model", params.car_model);
-  formData.append("damage_description", params.damage_description);
-  formData.append("service_description", params.service_description);
-  formData.append("booking_schedule", params.booking_schedule);
-  formData.append("zone_id", zoneId);
+  const primaryServiceId =
+    params.service_id ||
+    (params.service_ids && params.service_ids.length > 0 ? params.service_ids[0] : "");
+  if (primaryServiceId) {
+    formData.append("service_id", primaryServiceId);
+  }
 
-  params.service_ids.forEach((id) => {
-    formData.append("service_ids[]", id);
-  });
+  if (params.service_ids && params.service_ids.length > 0) {
+    params.service_ids.forEach((id) => {
+      formData.append("service_ids[]", id);
+    });
+  }
+
+  formData.append("category_id", params.category_id);
+
   params.provider_ids.forEach((id) => {
     formData.append("provider_ids[]", id);
   });
+
+  if (params.service_description) {
+    formData.append("service_description", params.service_description);
+  }
+  if (params.booking_schedule) {
+    formData.append("booking_schedule", params.booking_schedule);
+  }
+  if (params.service_address_id) {
+    formData.append("service_address_id", params.service_address_id);
+  }
+  if (params.car_model) {
+    formData.append("car_model", params.car_model);
+  }
+  if (params.car_registration_number) {
+    formData.append("car_registration_number", params.car_registration_number);
+  }
+  if (params.damage_description) {
+    formData.append("damage_description", params.damage_description);
+  }
 
   // Handle single or multiple image uploads
   if (params.car_images && params.car_images.length > 0) {
@@ -585,25 +625,46 @@ export const getCustomerQuotationPosts = async (
 
 export const getMyModificationQuotationRequests = getCustomerQuotationPosts;
 
+const modBidsCache = new Map<string, { data: PostBidItem[]; timestamp: number }>();
+
 export const getPostBidsList = async (
   postId: string,
   limit: number = 100,
   offset: number = 0
 ): Promise<PostBidItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
-  const response = await apiClient.get(`/customer/post/bid`, {
-    headers: {
-      zoneid: zoneId,
-    },
-    params: {
-      post_id: postId,
-      limit,
-      offset,
-    },
-  });
+  if (!postId) return [];
 
-  const raw = response.data?.content?.data || response.data?.content || [];
-  return Array.isArray(raw) ? raw : [];
+  const cacheKey = `${postId}_${limit}_${offset}`;
+  const cached = modBidsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 12000) {
+    return cached.data;
+  }
+
+  try {
+    const zoneId = DEFAULT_ZONE_ID;
+    const response = await apiClient.get(`/customer/post/bid`, {
+      headers: {
+        zoneid: zoneId,
+      },
+      params: {
+        post_id: postId,
+        limit,
+        offset,
+      },
+    });
+
+    const raw = response.data?.content?.data || response.data?.content || [];
+    const result = Array.isArray(raw) ? raw : [];
+    modBidsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      console.warn(`[getPostBidsList] Rate limited for post ${postId}, using cached result.`);
+    } else {
+      console.warn("Could not fetch modification bids:", error?.message || error);
+    }
+    return cached?.data || [];
+  }
 };
 
 export const getModificationPostBids = getPostBidsList;
@@ -960,7 +1021,7 @@ async function resolveModificationPaymentUrl(
         if (pId) {
           redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
             String(pId)
-          )}&is_partial=${params.is_partial ?? 0}`;
+          )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(p.callback)}`;
           break;
         }
       } catch (switchErr: any) {
@@ -975,10 +1036,15 @@ async function resolveModificationPaymentUrl(
   }
 
   // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
-  if (!redirectLink && effectiveId) {
+  if (!redirectLink && bookingUuid) {
+    const successCb =
+      params.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success");
     redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-      String(effectiveId)
-    )}&is_partial=${params.is_partial ?? 0}`;
+      String(bookingUuid)
+    )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(successCb)}`;
   }
 
   if (redirectLink) {

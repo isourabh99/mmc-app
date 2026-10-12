@@ -88,7 +88,7 @@ export const CarDetailsView: React.FC<CarDetailsViewProps> = ({
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       {/* Main Content Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pt-6 sm:pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: Gallery, Specs, Terms, Description (8 cols) */}

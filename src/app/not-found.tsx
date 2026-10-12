@@ -1,6 +1,55 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import EstimateDetailClient from "./estimate/[token]/EstimateDetailClient";
+import ProviderEstimateDetailClient from "./provider-estimates/details/[token]/ProviderEstimateDetailClient";
 
 export default function NotFound() {
+  const [dynamicType, setDynamicType] = useState<
+    "loading" | "estimate" | "provider-estimate" | "not-found"
+  >("loading");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname;
+      if (path.startsWith("/estimate/") && path !== "/estimate/") {
+        setDynamicType("estimate");
+        return;
+      } else if (
+        path.startsWith("/provider-estimates/details/") &&
+        path !== "/provider-estimates/details/"
+      ) {
+        setDynamicType("provider-estimate");
+        return;
+      } else {
+        setDynamicType("not-found");
+      }
+    } else {
+      setDynamicType("not-found");
+    }
+  }, []);
+
+  if (dynamicType === "estimate") {
+    return <EstimateDetailClient />;
+  }
+
+  if (dynamicType === "provider-estimate") {
+    return <ProviderEstimateDetailClient />;
+  }
+
+  if (dynamicType === "loading") {
+    return (
+      <div className="min-h-screen bg-[#090706] flex flex-col items-center justify-center text-white">
+        <div className="w-14 h-14 rounded-2xl bg-[#E8BC6B]/10 border border-[#E8BC6B]/20 flex items-center justify-center mb-4">
+          <div className="w-7 h-7 border-2 border-[#E8BC6B] border-t-transparent rounded-full animate-spin" />
+        </div>
+        <p className="text-xs uppercase tracking-widest text-[#E8BC6B] font-semibold">
+          Loading Motor Market Club...
+        </p>
+      </div>
+    );
+  }
   return (
     <main className="relative min-h-[calc(100vh-80px)] overflow-hidden bg-black text-white">
       

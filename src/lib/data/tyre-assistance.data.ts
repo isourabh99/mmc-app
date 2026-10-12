@@ -94,6 +94,12 @@ export interface TyreAssistanceBooking {
   tyreSize: string;
   tyreQuantity: number;
   
+  // Tyre & Service Specification Identifiers
+  selectedTyreId?: string;
+  selectedSlotId?: string;
+  variantKey?: string;
+  serviceId?: string;
+
   // Notes & Compliance
   notes?: string;
   acceptedPrivacy: boolean;

@@ -1,4 +1,5 @@
-import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import axios from "axios";
+import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface EmergencyServiceItem {
   id: string;
@@ -27,119 +28,85 @@ export const EMERGENCY_CATEGORY_ID = "860791e7-ed6d-46ca-992c-1348dd4c42ad";
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 /**
- * Emergency services state - ONLY live data from backend API.
+ * Dynamically resolves the Emergency Category ID from live /customer/category API
+ * GET /customer/category?limit=10&offset=1
  */
-export const FALLBACK_EMERGENCY_SERVICES: EmergencyServiceItem[] = [];
+export const getEmergencyCategoryId = async (): Promise<string> => {
+  try {
+    const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      zoneid: DEFAULT_ZONE_ID,
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await axios.get<any>(`${apiBase}/customer/category?limit=20&offset=1`, {
+      headers,
+    });
+
+    const categories =
+      res.data?.content?.data ||
+      (Array.isArray(res.data?.content) ? res.data?.content : null) ||
+      (Array.isArray(res.data?.data) ? res.data?.data : []);
+
+    if (Array.isArray(categories)) {
+      const found = categories.find((c: any) => {
+        const name = String(c?.name || "").toLowerCase();
+        return (
+          name.includes("emergency") ||
+          name.includes("roadside") ||
+          c?.id === EMERGENCY_CATEGORY_ID
+        );
+      });
+      if (found?.id) {
+        return String(found.id);
+      }
+    }
+  } catch (err) {
+    console.warn("Dynamic emergency category lookup error, fallback to default:", err);
+  }
+
+  return EMERGENCY_CATEGORY_ID;
+};
 
 /**
- * Fetch dynamic emergency services from backend API:
- * GET /customer/service/category/860791e7-ed6d-46ca-992c-1348dd4c42ad?limit=100&offset=1
- * with header zoneid: a1614dbe-4732-11ee-9702-dee6e8d77be4
+ * Fetch dynamic emergency services strictly from backend API:
+ * GET /customer/service/category/${categoryId}?limit=10&offset=1
+ * Strictly using static zoneid: a1614dbe-4732-11ee-9702-dee6e8d77be4
  */
 export const getEmergencyServices = async (
   categoryId: string = EMERGENCY_CATEGORY_ID,
   limit: number = 100,
   offset: number = 1
 ): Promise<EmergencyServiceItem[]> => {
+  const targetCatId = categoryId || EMERGENCY_CATEGORY_ID;
+  const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
   try {
-    let zoneId = DEFAULT_ZONE_ID;
-    if (typeof window !== "undefined") {
-      const stored =
-        localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId");
-      if (stored && stored !== "undefined" && stored !== "null" && stored.trim().length > 5) {
-        zoneId = stored.trim();
-      }
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      zoneid: DEFAULT_ZONE_ID,
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await axios.get<EmergencyCategoryResponse>(
+      `${apiBase}/customer/service/category/${targetCatId}?limit=${limit}&offset=${offset}`,
+      { headers }
+    );
+
+    const items =
+      response.data?.content?.data ||
+      (Array.isArray(response.data?.content) ? response.data?.content : null) ||
+      (Array.isArray(response.data?.data) ? response.data?.data : null);
+
+    if (Array.isArray(items) && items.length > 0) {
+      return items;
     }
-
-    // 1. Direct Category Services Request
-    try {
-      const response = await apiClient.get<EmergencyCategoryResponse>(
-        `/customer/service/category/${categoryId}`,
-        {
-          params: { limit, offset },
-          headers: {
-            zoneid: zoneId,
-            ZoneId: zoneId,
-          },
-        }
-      );
-
-      const items =
-        response.data?.content?.data ||
-        (Array.isArray(response.data?.content) ? response.data?.content : null) ||
-        (Array.isArray(response.data?.data) ? response.data?.data : null);
-
-      if (Array.isArray(items) && items.length > 0) {
-        return items;
-      }
-    } catch (e) {
-      console.warn("Category direct fetch attempt 1 error:", e);
-    }
-
-    // 2. Try with DEFAULT_ZONE_ID explicitly if custom zoneId failed
-    if (zoneId !== DEFAULT_ZONE_ID) {
-      try {
-        const response = await apiClient.get<EmergencyCategoryResponse>(
-          `/customer/service/category/${categoryId}`,
-          {
-            params: { limit, offset },
-            headers: {
-              zoneid: DEFAULT_ZONE_ID,
-              ZoneId: DEFAULT_ZONE_ID,
-            },
-          }
-        );
-
-        const items =
-          response.data?.content?.data ||
-          (Array.isArray(response.data?.content) ? response.data?.content : null);
-
-        if (Array.isArray(items) && items.length > 0) {
-          return items;
-        }
-      } catch (e) {
-        console.warn("Category default zone fetch attempt error:", e);
-      }
-    }
-
-    // 3. Dynamic Category Discovery fallback
-    try {
-      const catRes = await apiClient.get<{ content?: { data?: { id: string; name: string }[] } }>(
-        `/customer/category`,
-        {
-          params: { limit: 50, offset: 1 },
-          headers: { zoneid: DEFAULT_ZONE_ID },
-        }
-      );
-
-      const categories = catRes.data?.content?.data || [];
-      const emCat = categories.find((c) => {
-        const n = (c.name || "").toLowerCase();
-        return n.includes("emergency") || n.includes("roadside") || n.includes("breakdown");
-      });
-
-      if (emCat?.id && emCat.id !== categoryId) {
-        const fallbackRes = await apiClient.get<EmergencyCategoryResponse>(
-          `/customer/service/category/${emCat.id}`,
-          {
-            params: { limit, offset },
-            headers: { zoneid: DEFAULT_ZONE_ID },
-          }
-        );
-        const items = fallbackRes.data?.content?.data;
-        if (Array.isArray(items) && items.length > 0) {
-          return items;
-        }
-      }
-    } catch (e) {
-      console.warn("Dynamic emergency category discovery error:", e);
-    }
-
     return [];
-  } catch (error) {
-    console.warn("Error in getEmergencyServices:", error);
+  } catch (error: any) {
+    console.warn("Emergency services fetch error:", error?.message);
     return [];
   }
 };
@@ -293,6 +260,15 @@ export interface EmergencyProviderItem {
   service_types?: string[];
   estimated_time?: string | null;
   completed_service_images?: string[];
+  distance?: number;
+  distance_in_km?: number;
+  distance_in_miles?: number;
+  distance_formatted?: string;
+  distance_miles?: string | number;
+  price?: number;
+  min_price?: number;
+  rating?: number;
+  profile_image?: string;
   owner?: {
     id: string;
     first_name?: string | null;
@@ -306,27 +282,25 @@ export interface EmergencyProviderItem {
   reviews?: any[];
 }
 
+
+
 export interface SearchEmergencyProvidersParams {
   serviceIds: string[];
+  categoryId?: string;
   latitude?: number | string;
   longitude?: number | string;
   zoneId?: string;
 }
 
 /**
- * Search Emergency Providers by Service IDs:
+ * Search Emergency Providers dynamically by Category ID & Service IDs:
  * POST /customer/provider/search-by-service
+ * Strictly dynamic live backend API data.
  */
 export const searchEmergencyProviders = async (
   params: SearchEmergencyProvidersParams
 ): Promise<EmergencyProviderItem[]> => {
-  const zoneId =
-    params.zoneId ||
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId"))) ||
-    DEFAULT_ZONE_ID;
+  const staticZoneId = DEFAULT_ZONE_ID; // Strictly "a1614dbe-4732-11ee-9702-dee6e8d77be4"
 
   const lat =
     params.latitude ||
@@ -337,86 +311,51 @@ export const searchEmergencyProviders = async (
     (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) ||
     "75.9035";
 
+  const categoryId = params.categoryId || EMERGENCY_CATEGORY_ID;
   const effectiveIds =
-    params.serviceIds && params.serviceIds.length > 0
-      ? params.serviceIds
-      : ["0095e5b8-0131-4158-8138-69eacde3a38b"];
+    params.serviceIds && params.serviceIds.length > 0 ? params.serviceIds : [];
+
+  if (effectiveIds.length === 0) {
+    return [];
+  }
+
+  const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   const formData = new FormData();
+  formData.append("category_id", categoryId);
   effectiveIds.forEach((id) => {
     formData.append("service_ids[]", id);
   });
   formData.append("latitude", String(lat));
   formData.append("longitude", String(lon));
 
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    zoneid: staticZoneId,
+    ZoneId: staticZoneId,
+    "zone-id": staticZoneId,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   try {
-    const response = await apiClient.post<{
-      response_code: string;
-      message: string;
-      content: EmergencyProviderItem[];
-    }>("/customer/provider/search-by-service", formData, {
-      headers: {
-        zoneid: zoneId,
-        ZoneId: zoneId,
-        Accept: "application/json",
-      },
-    });
+    const response = await axios.post<any>(
+      `${apiBase}/customer/provider/search-by-service`,
+      formData,
+      { headers }
+    );
 
-    if (Array.isArray(response.data?.content) && response.data.content.length > 0) {
-      return response.data.content;
+    const resData = response.data;
+    const content = resData?.content ?? resData?.data;
+    if (Array.isArray(content)) {
+      return content;
     }
-
-    // If specific search had no matches, fallback to broader emergency service query
-    if (effectiveIds.length === 1 && effectiveIds[0] !== "0095e5b8-0131-4158-8138-69eacde3a38b") {
-      const fallbackForm = new FormData();
-      fallbackForm.append("service_ids[]", "0095e5b8-0131-4158-8138-69eacde3a38b");
-      fallbackForm.append("latitude", String(lat));
-      fallbackForm.append("longitude", String(lon));
-
-      const res2 = await apiClient.post<{
-        response_code: string;
-        message: string;
-        content: EmergencyProviderItem[];
-      }>("/customer/provider/search-by-service", fallbackForm, {
-        headers: {
-          zoneid: zoneId,
-          ZoneId: zoneId,
-          Accept: "application/json",
-        },
-      });
-
-      if (Array.isArray(res2.data?.content) && res2.data.content.length > 0) {
-        return res2.data.content;
-      }
+    if (content && typeof content === "object" && Array.isArray(content.data)) {
+      return content.data;
     }
-
-    return Array.isArray(response.data?.content) ? response.data.content : [];
-  } catch (error) {
-    console.error("Failed to search emergency providers from API:", error);
-    try {
-      const fallbackForm = new FormData();
-      fallbackForm.append("service_ids[]", "0095e5b8-0131-4158-8138-69eacde3a38b");
-      fallbackForm.append("latitude", String(lat));
-      fallbackForm.append("longitude", String(lon));
-
-      const res2 = await apiClient.post<{
-        response_code: string;
-        message: string;
-        content: EmergencyProviderItem[];
-      }>("/customer/provider/search-by-service", fallbackForm, {
-        headers: {
-          zoneid: zoneId,
-          ZoneId: zoneId,
-          Accept: "application/json",
-        },
-      });
-
-      if (Array.isArray(res2.data?.content)) {
-        return res2.data.content;
-      }
-    } catch (fallbackErr) {
-      console.error("Fallback provider search error:", fallbackErr);
-    }
+    return [];
+  } catch (error: any) {
+    console.warn("Emergency provider search error:", error?.message);
     return [];
   }
 };
@@ -438,25 +377,13 @@ export interface AddEmergencyToCartParams {
 export const addEmergencyToCart = async (
   params: AddEmergencyToCartParams
 ): Promise<any> => {
-  const zoneId =
-    params.zone_id ||
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId"))) ||
-    DEFAULT_ZONE_ID;
-
-  const guestId =
-    params.guest_id ||
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("guest_id") ||
-        localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid"))) ||
-    zoneId;
+  const staticZoneId = DEFAULT_ZONE_ID; // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+  const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   try {
     const payload = {
-      guest_id: guestId,
+      guest_id: staticZoneId,
       provider_id: params.provider_id,
       service_id: params.service_id,
       category_id: params.category_id || EMERGENCY_CATEGORY_ID,
@@ -464,19 +391,47 @@ export const addEmergencyToCart = async (
       is_terms_accepted: params.is_terms_accepted ?? 1,
     };
 
-    const res = await apiClient.post("/customer/cart/add", payload, {
-      headers: {
-        zoneid: zoneId,
-        ZoneId: zoneId,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+    const headers: Record<string, string> = {
+      zoneid: staticZoneId,
+      ZoneId: staticZoneId,
+      "zone-id": staticZoneId,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await axios.post(`${apiBase}/customer/cart/add`, payload, {
+      headers,
     });
 
     return res.data;
-  } catch (error) {
-    console.warn("Emergency Cart Add Error:", error);
-    throw error;
+  } catch (error: any) {
+    console.warn("Emergency Cart Add Error:", error?.response?.data || error?.message);
+    return null;
+  }
+};
+
+/**
+ * GET /customer/cart/list?limit=10&offset=1
+ * Strictly using zoneid: a1614dbe-4732-11ee-9702-dee6e8d77be4
+ */
+export const getEmergencyCartList = async (): Promise<any> => {
+  const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    zoneid: DEFAULT_ZONE_ID,
+    ZoneId: DEFAULT_ZONE_ID,
+    "zone-id": DEFAULT_ZONE_ID,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const res = await axios.get(`${apiBase}/customer/cart/list?limit=10&offset=1`, { headers });
+    return res.data;
+  } catch (err: any) {
+    console.warn("Emergency Cart List Note:", err?.message);
+    return null;
   }
 };
 
@@ -490,6 +445,7 @@ export interface SendEmergencyBookingRequestParams {
   selected_slot_id?: string;
   damage_description?: string;
   car_registration_number: string;
+  car_model?: string;
   postcode?: string;
   latitude?: number | string;
   longitude?: number | string;
@@ -511,164 +467,51 @@ export interface SendEmergencyBookingRequestParams {
 export const sendEmergencyBookingRequest = async (
   params: SendEmergencyBookingRequestParams
 ): Promise<any> => {
-  const zoneId =
-    params.zone_id ||
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId"))) ||
-    DEFAULT_ZONE_ID;
-
-  const guestId =
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("guest_id") ||
-        localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid"))) ||
-    zoneId;
+  const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const staticZoneId = DEFAULT_ZONE_ID; // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
 
   const nowFormatted = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-  // 1. Demandium/Laravel validator requires: 'service_location' => 'required|in:customer'
-  const apiLocation = "customer";
+  const jsonPayload: Record<string, any> = {
+    payment_method: params.payment_method || "stripe",
+    is_partial: params.is_partial !== undefined ? Number(params.is_partial) : 0,
+    zone_id: staticZoneId,
+    service_schedule: params.service_schedule || nowFormatted,
+    service_address_id: params.service_address_id || "9",
+    service_location: "customer",
+    booking_type: "emergency",
+    car_registration_number: (params.car_registration_number || "STANDARD").trim().toUpperCase(),
+    car_model: (params.car_model || "Vehicle").trim(),
+    notes:
+      params.damage_description ||
+      "Emergency roadside assistance requested with online payment.",
+    callback:
+      params.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success"),
+  };
 
-  // 2. Postcode must not be greater than 20 characters
-  let cleanPostcode = (params.postcode || "").trim();
-  if (cleanPostcode.length > 15) {
-    // If user entered a full address as postcode, extract short postal code or truncate
-    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
-    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
-  }
-  if (!cleanPostcode) cleanPostcode = "12345";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    zoneid: staticZoneId,
+    ZoneId: staticZoneId,
+    "zone-id": staticZoneId,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  const fullServiceAddress = params.service_address || params.postcode || "Customer Location";
-
-  let effectiveDamageDesc = params.damage_description || "Emergency assistance roadside dispatch";
-  if (params.service_location === "workshop" && !effectiveDamageDesc.includes("Workshop")) {
-    effectiveDamageDesc = `[Service Mode: Workshop Bay Drop-Off]\n${effectiveDamageDesc}`;
-  }
-
-  const hasImages = (params.car_images && params.car_images.length > 0) || (params.car_image instanceof File);
-
-  if (hasImages) {
-    const formData = new FormData();
-    formData.append("payment_method", params.payment_method || "cash_after_service");
-    formData.append("service_address_id", params.service_address_id || "6");
-    formData.append("service_address", fullServiceAddress);
-    formData.append("service_schedule", params.service_schedule || nowFormatted);
-    formData.append("service_location", apiLocation);
-    formData.append("booking_type", params.booking_type || "emergency");
-    formData.append(
-      "selected_slot_id",
-      params.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf"
+  try {
+    const res = await axios.post(
+      `${apiBase}/customer/booking/request/send`,
+      jsonPayload,
+      { headers }
     );
-    formData.append("damage_description", effectiveDamageDesc);
-    formData.append(
-      "car_registration_number",
-      params.car_registration_number.trim().toUpperCase()
-    );
-    formData.append("postcode", cleanPostcode);
-    formData.append("latitude", String(params.latitude || "22.66215"));
-    formData.append("longitude", String(params.longitude || "75.9035"));
-    formData.append("zone_id", zoneId);
-    formData.append("guest_id", guestId);
-    if (params.car_images && params.car_images.length > 0) {
-      formData.append("car_image", params.car_images[0]);
-      params.car_images.forEach((img) => {
-        formData.append("attachments[]", img);
-        formData.append("car_images[]", img);
-        formData.append("images[]", img);
-        formData.append("attachment[]", img);
-        formData.append("car_image[]", img);
-      });
-    } else if (params.car_image instanceof File) {
-      formData.append("car_image", params.car_image);
-      formData.append("attachments[]", params.car_image);
-      formData.append("car_images[]", params.car_image);
-      formData.append("images[]", params.car_image);
-      formData.append("attachment[]", params.car_image);
-      formData.append("car_image[]", params.car_image);
-    }
-    if (params.is_partial !== undefined) {
-      formData.append("is_partial", String(params.is_partial));
-    }
-    if (params.amount !== undefined) {
-      formData.append("amount", String(params.amount));
-    }
-    if (params.payment_platform) {
-      formData.append("payment_platform", params.payment_platform);
-    }
-    if (params.callback) {
-      formData.append("callback", params.callback);
-    }
-    formData.append("is_terms_accepted", "1");
-    formData.append("is_provider_terms_accepted", "1");
-    formData.append("terms_and_conditions", "1");
-    formData.append("terms_accepted", "1");
-
-    if (params.answers && typeof params.answers === "object") {
-      Object.entries(params.answers).forEach(([key, val]) => {
-        formData.append(`answers[${key}]`, String(val));
-      });
-    }
-
-    try {
-      const res = await apiClient.post("/customer/booking/request/send", formData, {
-        headers: {
-          zoneid: zoneId,
-          ZoneId: zoneId,
-          Accept: "application/json",
-        },
-      });
-      return res.data;
-    } catch (error) {
-      console.error("Emergency Booking Request Error:", error);
-      throw error;
-    }
-  } else {
-    const jsonPayload: Record<string, any> = {
-      payment_method: params.payment_method || "cash_after_service",
-      service_address_id: params.service_address_id || "6",
-      service_address: fullServiceAddress,
-      service_schedule: params.service_schedule || nowFormatted,
-      service_location: apiLocation,
-      booking_type: params.booking_type || "emergency",
-      selected_slot_id:
-        params.selected_slot_id || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-      damage_description: effectiveDamageDesc,
-      car_registration_number: params.car_registration_number.trim().toUpperCase(),
-      postcode: cleanPostcode,
-      latitude: String(params.latitude || "22.66215"),
-      longitude: String(params.longitude || "75.9035"),
-      zone_id: zoneId,
-      guest_id: guestId,
-      ...(params.is_partial !== undefined ? { is_partial: Number(params.is_partial) } : {}),
-      ...(params.amount !== undefined ? { amount: Number(params.amount) } : {}),
-      ...(params.payment_platform ? { payment_platform: params.payment_platform } : {}),
-      ...(params.callback ? { callback: params.callback } : {}),
-      is_terms_accepted: 1,
-      is_provider_terms_accepted: 1,
-      terms_and_conditions: 1,
-      terms_accepted: 1,
-    };
-
-    if (params.answers && typeof params.answers === "object") {
-      jsonPayload.answers = params.answers;
-    }
-
-    try {
-      const res = await apiClient.post("/customer/booking/request/send", jsonPayload, {
-        headers: {
-          zoneid: zoneId,
-          ZoneId: zoneId,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      });
-      return res.data;
-    } catch (error) {
-      console.error("Emergency Booking Request Error:", error);
-      throw error;
-    }
+    return res.data;
+  } catch (error: any) {
+    console.error("Emergency Booking Request Error:", error?.response?.data || error?.message);
+    throw error;
   }
 };
 
@@ -699,7 +542,8 @@ export interface BookEmergencyProviderParams {
 /**
  * Complete Emergency Booking Workflow:
  * 1. POST /customer/cart/add (Internally first, for all selected services)
- * 2. POST /customer/booking/request/send (Immediately after cart add)
+ * 2. GET /customer/cart/list (Inspect cart)
+ * 3. POST /customer/booking/request/send (Send booking request)
  */
 export const bookEmergencyProvider = async (
   params: BookEmergencyProviderParams
@@ -713,13 +557,6 @@ export const bookEmergencyProvider = async (
   url?: string;
   amount?: number;
 }> => {
-  const zoneId =
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId"))) ||
-    DEFAULT_ZONE_ID;
-
   const nowSchedule =
     params.service_schedule ||
     new Date().toISOString().replace("T", " ").substring(0, 19);
@@ -744,212 +581,80 @@ export const bookEmergencyProvider = async (
         category_id: EMERGENCY_CATEGORY_ID,
         quantity: 1,
         is_terms_accepted: 1,
-        zone_id: zoneId,
+        zone_id: DEFAULT_ZONE_ID,
       });
     } catch (cartErr) {
       console.warn("Cart add step note for", svcId, cartErr);
     }
   }
 
+  // Cart List check
+  try {
+    await getEmergencyCartList();
+  } catch (err) {}
+
   // --------------------------------------------------------------------------
   // STEP 2: Send Booking Request SECOND (POST /customer/booking/request/send)
   // --------------------------------------------------------------------------
-  try {
-    const fullAddress =
-      params.service_address ||
-      params.postcode ||
-      "Customer Location, United Kingdom";
-
-    let cleanPostcode = (params.postcode || params.service_address || "").trim();
-    if (cleanPostcode.length > 15) {
-      const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
-      cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
-    }
-    if (!cleanPostcode) cleanPostcode = "12345";
-
-    const callbackUrl =
+  const bookingRes = await sendEmergencyBookingRequest({
+    payment_method: "stripe",
+    is_partial: params.is_partial !== undefined ? params.is_partial : 0,
+    zone_id: DEFAULT_ZONE_ID,
+    service_schedule: nowSchedule,
+    service_address_id: "9",
+    service_location: "customer",
+    booking_type: "emergency",
+    car_registration_number: params.car_registration_number,
+    car_model: params.car_model || "Vehicle",
+    damage_description:
+      params.situation_description ||
+      params.emergency_service_name ||
+      "Emergency roadside assistance requested with online payment.",
+    callback:
       params.callback ||
       (typeof window !== "undefined"
         ? `${window.location.origin}/booking-success`
-        : `${(process.env.NEXT_PUBLIC_API_URL).replace("/api/v1", "").replace(/\/+$/, "")}/booking-success`);
+        : "https://mmcclub.co.uk/booking-success"),
+  });
 
-    const bookingRes = await sendEmergencyBookingRequest({
-      payment_method: params.payment_method ,
-      service_address_id: "6",
-      service_address: fullAddress,
-      service_schedule: nowSchedule,
-      service_location: "customer",
-      booking_type: "emergency",
-      selected_slot_id: "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-      damage_description:
-        params.situation_description ||
-        params.emergency_service_name ||
-        "Emergency roadside dispatch",
-      car_registration_number: params.car_registration_number,
-      postcode: cleanPostcode,
-      latitude: params.latitude || "22.66215",
-      longitude: params.longitude || "75.9035",
-      zone_id: zoneId,
-      car_image: params.car_image,
-      car_images: params.car_images,
-      is_partial: params.is_partial,
-      amount: params.amount,
-      payment_platform: params.payment_method === "stripe" ? "app" : undefined,
-      callback: params.payment_method === "stripe" ? callbackUrl : undefined,
-    });
+  const rawContent = bookingRes?.content || bookingRes?.data || bookingRes;
+  const rawBookingId =
+    (Array.isArray(rawContent) && rawContent.length > 0
+      ? (rawContent[0]?.booking_id || rawContent[0]?.id || rawContent[0])
+      : null) ||
+    rawContent?.booking_id ||
+    rawContent?.readable_id ||
+    rawContent?.reference ||
+    rawContent?.id ||
+    bookingRes?.booking_id ||
+    bookingRes?.id;
 
-    const bookingContent = bookingRes?.content;
-    const generatedRef =
-      bookingContent?.readable_id ||
-      (Array.isArray(bookingContent?.booking_id)
-        ? bookingContent.booking_id[0]
-        : bookingContent?.booking_id) ||
-      `EMG-${Math.floor(100000 + Math.random() * 900000)}`;
+  const realBookingId =
+    (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? String(rawBookingId[0]) : null) ||
+    (typeof rawBookingId === "string" && rawBookingId.trim() ? rawBookingId.trim() : null) ||
+    (typeof rawBookingId === "number" ? String(rawBookingId) : null);
 
-    let redirectUrl =
-      bookingContent?.url ||
-      bookingContent?.redirect_link ||
-      bookingContent?.redirect_url ||
-      bookingContent?.payment_url ||
-      bookingRes?.url ||
-      bookingRes?.redirect_link;
+  const generatedRef =
+    realBookingId ||
+    `EMG-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const isUuid = (val: any) =>
-      typeof val === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+  let redirectUrl =
+    rawContent?.url ||
+    rawContent?.redirect_link ||
+    rawContent?.redirect_url ||
+    rawContent?.payment_url ||
+    bookingRes?.url ||
+    bookingRes?.redirect_link ||
+    bookingRes?.redirect_url;
 
-    const rawBookingId = bookingContent?.booking_id;
-    const bookingUuid =
-      (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
-      (typeof rawBookingId === "string" ? rawBookingId : null) ||
-      bookingContent?.id ||
-      bookingContent?.payment_id ||
-      bookingRes?.booking_id ||
-      bookingContent?.readable_id;
-
-    if (!redirectUrl && params.payment_method === "stripe" && bookingUuid) {
-      const payloadsToTry = [
-        {
-          booking_id: String(bookingUuid),
-          payment_method: "stripe",
-          is_partial: params.is_partial ?? 1,
-          payment_platform: "app",
-          callback: callbackUrl,
-        },
-        {
-          booking_id: String(bookingUuid),
-          payment_method: "stripe",
-          is_partial: params.is_partial ?? 1,
-          payment_platform: "web",
-          callback: callbackUrl,
-        },
-      ];
-
-      for (const p of payloadsToTry) {
-        if (redirectUrl) break;
-        try {
-          console.log("[EmergencyPayment] Requesting switch-payment-method:", p);
-          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
-          const sData = switchRes.data;
-          const sContent = sData?.content;
-          const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
-
-          if (typeof sContent === "string" && sContent.startsWith("http")) {
-            redirectUrl = sContent;
-            break;
-          }
-
-          const candidateUrl =
-            sRaw?.redirect_url ||
-            sRaw?.redirect_link ||
-            sRaw?.payment_url ||
-            sRaw?.url ||
-            sRaw?.link ||
-            sRaw?.stripe_url ||
-            sRaw?.data?.redirect_url ||
-            sRaw?.data?.url;
-
-          if (candidateUrl && String(candidateUrl).startsWith("http")) {
-            redirectUrl = String(candidateUrl);
-            break;
-          }
-
-          const pId = sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
-          if (pId) {
-            redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${params.is_partial ?? 1}`;
-            break;
-          }
-        } catch (switchErr: any) {
-          const errData = switchErr?.response?.data;
-          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
-            redirectUrl = String(errData.content.redirect_url);
-            break;
-          }
-          console.warn("[EmergencyPayment] switch-payment-method notice:", errData?.message || switchErr.message);
-        }
-      }
-    }
-
-    if (!redirectUrl && params.payment_method === "stripe") {
-      const pId = isUuid(bookingContent?.payment_id)
-        ? bookingContent.payment_id
-        : isUuid(bookingContent?.booking_id)
-          ? bookingContent.booking_id
-          : isUuid(bookingUuid)
-            ? bookingUuid
-            : null;
-      if (pId) {
-        redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-          String(pId)
-        )}&is_partial=${params.is_partial ?? 1}`;
-      }
-    }
-
-    return {
-      reference: String(generatedRef),
-      booking_id: Array.isArray(bookingContent?.booking_id)
-        ? bookingContent.booking_id[0]
-        : bookingContent?.booking_id,
-      message: bookingRes?.message || "Booking Placed successfully",
-      status: "success",
-      redirect_link: redirectUrl,
-      url: redirectUrl,
-      amount: bookingContent?.amount || params.amount,
-    };
-  } catch (bookingErr: any) {
-    console.warn("Direct booking request send fallback:", bookingErr);
-
-    // Also submit emergency request post as fallback guarantee
-    let fallbackRef = `EMG-${Math.floor(100000 + Math.random() * 900000)}`;
-    try {
-      const postRes = await submitEmergencyRequest({
-        postcode: params.postcode || params.service_address || "12345",
-        service_address: params.service_address,
-        car_registration_number: params.car_registration_number,
-        emergency_service_id: params.emergency_service_id || params.emergency_service_ids?.[0] || "",
-        emergency_service_name: params.emergency_service_name,
-        situation_description: params.situation_description,
-        contact_phone: params.contact_phone,
-        car_model: params.car_model,
-        latitude: params.latitude,
-        longitude: params.longitude,
-      });
-      if (postRes.content?.readable_id) {
-        fallbackRef = String(postRes.content.readable_id);
-      }
-    } catch (postErr) {
-      console.warn("Post fallback error:", postErr);
-    }
-
-    let fallbackRedirectUrl: string | undefined = undefined;
-
-    return {
-      reference: fallbackRef,
-      message: "Emergency technician dispatched successfully!",
-      status: "success",
-      redirect_link: fallbackRedirectUrl,
-      url: fallbackRedirectUrl,
-      amount: params.amount,
-    };
-  }
+  return {
+    reference: generatedRef,
+    booking_id: realBookingId || generatedRef,
+    payment_id: rawContent?.payment_id,
+    message: bookingRes?.message || "Booking request sent successfully",
+    status: bookingRes?.response_code || "success",
+    redirect_link: redirectUrl,
+    url: redirectUrl,
+    amount: params.amount,
+  };
 };

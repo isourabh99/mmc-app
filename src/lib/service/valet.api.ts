@@ -526,7 +526,7 @@ export const searchProvidersByService = async (
         return {
           ...p,
           id: String(p.id || p.provider_id || ""),
-          company_name: p.company_name || p.name || "MMC Verified Valet",
+          company_name: p.company_name || p.name || "Motor Market Club Verified Valet",
           company_phone: p.company_phone || p.phone || "",
           company_address: p.company_address || p.address || "",
           company_email: p.company_email || p.email || "",
@@ -594,7 +594,7 @@ export const searchProvidersByService = async (
         return {
           ...p,
           id: String(p.id || p.provider_id || ""),
-          company_name: p.company_name || p.name || "MMC Verified Valet",
+          company_name: p.company_name || p.name || "Motor Market Club Verified Valet",
           company_phone: p.company_phone || p.phone || "",
           company_address: p.company_address || p.address || "",
           company_email: p.company_email || p.email || "",
@@ -891,7 +891,7 @@ export const sendValetBookingRequest = async (
 
           const pId = sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
           if (pId) {
-            redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${payload.is_partial ?? 1}`;
+            redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(pId))}&is_partial=${payload.is_partial ?? 1}&callback=${encodeURIComponent(payload.callback || defaultSuccessCallback)}`;
             break;
           }
         } catch (switchErr: any) {
@@ -906,7 +906,7 @@ export const sendValetBookingRequest = async (
     }
 
     if (!redirectLink && bookingUuid && isUuid(String(bookingUuid))) {
-      redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(bookingUuid))}&is_partial=${payload.is_partial ?? 1}`;
+      redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(bookingUuid))}&is_partial=${payload.is_partial ?? 1}&callback=${encodeURIComponent(payload.callback || defaultSuccessCallback)}`;
     }
 
     if (res.data) {

@@ -599,7 +599,7 @@ function ProvidersContent() {
       // Trigger native notification pop-up on user device
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
         try {
-          new Notification("MMC Valet Wash Confirmed! 🧼", {
+          new Notification("Motor Market Club Valet Wash Confirmed! 🧼", {
             body: `Booking Ref #${confirmedId} for ${currentServiceName} has been confirmed!`,
             icon: "/mmc-logo.png",
             badge: "/mmc-logo.png",
@@ -634,7 +634,7 @@ function ProvidersContent() {
 
       {/* 1. Desktop Breadcrumb & Hero Header Section */}
       <section className="border-b border-white/8 bg-gradient-to-b from-white/[0.04] to-transparent pt-6 pb-8 relative z-20">
-        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-4">
           {/* Breadcrumb Navigation */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-white/50">
@@ -700,7 +700,7 @@ function ProvidersContent() {
       </section>
 
       {/* 2. Main Desktop Layout (Sidebar + Results Grid) */}
-      <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 relative z-10">
+      <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pt-6 sm:pt-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
           {/* ========================================================= */}
@@ -875,7 +875,7 @@ function ProvidersContent() {
             <div className="rounded-3xl border border-white/10 bg-[#120e0b]/70 p-5 space-y-3.5 text-xs">
               <div className="flex items-center gap-2 text-[#FAD293] font-bold">
                 <ShieldCheck size={16} />
-                <span>The MMC Valet Guarantee</span>
+                <span>The Motor Market Club Valet Guarantee</span>
               </div>
               <ul className="space-y-2 text-white/70 text-[11px]">
                 <li className="flex items-start gap-2">

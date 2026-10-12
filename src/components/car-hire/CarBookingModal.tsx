@@ -90,6 +90,47 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [bookingDetails, setBookingDetails] = useState<any>(null);
 
+  // Time & Duration Helpers
+  const calculateHoursBetween = (startT: string, endT: string): number => {
+    const [sH, sM] = (startT || "10:00").split(":").map(Number);
+    const [eH, eM] = (endT || "14:00").split(":").map(Number);
+    let startMinutes = (isNaN(sH) ? 10 : sH) * 60 + (isNaN(sM) ? 0 : sM);
+    let endMinutes = (isNaN(eH) ? 14 : eH) * 60 + (isNaN(eM) ? 0 : eM);
+    if (endMinutes <= startMinutes) {
+      endMinutes += 24 * 60;
+    }
+    const diffHours = (endMinutes - startMinutes) / 60;
+    return Math.max(1, Math.round(diffHours * 10) / 10);
+  };
+
+  const addHoursToTime = (timeStr: string, hours: number): string => {
+    const [h, m] = (timeStr || "10:00").split(":").map(Number);
+    const totalMinutes = (((isNaN(h) ? 10 : h) * 60 + (isNaN(m) ? 0 : m) + Math.round(hours * 60)) % (24 * 60) + (24 * 60)) % (24 * 60);
+    const newH = Math.floor(totalMinutes / 60);
+    const newM = totalMinutes % 60;
+    return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+  };
+
+  const handlePickupTimeChange = (newPickup: string) => {
+    setPickupTime(newPickup);
+    if (pricingType === "hourly") {
+      setDropTime(addHoursToTime(newPickup, hoursCount));
+    }
+  };
+
+  const handleDropTimeChange = (newDrop: string) => {
+    setDropTime(newDrop);
+    if (pricingType === "hourly") {
+      const computedHours = calculateHoursBetween(pickupTime, newDrop);
+      setHoursCount(computedHours);
+    }
+  };
+
+  const handleDurationChange = (newHours: number) => {
+    setHoursCount(newHours);
+    setDropTime(addHoursToTime(pickupTime, newHours));
+  };
+
   useEffect(() => {
     if (car && isOpen) {
       const carDaily = parseFloat(car.daily_rate || "0");
@@ -133,7 +174,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.max(0, end.getTime() - start.getTime());
-  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
 
   const rawDeliveryFee = parseFloat(car?.delivery_fee || "0");
   const deliveryFee = pickupType === "delivery" ? rawDeliveryFee : 0;
@@ -187,6 +228,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
   };
 
   const executeCarBooking = async () => {
+    if (submitting) return;
     if (!isAuthenticated()) {
       showToast("Please login to book a vehicle.", "info");
       onClose();
@@ -197,7 +239,9 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
     try {
       setSubmitting(true);
 
-      const callbackUrl = getDigitalPaymentCallbackUrl();
+      const callbackUrl = typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : getDigitalPaymentCallbackUrl();
 
       const payload: CarBookingPayload = {
         car_id: car.id,
@@ -207,8 +251,8 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
         total_amount: numericPrice,
         start_date: startDate,
         end_date: pricingType === "hourly" ? startDate : endDate,
-        pickup_time: formatTimeTo12Hour(pickupTime), // e.g. "10:00 AM"
-        drop_time: formatTimeTo12Hour(dropTime), // e.g. "02:00 PM"
+        pickup_time: pickupTime.includes(":") && pickupTime.length === 5 ? `${pickupTime}:00` : formatTimeTo12Hour(pickupTime),
+        drop_time: dropTime.includes(":") && dropTime.length === 5 ? `${dropTime}:00` : formatTimeTo12Hour(dropTime),
         pickup_type: pickupType, // "delivery" | "self"
         ...(pickupType === "delivery"
           ? {
@@ -299,10 +343,10 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
             booking_id: bookingRef,
             readable_id: (res as any)?.content?.booking?.booking?.readable_id ? String((res as any).content.booking.booking.readable_id) : bookingRef,
             provider: car?.provider,
-            schedule: `${startDate} ${formatTimeTo12Hour(pickupTime)}`,
+            schedule: `${startDate} (${formatTimeTo12Hour(pickupTime)} - ${formatTimeTo12Hour(dropTime)})`,
             price: respTotalAmount,
             is_partial: isPartialPayment ? 1 : 0,
-            deposit_amount: respDepositAmount,
+            deposit_amount: isPartialPayment ? respDepositAmount : respTotalAmount,
             service_name: `Car Hire: ${car?.brand || "Vehicle"} ${car?.model || ""}`.trim(),
           })
         );
@@ -328,7 +372,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
         // Trigger native notification pop-up on user device
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
           try {
-            new Notification("MMC Reservation Confirmed! 🚗", {
+            new Notification("Motor Market Club Reservation Confirmed! 🚗", {
               body: `Your hire request for ${car.brand} (Ref: ${res?.content?.booking_id || res?.content?.id || "Confirmed"}) has been placed!`,
               icon: "/mmc-logo.png",
               badge: "/mmc-logo.png",
@@ -678,13 +722,26 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-white/80 flex items-center gap-1.5">
-                    <Clock size={12} className="text-[#FAD293]" />
-                    <span>Duration</span>
+                  <label className="text-[11px] font-semibold text-white/80 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Clock size={12} className="text-[#FAD293]" />
+                      <span>Duration</span>
+                    </span>
+                    <span className="text-[#FAD293] font-bold text-[10px]">
+                      {hoursCount} Hours Package
+                    </span>
                   </label>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-[#FAD293] font-bold">
-                    <span>{hoursCount} Hours Package</span>
-                  </div>
+                  <select
+                    value={hoursCount}
+                    onChange={(e) => handleDurationChange(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-[#FAD293] font-bold focus:outline-none focus:border-[#FAD293] cursor-pointer"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 24].map((h) => (
+                      <option key={h} value={h} className="bg-[#141518] text-white">
+                        {h} Hours Package ({formatCurrency(effectiveHourlyRate * h)})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
@@ -702,7 +759,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
                   type="time"
                   required
                   value={pickupTime}
-                  onChange={(e) => setPickupTime(e.target.value)}
+                  onChange={(e) => handlePickupTimeChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
                 />
               </div>
@@ -721,7 +778,7 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
                   type="time"
                   required
                   value={dropTime}
-                  onChange={(e) => setDropTime(e.target.value)}
+                  onChange={(e) => handleDropTimeChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
                 />
               </div>
@@ -771,14 +828,6 @@ export const CarBookingModal: React.FC<CarBookingModalProps> = ({
                 <span>Collection Mode:</span>
                 <span className="text-[#FAD293] font-semibold">
                   {pickupType === "delivery" ? "Doorstep Delivery" : "Self Collection (HQ)"}
-                </span>
-              </div>
-              <div className="flex justify-between text-white/60">
-                <span>
-                  Hire Rate ({diffDays} {diffDays === 1 ? "day" : "days"}):
-                </span>
-                <span className="text-white font-medium">
-                  {formatCurrency(basePrice)}
                 </span>
               </div>
               {deposit > 0 && (

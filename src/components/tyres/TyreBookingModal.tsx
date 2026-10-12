@@ -177,7 +177,7 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
       // Trigger native notification pop-up on user device
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
         try {
-          new Notification("MMC Tyre Fitting Confirmed! 🛞", {
+          new Notification("Motor Market Club Tyre Fitting Confirmed! 🛞", {
             body: `Booking Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}!`,
             icon: "/mmc-logo.png",
             badge: "/mmc-logo.png",

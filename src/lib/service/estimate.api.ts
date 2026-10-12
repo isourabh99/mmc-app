@@ -1,4 +1,4 @@
-import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 
 export interface EstimateItem {
   id?: string;
@@ -131,11 +131,14 @@ export async function getCustomerEstimates(limit = 50, offset = 1): Promise<Esti
     }
     return [];
   } catch (err: any) {
-    if (err?.response?.status === 404) {
-      return [];
-    }
     console.warn("[estimate.api] Failed to fetch customer estimates:", err?.message);
-    throw err;
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("mmc_customer_estimates");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
   }
 }
 
@@ -180,7 +183,7 @@ export async function getEstimateDetails(tokenOrId: string): Promise<EstimateIte
     } catch {}
   }
 
-  // 1. Try direct estimate detail endpoint with a 5s timeout
+  // 1. Try direct estimate detail endpoints in parallel
   const probeEndpoints = [
     `/customer/estimate/${cleanToken}`,
     `/customer/estimate?token=${cleanToken}`,
@@ -190,13 +193,25 @@ export async function getEstimateDetails(tokenOrId: string): Promise<EstimateIte
     `/customer/estimate/details?link_token=${cleanToken}`,
     `/customer/estimate/show/${cleanToken}`,
     `/customer/estimate/view/${cleanToken}`,
+    `/customer/estimate/link/${cleanToken}`,
+    `/customer/estimate/link?token=${cleanToken}`,
+    `/customer/estimate/link?link_token=${cleanToken}`,
+    `/customer/estimate/token/${cleanToken}`,
+    `/customer/estimate/public/${cleanToken}`,
+    `/customer/estimate/public?token=${cleanToken}`,
+    `/customer/estimate/public?link_token=${cleanToken}`,
     `/estimate/${cleanToken}`,
     `/estimate/details/${cleanToken}`,
+    `/estimate/view/${cleanToken}`,
+    `/estimate/token/${cleanToken}`,
+    `/estimate/show/${cleanToken}`,
+    `/estimate/public/${cleanToken}`,
   ];
 
-  for (const url of probeEndpoints) {
+  // Try fetching in parallel for instant response
+  const probePromises = probeEndpoints.map(async (url) => {
     try {
-      const response = await apiClient.get<any>(url, { timeout: 4000 });
+      const response = await apiClient.get<any>(url, { timeout: 6000 });
       const body = response.data;
       const result =
         body?.content && typeof body.content === "object" && !Array.isArray(body.content)
@@ -210,12 +225,19 @@ export async function getEstimateDetails(tokenOrId: string): Promise<EstimateIte
       if (result && (result.id || result.readable_id || result.link_token || result.service_description || result.price)) {
         return result;
       }
+      return null;
     } catch {
-      // Continue to next probe
+      return null;
     }
+  });
+
+  const results = await Promise.all(probePromises);
+  const found = results.find((r) => r !== null);
+  if (found) {
+    return found;
   }
 
-  // 2. Fallback: Search inside live customer's estimates list
+  // 2. Fallback: Search inside live customer's estimates list if user is logged in
   try {
     const list = await getCustomerEstimates(100, 1);
     const matched = list.find((item) => {
@@ -239,31 +261,116 @@ export async function getEstimateDetails(tokenOrId: string): Promise<EstimateIte
 /**
  * Accept customer estimate
  * POST /customer/estimate/accept
- * Body: { link_token: string, payment_method: string }
+ * Body: { link_token: string, payment_method: string, is_partial: number, callback?: string }
  */
 export async function acceptCustomerEstimate(
-  linkToken: string,
-  paymentMethod: string = "cash_after_service"
+  estimateOrToken: string | EstimateItem,
+  paymentMethod: string = "stripe",
+  isPartial: number = 1
 ): Promise<{ success: boolean; message?: string; redirect_url?: string; data?: any }> {
-  try {
-    const response = await apiClient.post("/customer/estimate/accept", {
-      link_token: linkToken,
-      payment_method: paymentMethod,
-    });
+  const isPartialNum = isPartial ? 1 : 0;
+  const callbackUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/booking-success`
+      : `${getBackendRootUrl()}/booking-success`;
 
-    const data = response.data;
-    return {
-      success: true,
-      message: data?.message || "Estimate accepted successfully!",
-      redirect_url: data?.content?.redirect_url || data?.redirect_url,
-      data: data?.content || data?.data || data,
-    };
-  } catch (err: any) {
-    console.error("[estimate.api] Accept estimate failed:", err?.response?.data || err?.message);
-    const msg =
-      err?.response?.data?.message ||
-      err?.response?.data?.errors?.[0]?.message ||
-      "Failed to accept estimate. Please try again.";
-    throw new Error(msg);
+  const tokenCandidates: string[] = [];
+  if (typeof estimateOrToken === "object" && estimateOrToken !== null) {
+    if (estimateOrToken.readable_id) {
+      tokenCandidates.push(`EST-${estimateOrToken.readable_id}`);
+      tokenCandidates.push(String(estimateOrToken.readable_id));
+    }
+    if (estimateOrToken.link_token) {
+      tokenCandidates.push(String(estimateOrToken.link_token).trim());
+    }
+    if (estimateOrToken.id) {
+      tokenCandidates.push(String(estimateOrToken.id).trim());
+    }
+  } else if (typeof estimateOrToken === "string") {
+    const clean = estimateOrToken.trim();
+    if (clean) {
+      if (/^\d+$/.test(clean)) {
+        tokenCandidates.push(`EST-${clean}`);
+        tokenCandidates.push(clean);
+      } else if (clean.startsWith("EST-")) {
+        tokenCandidates.push(clean);
+        tokenCandidates.push(clean.replace(/^EST-/, ""));
+      } else {
+        tokenCandidates.push(clean);
+        tokenCandidates.push(`EST-${clean}`);
+      }
+    }
   }
+
+  const uniqueTokens = Array.from(new Set(tokenCandidates)).filter(Boolean);
+
+  // Candidate payment methods to try if backend rejects specific string
+  const methodCandidates =
+    paymentMethod === "cash_after_service"
+      ? ["cash_after_service", "cash_on_delivery", "offline"]
+      : [paymentMethod, "stripe", "digital_payment", "online", "card"];
+
+  const uniqueMethods = Array.from(new Set(methodCandidates));
+
+  let lastError: any = null;
+
+  for (const t of uniqueTokens) {
+    for (const method of uniqueMethods) {
+      try {
+        const payload: Record<string, any> = {
+          link_token: t,
+          payment_method: method,
+          is_partial: isPartialNum,
+          callback: callbackUrl,
+        };
+
+        const response = await apiClient.post("/customer/estimate/accept", payload);
+        const data = response.data;
+
+        const redirectUrl =
+          data?.content?.redirect_url ||
+          data?.content?.url ||
+          data?.content?.payment_url ||
+          data?.content?.redirect_link ||
+          data?.redirect_url ||
+          data?.url ||
+          (data?.content?.payment_id || data?.content?.id || data?.content?.booking_id
+            ? `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+                String(data?.content?.payment_id || data?.content?.id || data?.content?.booking_id)
+              )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`
+            : undefined);
+
+        return {
+          success: true,
+          message: data?.message || "Estimate accepted successfully!",
+          redirect_url: redirectUrl,
+          data: data?.content || data?.data || data,
+        };
+      } catch (err: any) {
+        lastError = err;
+        const errErrors = err?.response?.data?.errors;
+        const isPaymentMethodError =
+          Array.isArray(errErrors) &&
+          errErrors.some(
+            (e: any) =>
+              e.error_code === "payment_method" ||
+              String(e.message || "").toLowerCase().includes("payment method")
+          );
+
+        // If error is specifically about payment_method, continue to next method candidate
+        if (isPaymentMethodError) {
+          continue;
+        }
+        // If error is quotation not found or something else, try next token candidate
+        break;
+      }
+    }
+  }
+
+  console.error("[estimate.api] Accept estimate failed:", lastError?.response?.data || lastError?.message);
+  const msg =
+    lastError?.response?.data?.message ||
+    lastError?.response?.data?.errors?.[0]?.message ||
+    "Failed to accept estimate. Please check the estimate details and try again.";
+  throw new Error(msg);
 }

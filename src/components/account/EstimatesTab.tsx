@@ -28,6 +28,8 @@ import {
   Star,
   User,
   Image as ImageIcon,
+  Info,
+  Check,
   X,
 } from "lucide-react";
 import {
@@ -53,7 +55,8 @@ export const EstimatesTab: React.FC = () => {
 
   // Accept Modal State
   const [acceptingItem, setAcceptingItem] = useState<EstimateItem | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>("cash_after_service");
+  const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
+  const [paymentMethod, setPaymentMethod] = useState<string>("stripe");
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
 
   const fetchEstimates = useCallback(async () => {
@@ -91,7 +94,7 @@ export const EstimatesTab: React.FC = () => {
       } catch {}
     }
     if (token) {
-      router.push(`/estimate/${token}`);
+      router.push(`/estimate/${encodeURIComponent(token)}`);
     }
   };
 
@@ -99,7 +102,7 @@ export const EstimatesTab: React.FC = () => {
     if (e) e.stopPropagation();
     const token = item.link_token || item.id || String(item.readable_id);
     const origin = typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk";
-    const shareUrl = `${origin}/estimate/${token}`;
+    const shareUrl = `${origin}/estimate/${encodeURIComponent(token)}`;
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareUrl);
@@ -111,30 +114,58 @@ export const EstimatesTab: React.FC = () => {
 
   const handleConfirmAccept = async () => {
     if (!acceptingItem) return;
-    const token = acceptingItem.link_token || acceptingItem.id || String(acceptingItem.readable_id);
+    const itemKey = acceptingItem.link_token || acceptingItem.id || String(acceptingItem.readable_id || "");
     try {
       setAcceptSubmitting(true);
-      const res = await acceptCustomerEstimate(token, paymentMethod);
+      const isPartialNum = isPartialPayment ? 1 : 0;
+      const res = await acceptCustomerEstimate(acceptingItem, "stripe", isPartialNum);
+
+      if (res.redirect_url) {
+        if (typeof window !== "undefined" && acceptingItem) {
+          try {
+            const grandTotalVal = Number(
+              acceptingItem.total_amount ??
+              acceptingItem.grand_total ??
+              acceptingItem.price ??
+              0
+            );
+            const depVal = Math.round(grandTotalVal * 0.25 * 100) / 100;
+            sessionStorage.setItem(
+              "mmc_pending_booking",
+              JSON.stringify({
+                booking_id: res.data?.booking_id || res.data?.id || acceptingItem.id,
+                readable_id: acceptingItem.readable_id || res.data?.readable_id,
+                service_name: acceptingItem.service_description || "Repair Service",
+                price: grandTotalVal,
+                deposit_amount: isPartialNum === 1 ? depVal : grandTotalVal,
+                is_partial: isPartialNum,
+                provider: acceptingItem.provider,
+                schedule: acceptingItem.service_schedule || new Date().toISOString(),
+              })
+            );
+          } catch {}
+        }
+        showToast("Redirecting to Stripe secure checkout...", "info");
+        window.location.href = res.redirect_url;
+        return;
+      }
+
       showToast(res.message || "Estimate accepted successfully!", "success");
 
       // Update state locally
       setEstimates((prev) =>
         prev.map((est) =>
-          (est.link_token === token || est.id === token || String(est.readable_id) === token)
-            ? { ...est, status: "accepted", payment_method: paymentMethod }
+          (est.link_token === itemKey || est.id === itemKey || String(est.readable_id) === itemKey)
+            ? { ...est, status: "accepted", payment_method: "stripe" }
             : est
         )
       );
 
-      if (selectedEstimate && (selectedEstimate.link_token === token || selectedEstimate.id === token)) {
-        setSelectedEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: paymentMethod } : null));
+      if (selectedEstimate && (selectedEstimate.link_token === itemKey || selectedEstimate.id === itemKey)) {
+        setSelectedEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: "stripe" } : null));
       }
 
       setAcceptingItem(null);
-
-      if (res.redirect_url) {
-        window.location.href = res.redirect_url;
-      }
     } catch (err: any) {
       showToast(err.message || "Failed to accept estimate", "error");
     } finally {
@@ -296,7 +327,7 @@ export const EstimatesTab: React.FC = () => {
                 </button>
 
                 <Link
-                  href={`/estimate/${selectedEstimate.link_token || selectedEstimate.id}`}
+                  href={`/estimate/${encodeURIComponent(selectedEstimate.link_token || selectedEstimate.id || "")}`}
                   target="_blank"
                   className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 transition"
                   title="Open full public page"
@@ -481,7 +512,7 @@ export const EstimatesTab: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-white/10">
               <div className="flex items-center gap-2 text-xs text-white/50">
                 <ShieldCheck size={16} className="text-[#f2cb87]" />
-                <span>MMC Certified Quote Guarantee included</span>
+                <span>Motor Market Club Certified Quote Guarantee included</span>
               </div>
 
               {(selectedEstimate.status || "pending").toLowerCase() === "pending" ? (
@@ -659,106 +690,172 @@ export const EstimatesTab: React.FC = () => {
         </div>
       )}
 
-      {/* ─── ACCEPT ESTIMATE MODAL ─── */}
-      {acceptingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-md rounded-3xl border border-[#3a2a17] bg-[#14100c] p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-                  <CheckCircle2 size={16} />
+      {/* ─── ACCEPT ESTIMATE MODAL (Deposit 25% vs Full Online) ─── */}
+      {acceptingItem && (() => {
+        const itemTotal = Number(
+          acceptingItem.total_amount ??
+          acceptingItem.grand_total ??
+          acceptingItem.price ??
+          0
+        );
+        const depAmount = (Math.round(itemTotal * 0.25 * 100) / 100).toFixed(2);
+        const remAmount = (Math.round((itemTotal - Number(depAmount)) * 100) / 100).toFixed(2);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+            <div className="relative w-full max-w-md rounded-3xl border border-[#3a2a17] bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between border-b border-white/10 pb-3">
+                <div>
+                  <h3 className="text-lg font-black text-white">Select Payment Method</h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Choose how you want to pay for {acceptingItem.readable_id ? `EST-${acceptingItem.readable_id}` : "this estimate"}
+                  </p>
                 </div>
-                <h3 className="text-base font-black text-white">Accept Provider Estimate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAcceptingItem(null)}
-                className="text-white/40 hover:text-white text-sm cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2 text-xs">
-              <div className="flex justify-between text-white/60">
-                <span>Estimate Ref:</span>
-                <span className="font-bold text-white">
-                  {acceptingItem.readable_id ? `EST-${acceptingItem.readable_id}` : (acceptingItem.estimate_number || `EST-${String(acceptingItem.id || "").slice(0, 8)}`)}
-                </span>
-              </div>
-              <div className="flex justify-between text-white/60">
-                <span>Total Amount:</span>
-                <span className="font-black text-emerald-400 text-sm">
-                  £
-                  {Number(
-                    acceptingItem.total_amount ??
-                    acceptingItem.grand_total ??
-                    acceptingItem.price ??
-                    0
-                  ).toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-white/80">Choose Payment Method:</label>
-              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod("cash_after_service")}
-                  className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                    paymentMethod === "cash_after_service"
-                      ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
-                      : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                  }`}
+                  onClick={() => setAcceptingItem(null)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
                 >
-                  <Banknote size={18} />
-                  <span>Pay After Service</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("stripe")}
-                  className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                    paymentMethod === "stripe"
-                      ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
-                      : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                  }`}
-                >
-                  <CreditCard size={18} />
-                  <span>Online / Card</span>
+                  <X size={16} />
                 </button>
               </div>
-            </div>
 
-            {/* Buttons */}
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setAcceptingItem(null)}
-                disabled={acceptSubmitting}
-                className="flex-1 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-white/70 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmAccept}
-                disabled={acceptSubmitting}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-lg shadow-[#d09a50]/20 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                {acceptSubmitting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <CheckCircle2 size={14} />
-                )}
-                <span>{acceptSubmitting ? "Accepting..." : "Confirm & Accept"}</span>
-              </button>
+              {/* Payment Options */}
+              <div className="space-y-3 pt-1">
+                {/* Option 1: Deposit (25% Advance) */}
+                <div
+                  onClick={() => setIsPartialPayment(true)}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                    isPartialPayment
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                        <Banknote className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">Deposit</span>
+                          <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
+                            25% ADVANCE
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Pay 25% deposit now to secure reservation
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                        isPartialPayment
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
+                      }`}
+                    >
+                      {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-zinc-300">Deposit Due Now (25%):</span>
+                      <span className="text-sm font-extrabold text-[#E8AF66]">£{depAmount}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                      <span>Due on vehicle arrival (75%):</span>
+                      <span className="font-semibold text-zinc-300">£{remAmount}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Option 2: Online Payment (Full 100%) */}
+                <div
+                  onClick={() => setIsPartialPayment(false)}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                    !isPartialPayment
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
+                        <CreditCard className="w-5 h-5 text-[#E8AF66]" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-white block">Online Payment</span>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Pay full amount now online
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                        !isPartialPayment
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
+                      }`}
+                    >
+                      {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
+                    <span className="text-zinc-300">Amount Due Now:</span>
+                    <span className="text-sm font-extrabold text-white">£{itemTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informational Callout Box */}
+              <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-3.5 flex items-start gap-3 text-xs">
+                <Info className="w-4 h-4 text-[#E8AF66] shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-[#E8AF66] block">
+                    {isPartialPayment ? "25% Advance Payment Required" : "100% Online Secure Payment"}
+                  </span>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    {isPartialPayment
+                      ? "You must pay a 25% deposit upfront to confirm your reservation. The remaining 75% will be paid once the vehicle is delivered or handed over."
+                      : "Pay the full quotation amount upfront securely via Stripe for instant vehicle service authorization."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Pay CTA */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmAccept}
+                  disabled={acceptSubmitting}
+                  className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {acceptSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin text-zinc-950" />
+                      <span>Redirecting to Payment Gateway...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        {isPartialPayment
+                          ? `PAY DEPOSIT (£${depAmount})`
+                          : `PAY FULL AMOUNT (£${itemTotal.toFixed(2)})`}
+                      </span>
+                      <ArrowRight className="w-4 h-4 text-zinc-950" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Lightbox Modal for Damage Photos */}
       {previewImage && (

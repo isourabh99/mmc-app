@@ -1,29 +1,32 @@
-# Enable Rewrite Engine
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteBase /
+RewriteEngine On
+Options -MultiViews
 
-    # Redirect trailing slashes if not a directory
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
+# Direct dynamic Estimate Routes
+RewriteRule ^estimate/details/?$ - [L]
+RewriteRule ^estimate/[^/]+/?$ estimate/details/index.html [L]
 
-    # Serve direct existing files or directories
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
-    RewriteRule ^ - [L]
+# Direct dynamic Provider Estimates Routes
+RewriteRule ^provider-estimates/details/[^/]+/?$ provider-estimates/details/details/index.html [L]
+RewriteRule ^provider-estimates/[^/]+/?$ provider-estimates/view/index.html [L]
 
-    # Check if .html file exists
-    RewriteCond %{REQUEST_FILENAME}.html -f
-    RewriteRule ^(.*)$ $1.html [L]
+# Direct dynamic Car Hire Routes
+RewriteRule ^car-hire/[^/]+/book/?$ car-hire/view/book/index.html [L]
+RewriteRule ^car-hire/[^/]+/?$ car-hire/view/index.html [L]
 
-    # Check if subdirectory/index.html exists
-    RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
-    RewriteRule ^(.*)$ $1/index.html [L]
+# Direct dynamic Chauffeur Routes
+RewriteRule ^services/Chauffeur/[^/]+/?$ services/Chauffeur/view/index.html [L]
 
-    # Fallback to index.html for client-side routing
-    RewriteRule ^ index.html [L]
-</IfModule>
+# Check if .html file exists
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.*)$ $1.html [L]
+
+# Existing files or directories
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Client-side routing fallback
+RewriteRule ^ index.html [L]
 
 # Custom Error Pages
 ErrorDocument 404 /404.html

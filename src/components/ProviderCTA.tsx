@@ -2,8 +2,8 @@
 
 export default function ProviderCTA() {
   return (
-    <section id="become-provider" className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto">
+    <section id="become-provider" className="py-16 sm:py-24 relative overflow-hidden">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div
           className="relative rounded-3xl overflow-hidden"
           style={{
@@ -60,10 +60,10 @@ export default function ProviderCTA() {
                 >
                   Business
                 </span>{" "}
-                with MMC
+                with Motor Market Club
               </h2>
               <p className="text-white/55 text-lg max-w-xl mb-8">
-                Join thousands of automotive professionals earning more with MMC. We bring the customers to you — you focus on delivering exceptional service.
+                Join thousands of automotive professionals earning more with Motor Market Club. We bring the customers to you — you focus on delivering exceptional service.
               </p>
 
               {/* Benefits */}

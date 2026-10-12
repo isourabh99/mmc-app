@@ -41,6 +41,7 @@ import {
   saveBookingMeta,
   parseBookingTimestamp,
   getDigitalPaymentCallbackUrl,
+  switchBookingPaymentMethod,
 } from "@/lib/service/bookings.api";
 
 interface BookingsTabProps {
@@ -608,7 +609,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
               href="/services"
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] px-5 py-2.5 text-xs font-black text-black shadow-md transition hover:brightness-105"
             >
-              <span>Explore All MMC Services</span>
+              <span>Explore All Motor Market Club Services</span>
               <ArrowRight size={14} />
             </Link>
           )}
@@ -632,9 +633,9 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
             const dueAmount = item.dueAmount;
             const isPartiallyPaid = item.isPartiallyPaid;
 
-            // Allow pay button only for accepted/ongoing with an outstanding due amount
-            const isOngoingOrAccepted = isOngoing || item.status === "accepted";
-            const canPayDue = !isFullyPaid && dueAmount > 0 && isOngoingOrAccepted;
+            // Allow pay button for accepted, ongoing, or pending bookings with an outstanding due amount
+            const isPayableStatus = isOngoing || item.status === "accepted" || item.status === "pending";
+            const canPayDue = !isFullyPaid && dueAmount > 0 && isPayableStatus;
 
             return (
               <div
@@ -826,7 +827,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           <span className="text-zinc-400 text-[10px] block font-bold">Time Window</span>
                           <span className="font-semibold text-white flex items-center gap-1">
                             <Clock size={11} className="text-emerald-400" />
-                            {item.scheduleTime || "As Scheduled"}
+                            {item.scheduleTime === "Dispa" ? "Immediate Dispatch" : (item.scheduleTime || "As Scheduled")}
                           </span>
                           {item.scheduleEndTime && (
                             <span className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
@@ -1048,7 +1049,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
               {(selectedBookingForModal.providerName || selectedBookingForModal.providerPhone) && (
                 <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1">
                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Assigned Provider</span>
-                  <p className="text-white font-medium">{selectedBookingForModal.providerName || "MMC Certified Fleet"}</p>
+                  <p className="text-white font-medium">{selectedBookingForModal.providerName || "Motor Market Club Certified Fleet"}</p>
                   {selectedBookingForModal.providerPhone && (
                     <a href={`tel:${selectedBookingForModal.providerPhone}`} className="text-[#FAD293] hover:underline block text-[11px] font-bold">
                       📞 {selectedBookingForModal.providerPhone}
@@ -1080,7 +1081,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   const modalCanPay =
                     !selectedBookingForModal.isPaid &&
                     selectedBookingForModal.dueAmount > 0 &&
-                    (selectedBookingForModal.status === "ongoing" || selectedBookingForModal.status === "accepted");
+                    (selectedBookingForModal.status === "ongoing" || selectedBookingForModal.status === "accepted" || selectedBookingForModal.status === "pending");
 
                   return (
                     modalCanPay && (
@@ -1194,107 +1195,36 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                     try {
                       const raw = bookingForPayment.raw || {};
                       const candidateIds = [
-                        raw.payment_id,
-                        raw.stripe_payment_id,
-                        raw.id,
                         raw.booking_id,
                         raw.bookingId,
+                        raw.id,
+                        raw.payment_id,
+                        raw.stripe_payment_id,
                         bookingForPayment.rawId,
                         bookingForPayment.id,
                       ].filter(Boolean);
 
-                      const bookingId = candidateIds[0] || bookingForPayment.id;
-                      console.log("[Payment] Initiating payment for booking:", bookingId);
-
-                      const callbackUrl = getDigitalPaymentCallbackUrl();
-
                       let redirectUrl = "";
-                      let stripePaymentId = "";
-
-                      for (const testId of candidateIds) {
-                        if (redirectUrl || stripePaymentId) break;
-                        const payloadsToTry = [
-                          {
-                            booking_id: String(testId),
-                            payment_method: "stripe",
-                            is_partial: 0,
-                            payment_platform: "app",
-                            callback: callbackUrl,
-                          },
-                          {
-                            booking_id: String(testId),
-                            payment_method: "stripe",
-                            is_partial: 0,
-                            payment_platform: "web",
-                            callback: callbackUrl,
-                          },
-                        ];
-
-                        for (const payload of payloadsToTry) {
-                          if (redirectUrl || stripePaymentId) break;
-                          try {
-                            console.log("[Payment] Calling /customer/booking/switch-payment-method:", payload);
-                            const res = await apiClient.post("/customer/booking/switch-payment-method", payload);
-                            const fullResp = res.data;
-                            console.log("[Payment] switch-payment-method API resp:", fullResp);
-
-                            const content = fullResp?.content;
-                            const sRaw = (typeof content === "object" && content !== null) ? content : fullResp || {};
-
-                            if (typeof content === "string" && content.startsWith("http")) {
-                              redirectUrl = content;
-                              break;
-                            }
-
-                            const urlCandidate =
-                              sRaw?.redirect_url ||
-                              sRaw?.redirect_link ||
-                              sRaw?.payment_url ||
-                              sRaw?.url ||
-                              sRaw?.stripe_url ||
-                              sRaw?.link ||
-                              sRaw?.data?.redirect_url ||
-                              sRaw?.data?.url;
-
-                            if (urlCandidate && String(urlCandidate).startsWith("http")) {
-                              redirectUrl = String(urlCandidate);
-                              break;
-                            }
-
-                            const pId =
-                              sRaw?.payment_id ||
-                              sRaw?.paymentId ||
-                              sRaw?.stripe_payment_id ||
-                              sRaw?.data?.payment_id;
-
-                            if (pId) {
-                              stripePaymentId = String(pId);
-                              break;
-                            }
-                          } catch (e: any) {
-                            const errData = e?.response?.data;
-                            console.warn("[Payment] switch-payment-method error:", errData?.message || e?.message);
-                            if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
-                              redirectUrl = String(errData.content.redirect_url);
-                              break;
-                            }
-                            if (errData?.content?.payment_id) {
-                              stripePaymentId = String(errData.content.payment_id);
-                              break;
-                            }
+                      for (const cid of candidateIds) {
+                        try {
+                          const res = await switchBookingPaymentMethod(String(cid), "stripe");
+                          if (res.redirect_url) {
+                            redirectUrl = res.redirect_url;
+                            break;
                           }
+                        } catch (e: any) {
+                          console.warn("[BookingsTab] switch-payment-method retry for ID:", cid, e?.message);
                         }
                       }
 
                       if (!redirectUrl) {
-                        const targetId = stripePaymentId || bookingId;
+                        const targetId = candidateIds[0] || bookingForPayment.id;
                         if (targetId) {
                           redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
                         }
                       }
 
                       if (!redirectUrl) {
-                        console.error("[Payment] switch-payment-method failed to return redirect URL for booking:", bookingId);
                         setPayingRemaining(false);
                         window.dispatchEvent(
                           new CustomEvent("mmc-toast", {

@@ -8,7 +8,7 @@ const features = [
       </svg>
     ),
     title: "Verified Providers",
-    desc: "Every provider on MMC is background-checked, insured, and rated by real customers.",
+    desc: "Every provider on Motor Market Club is background-checked, insured, and rated by real customers.",
   },
   {
     icon: (
@@ -45,7 +45,7 @@ const features = [
       </svg>
     ),
     title: "Nationwide Coverage",
-    desc: "Thousands of providers across the UK. Wherever you are, MMC has you covered.",
+    desc: "Thousands of providers across the UK. Wherever you are, Motor Market Club has you covered.",
   },
   {
     icon: (
@@ -65,7 +65,7 @@ export default function TrustSection() {
       className="py-16 sm:py-24 relative overflow-hidden"
       style={{ background: "linear-gradient(180deg, #000000, #050400)" }}
     >
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div className="text-center mb-16">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
@@ -78,7 +78,7 @@ export default function TrustSection() {
                 backgroundClip: "text",
               }}
             >
-              Why Choose MMC
+              Why Choose Motor Market Club
             </span>
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, #CEA46B, transparent)" }} />
           </div>

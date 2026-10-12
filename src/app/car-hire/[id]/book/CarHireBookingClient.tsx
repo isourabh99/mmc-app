@@ -82,6 +82,47 @@ export default function CarHireBookingClient() {
   const [description, setDescription] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
 
+  // Time & Duration Helpers
+  const calculateHoursBetween = (startT: string, endT: string): number => {
+    const [sH, sM] = (startT || "10:00").split(":").map(Number);
+    const [eH, eM] = (endT || "14:00").split(":").map(Number);
+    let startMinutes = (isNaN(sH) ? 10 : sH) * 60 + (isNaN(sM) ? 0 : sM);
+    let endMinutes = (isNaN(eH) ? 14 : eH) * 60 + (isNaN(eM) ? 0 : eM);
+    if (endMinutes <= startMinutes) {
+      endMinutes += 24 * 60;
+    }
+    const diffHours = (endMinutes - startMinutes) / 60;
+    return Math.max(1, Math.round(diffHours * 10) / 10);
+  };
+
+  const addHoursToTime = (timeStr: string, hours: number): string => {
+    const [h, m] = (timeStr || "10:00").split(":").map(Number);
+    const totalMinutes = (((isNaN(h) ? 10 : h) * 60 + (isNaN(m) ? 0 : m) + Math.round(hours * 60)) % (24 * 60) + (24 * 60)) % (24 * 60);
+    const newH = Math.floor(totalMinutes / 60);
+    const newM = totalMinutes % 60;
+    return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+  };
+
+  const handlePickupTimeChange = (newPickup: string) => {
+    setPickupTime(newPickup);
+    if (pricingType === "hourly") {
+      setDropTime(addHoursToTime(newPickup, hoursCount));
+    }
+  };
+
+  const handleDropTimeChange = (newDrop: string) => {
+    setDropTime(newDrop);
+    if (pricingType === "hourly") {
+      const computedHours = calculateHoursBetween(pickupTime, newDrop);
+      setHoursCount(computedHours);
+    }
+  };
+
+  const handleDurationChange = (newHours: number) => {
+    setHoursCount(newHours);
+    setDropTime(addHoursToTime(pickupTime, newHours));
+  };
+
   // Payment Modal State (Matches Bodywork / Chauffeur / Mechanical)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPartialPayment, setIsPartialPayment] = useState(true);
@@ -219,6 +260,7 @@ export default function CarHireBookingClient() {
 
   // Final Booking Dispatch to API with Stripe Payment
   const executeCarBooking = async () => {
+    if (submitting) return;
     if (!isAuthenticated()) {
       showToast("Please log in to proceed with your vehicle hire reservation", "info");
       router.push(`/login?redirect=${encodeURIComponent(`/car-hire/${carId}/book`)}`);
@@ -227,7 +269,9 @@ export default function CarHireBookingClient() {
     try {
       setSubmitting(true);
 
-      const callbackUrl = getDigitalPaymentCallbackUrl();
+      const callbackUrl = typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : getDigitalPaymentCallbackUrl();
 
       const payload: CarBookingPayload = {
         car_id: car!.id,
@@ -237,8 +281,8 @@ export default function CarHireBookingClient() {
         total_amount: numericPrice,
         start_date: startDate,
         end_date: pricingType === "hourly" ? startDate : endDate,
-        pickup_time: formatTimeTo12Hour(pickupTime),
-        drop_time: formatTimeTo12Hour(dropTime),
+        pickup_time: pickupTime.includes(":") && pickupTime.length === 5 ? `${pickupTime}:00` : formatTimeTo12Hour(pickupTime),
+        drop_time: dropTime.includes(":") && dropTime.length === 5 ? `${dropTime}:00` : formatTimeTo12Hour(dropTime),
         pickup_type: pickupType,
         ...(pickupType === "delivery"
           ? {
@@ -329,10 +373,10 @@ export default function CarHireBookingClient() {
             booking_id: bookingRef,
             readable_id: (res as any)?.content?.booking?.booking?.readable_id ? String((res as any).content.booking.booking.readable_id) : bookingRef,
             provider: car?.provider,
-            schedule: `${startDate} ${formatTimeTo12Hour(pickupTime)}`,
+            schedule: `${startDate} (${formatTimeTo12Hour(pickupTime)} - ${formatTimeTo12Hour(dropTime)})`,
             price: respTotalAmount,
             is_partial: isPartialPayment ? 1 : 0,
-            deposit_amount: respDepositAmount,
+            deposit_amount: isPartialPayment ? respDepositAmount : respTotalAmount,
             service_name: `Car Hire: ${car?.brand || "Vehicle"} ${car?.model || ""}`.trim(),
           })
         );
@@ -631,7 +675,10 @@ export default function CarHireBookingClient() {
 
                   <button
                     type="button"
-                    onClick={() => setPricingType("hourly")}
+                    onClick={() => {
+                      setPricingType("hourly");
+                      setDropTime(addHoursToTime(pickupTime, hoursCount));
+                    }}
                     className={`py-3 px-3.5 rounded-xl border text-xs font-semibold transition flex flex-col items-center justify-center gap-1 ${pricingType === "hourly"
                         ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293] shadow-[0_0_15px_rgba(250,210,147,0.15)]"
                         : "border-white/10 bg-white/5 text-white/60 hover:text-white"
@@ -695,13 +742,26 @@ export default function CarHireBookingClient() {
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-white/70 flex items-center gap-1.5">
-                        <Clock size={13} className="text-[#FAD293]" />
-                        <span>Duration</span>
+                      <label className="text-xs font-semibold text-white/70 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Clock size={13} className="text-[#FAD293]" />
+                          <span>Duration</span>
+                        </span>
+                        <span className="text-[#FAD293] font-bold text-[11px]">
+                          {hoursCount} Hours Package
+                        </span>
                       </label>
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-[#FAD293] font-bold">
-                        <span>{hoursCount} Hours Package</span>
-                      </div>
+                      <select
+                        value={hoursCount}
+                        onChange={(e) => handleDurationChange(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-[#FAD293] font-bold focus:outline-none focus:border-[#FAD293] cursor-pointer"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 24].map((h) => (
+                          <option key={h} value={h} className="bg-[#141518] text-white">
+                            {h} Hours Package ({formatCurrency(effectiveHourlyRate * h)})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
@@ -719,7 +779,7 @@ export default function CarHireBookingClient() {
                       type="time"
                       required
                       value={pickupTime}
-                      onChange={(e) => setPickupTime(e.target.value)}
+                      onChange={(e) => handlePickupTimeChange(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
                     />
                   </div>
@@ -738,7 +798,7 @@ export default function CarHireBookingClient() {
                       type="time"
                       required
                       value={dropTime}
-                      onChange={(e) => setDropTime(e.target.value)}
+                      onChange={(e) => handleDropTimeChange(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
                     />
                   </div>
@@ -832,15 +892,6 @@ export default function CarHireBookingClient() {
                       {pricingType === "hourly"
                         ? `${hoursCount} Hours (${startDate})`
                         : `${diffDays} ${diffDays === 1 ? "day" : "days"} (${startDate} to ${endDate})`}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span>Hire Rate:</span>
-                    <span className="text-white font-medium">
-                      {pricingType === "hourly"
-                        ? `${formatCurrency(effectiveHourlyRate)} × ${hoursCount} hrs = ${formatCurrency(basePrice)}`
-                        : `${formatCurrency(effectiveDailyRate)} × ${diffDays} days = ${formatCurrency(basePrice)}`}
                     </span>
                   </div>
 

@@ -28,13 +28,13 @@ export default function HeroSection() {
   return (
     <section
       id="hero"
-      className="relative min-h-[300px] sm:min-h-[380px] md:min-h-[440px] lg:min-h-[500px] overflow-hidden bg-[#050505] text-white flex items-center pt-10 pb-8 sm:pt-14 sm:pb-12 lg:pt-16 lg:pb-14"
+      className="relative min-h-[260px] sm:min-h-[460px] md:min-h-[520px] lg:min-h-[580px] 2xl:min-h-[640px] overflow-hidden bg-[#050505] text-white flex items-center pt-20 sm:pt-28 md:pt-32 lg:pt-36 2xl:pt-40 pb-6 sm:pb-16 lg:pb-20 2xl:pb-24"
     >
       {/* =========================================================
           BACKGROUND IMAGE
       ========================================================= */}
       <div
-        className="absolute inset-0 bg-no-repeat bg-cover bg-[position:70%_center] sm:bg-[position:center_right]"
+        className="absolute inset-0 bg-no-repeat bg-cover bg-[position:80%_center] sm:bg-[position:center_right] lg:bg-[position:right_center] 2xl:bg-[position:right_center]"
         style={{
           backgroundImage: "url('/hero-bg1.png')",
         }}
@@ -62,7 +62,7 @@ export default function HeroSection() {
 
       {/* Top black cinematic fade */}
       <div
-        className="absolute inset-x-0 top-0 h-28 sm:h-44 pointer-events-none"
+        className="absolute inset-x-0 top-0 h-16 sm:h-44 pointer-events-none"
         style={{
           background:
             "linear-gradient(to bottom, rgba(0,0,0,0.85), transparent)",
@@ -71,7 +71,7 @@ export default function HeroSection() {
 
       {/* Bottom cinematic fade */}
       <div
-        className="absolute inset-x-0 bottom-0 h-32 sm:h-56 pointer-events-none"
+        className="absolute inset-x-0 bottom-0 h-16 sm:h-56 pointer-events-none"
         style={{
           background:
             "linear-gradient(to top, rgba(3,3,3,0.98), transparent)",
@@ -108,12 +108,12 @@ export default function HeroSection() {
       {/* =========================================================
           CONTENT
       ========================================================= */}
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="w-full max-w-[700px]">
+      <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px]">
+        <div className="w-full max-w-[700px] 2xl:max-w-[820px]">
           {/* Eyebrow badge */}
-          <div className="mb-3 sm:mb-5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#CEA46B]/10 border border-[#CEA46B]/25 backdrop-blur-md">
+          <div className="mb-2.5 sm:mb-6 inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-[#CEA46B]/10 border border-[#CEA46B]/25 backdrop-blur-md">
             <span className="w-1.5 h-1.5 rounded-full bg-[#FAD293] shadow-[0_0_8px_#FAD293] animate-pulse" />
-            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-[0.2em] text-[#FAD293]">
+            <span className="text-[9px] sm:text-xs font-semibold uppercase tracking-[0.18em] sm:tracking-[0.2em] text-[#FAD293]">
               Automotive Marketplace
             </span>
           </div>
@@ -121,7 +121,7 @@ export default function HeroSection() {
           {/* =====================================================
               HEADLINE
           ===================================================== */}
-          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-[64px] font-bold leading-[1.12] sm:leading-[1.06] tracking-[-0.03em] text-white">
+          <h1 className="text-2xl sm:text-5xl md:text-6xl lg:text-[60px] 2xl:text-[68px] font-bold leading-[1.18] sm:leading-[1.08] tracking-[-0.03em] text-white">
             Book trusted <br className="hidden sm:block" />
             <span
               className="inline-block"
@@ -139,7 +139,7 @@ export default function HeroSection() {
           </h1>
 
           {/* Description */}
-          <p className="mt-4 sm:mt-6 text-sm sm:text-base md:text-lg text-white/70 leading-relaxed max-w-[600px]">
+          <p className="mt-2.5 sm:mt-6 text-xs sm:text-base md:text-lg 2xl:text-xl text-white/75 leading-relaxed max-w-[600px] 2xl:max-w-[720px]">
             Mobile repairs, detailing, tyres and vehicle upgrades — all in one place.
           </p>
         </div>

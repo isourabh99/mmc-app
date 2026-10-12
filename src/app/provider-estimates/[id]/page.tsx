@@ -1,7 +1,9 @@
 import ProviderEstimateDetailClient from "./ProviderEstimateDetailClient";
 
-export const dynamic = "force-dynamic";
-export const dynamicParams = true;
+export function generateStaticParams() {
+  const ids = ["[id]", "view", ...Array.from({ length: 100 }, (_, i) => String(i + 1))];
+  return ids.map((id) => ({ id }));
+}
 
 export default function ProviderEstimateDetailPage() {
   return <ProviderEstimateDetailClient />;

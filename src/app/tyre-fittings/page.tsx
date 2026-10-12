@@ -36,11 +36,14 @@ import {
   TYRE_EMERGENCY_SERVICE_ID,
   TYRE_REPLACEMENT_SERVICE_ID,
   DEFAULT_PROVIDER_ID,
+  isUuid,
+  BackendTyreItem,
 } from "@/lib/service/tyre-assistance.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import { TyreCategoryStep } from "@/components/tyre-assistance/TyreCategoryStep";
-import { AssistanceTypeStep } from "@/components/tyre-assistance/AssistanceTypeStep";
+import { TyreReplacementSelectionStep } from "@/components/tyre-assistance/TyreReplacementSelectionStep";
+import { EmergencyProviderSelectionStep } from "@/components/tyre-assistance/EmergencyProviderSelectionStep";
 import { ScheduleLocationStep } from "@/components/tyre-assistance/ScheduleLocationStep";
 import { ProviderQuoteStep } from "@/components/tyre-assistance/ProviderQuoteStep";
 import { TechnicianAssigningStep } from "@/components/tyre-assistance/TechnicianAssigningStep";
@@ -52,7 +55,8 @@ import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.ap
 
 type WorkflowStep =
   | "category"
-  | "assistance_type"
+  | "emergency_flow"
+  | "replacement_tyres"
   | "schedule_location"
   | "provider_quote"
   | "technician_assigning"
@@ -60,7 +64,8 @@ type WorkflowStep =
 
 const STEP_LABELS: { key: WorkflowStep; label: string; stepNumber: number }[] = [
   { key: "category", label: "Category", stepNumber: 1 },
-  { key: "assistance_type", label: "Assistance Type", stepNumber: 2 },
+  { key: "emergency_flow", label: "Emergency Assist", stepNumber: 2 },
+  { key: "replacement_tyres", label: "Tyre Selection", stepNumber: 2 },
   { key: "schedule_location", label: "Schedule & Location", stepNumber: 3 },
   { key: "provider_quote", label: "Provider & Quote", stepNumber: 4 },
   { key: "technician_assigning", label: "Dispatching", stepNumber: 5 },
@@ -77,6 +82,7 @@ export default function TyreAssistancePage() {
     useState<TyreCategory>("emergency");
   const [selectedAssistanceType, setSelectedAssistanceType] =
     useState<AssistanceType>("mobile_tyre");
+  const [selectedTyre, setSelectedTyre] = useState<BackendTyreItem | null>(null);
 
   // Zone ID state from GPS
   const [activeZoneId, setActiveZoneId] = useState<string>("");
@@ -212,19 +218,27 @@ export default function TyreAssistancePage() {
   // 1. Step 1: Category Selection Handler
   const handleSelectCategory = (category: TyreCategory) => {
     setSelectedCategory(category);
-    setCurrentStep("assistance_type");
+    if (category === "emergency") {
+      setCurrentStep("emergency_flow");
+    } else if (category === "replacement") {
+      setCurrentStep("replacement_tyres");
+    } else {
+      setCurrentStep("schedule_location");
+    }
   };
 
-  // 2. Step 2: Assistance Type Continue Handler
-  const handleContinueAssistanceType = () => {
+  // Step 2 (Replacement): Tyre Selection Handler
+  const handleSelectTyre = (tyre: BackendTyreItem) => {
+    setSelectedTyre(tyre);
     setCurrentStep("schedule_location");
   };
 
-  // 3. Step 3: Submit Assistance Request Handler
+  // 2. Step 3: Submit Assistance Request Handler
   const handleSubmitScheduleAndLocation = async (details: {
     serviceLocationType: ServiceLocationType;
     scheduledDate: string;
     scheduledTimeSlot: string;
+    selectedSlotId?: string;
     locationAddress: string;
     locationPostcode: string;
     latitude: number;
@@ -240,6 +254,8 @@ export default function TyreAssistancePage() {
     situation?: string;
     notes: string;
     acceptedPrivacy: boolean;
+    providerId?: string;
+    isPartial?: number;
   }) => {
     if (!isAuthenticated()) {
       showToast("Please login to submit tyre assistance request.", "info");
@@ -253,6 +269,7 @@ export default function TyreAssistancePage() {
       serviceLocationType: details.serviceLocationType,
       scheduledDate: details.scheduledDate,
       scheduledTimeSlot: details.scheduledTimeSlot,
+      selectedSlotId: details.selectedSlotId,
       locationAddress: details.locationAddress,
       locationPostcode: details.locationPostcode,
       latitude: details.latitude,
@@ -263,33 +280,138 @@ export default function TyreAssistancePage() {
       serviceId: details.serviceId,
       tyreSize: details.tyreSize,
       tyreQuantity: details.tyreQuantity,
-      selectedTyreId: details.selectedTyreId,
-      selectedTyrePrice: details.selectedTyrePrice,
+      selectedTyreId: details.selectedTyreId || selectedTyre?.id,
+      selectedTyrePrice: details.selectedTyrePrice || selectedTyre?.price,
       situation: details.situation,
       notes: details.notes,
       acceptedPrivacy: details.acceptedPrivacy,
-      providerId: (details as any).providerId || DEFAULT_PROVIDER_ID,
+      providerId: details.providerId || selectedTyre?.provider_id || DEFAULT_PROVIDER_ID,
     });
 
     setCurrentBooking(booking);
-    setCurrentStep("provider_quote");
+
+    // Direct Stripe Checkout Flow (1 for Deposit, 0 for Online Full)
+    try {
+      const isPartialNum = details.isPartial !== undefined ? details.isPartial : 0;
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/booking-success`
+          : "https://mmcclub.co.uk/booking-success";
+
+      const numericFare = Number(booking.quote?.fareAmount || 0);
+      const depositVal = isPartialNum === 1 ? (numericFare * 0.25).toFixed(2) : numericFare.toFixed(2);
+      const dueVal = isPartialNum === 1 ? (numericFare * 0.75).toFixed(2) : "0.00";
+
+      const updated = await confirmQuoteAndAssignTechnician(booking.id, {
+        is_partial: isPartialNum,
+        payment_method: "stripe",
+        payment_platform: "app",
+        callback: callbackUrl,
+      });
+
+      const confirmedRefId =
+        updated?.referenceNumber ||
+        updated?.id ||
+        (updated as any)?.content?.booking_id ||
+        (updated as any)?.content?.id ||
+        booking.referenceNumber ||
+        booking.id;
+
+      try {
+        sessionStorage.setItem(
+          "mmc_pending_booking",
+          JSON.stringify({
+            booking_id: confirmedRefId,
+            readable_id: confirmedRefId,
+            provider: {
+              company_name: booking.provider?.name || "Mobile Tyre Specialist",
+              company_phone: "+44 20 7946 0912",
+            },
+            schedule: `${booking.scheduledDate || "Today"} ${booking.scheduledTimeSlot || "ASAP"}`,
+            price: numericFare,
+            is_partial: isPartialNum,
+            deposit_amount: depositVal,
+            service_name: `Tyre Fitting: ${booking.vehicleMakeModel || "Vehicle"} (${booking.category === "emergency" ? "Emergency" : "Replacement"})`,
+          })
+        );
+      } catch { }
+
+      saveBookingMeta(confirmedRefId, {
+        serviceTitle: `Tyre Fitting: ${booking.vehicleMakeModel || "Vehicle"}`,
+        serviceCategoryName: "Tyre Assistance",
+        serviceType: "tyre",
+        vehicleModel: booking.vehicleMakeModel,
+        vehicleReg: booking.vehicleRegistration,
+        providerName: booking.provider?.name,
+        price: numericFare,
+        isPaid: isPartialNum === 0,
+        isPartiallyPaid: isPartialNum === 1,
+        paidAmount: Number(depositVal),
+        dueAmount: Number(dueVal),
+      });
+
+      let targetPaymentUrl =
+        updated?.redirect_link ||
+        (updated as any)?.content?.redirect_link ||
+        (updated as any)?.content?.url ||
+        (updated as any)?.content?.redirect_url ||
+        (updated as any)?.content?.payment_url;
+
+      if (typeof targetPaymentUrl === "string") {
+        targetPaymentUrl = targetPaymentUrl.replace(/\\\//g, "/");
+      }
+
+      if (!targetPaymentUrl) {
+        const payTargetId =
+          (isUuid(updated?.id) ? updated?.id : null) ||
+          (isUuid(booking.id) ? booking.id : null);
+        if (payTargetId && isUuid(payTargetId)) {
+          targetPaymentUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+            String(payTargetId)
+          )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`;
+        }
+      }
+
+      if (targetPaymentUrl && typeof targetPaymentUrl === "string") {
+        targetPaymentUrl = targetPaymentUrl.replace(/\\\//g, "/");
+        if (!targetPaymentUrl.startsWith("http")) {
+          targetPaymentUrl = `${getBackendRootUrl()}${targetPaymentUrl.startsWith("/") ? "" : "/"}${targetPaymentUrl}`;
+        }
+        if (!targetPaymentUrl.includes("callback=")) {
+          const sep = targetPaymentUrl.includes("?") ? "&" : "?";
+          targetPaymentUrl = `${targetPaymentUrl}${sep}callback=${encodeURIComponent(callbackUrl)}`;
+        }
+        if (!targetPaymentUrl.includes("is_partial=")) {
+          targetPaymentUrl = `${targetPaymentUrl}&is_partial=${isPartialNum}`;
+        }
+
+        console.log("[StripeRedirect] Navigating to Stripe Payment:", targetPaymentUrl);
+        showToast("Redirecting to Stripe secure checkout...", "info");
+        window.location.href = targetPaymentUrl;
+        return;
+      }
+    } catch (paymentErr: any) {
+      console.warn("Direct stripe redirect error:", paymentErr);
+      showToast(paymentErr?.message || "Failed to initiate payment. Please try again.", "error");
+    }
   };
 
   // 4. Step 4: Confirm Quote & Start Technician Assignment with Stripe Payment
   const handleConfirmQuote = async (options?: { isPartial?: boolean }) => {
     if (!currentBooking) return;
     try {
-      const isPartial = options?.isPartial ?? true;
+      const isPartialParam = options?.isPartial === false ? false : true;
+      const isPartialNum = isPartialParam ? 1 : 0;
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
           : `${getBackendRootUrl()}/booking-success`;
 
       const numericFare = Number(currentBooking.quote?.fareAmount || 0);
-      const depositVal = (numericFare * 0.25).toFixed(2);
+      const depositVal = isPartialNum === 1 ? (numericFare * 0.25).toFixed(2) : numericFare.toFixed(2);
 
       const updated = await confirmQuoteAndAssignTechnician(currentBooking.id, {
-        is_partial: isPartial ? 1 : 0,
+        is_partial: isPartialNum,
         payment_method: "stripe",
         payment_platform: "app",
         callback: callbackUrl,
@@ -314,7 +436,7 @@ export default function TyreAssistancePage() {
             },
             schedule: `${currentBooking.scheduledDate || "Today"} ${currentBooking.scheduledTimeSlot || "ASAP"}`,
             price: numericFare,
-            is_partial: isPartial ? 1 : 0,
+            is_partial: isPartialNum,
             deposit_amount: depositVal,
             service_name: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"} (${currentBooking.category === "emergency" ? "Emergency" : "Replacement"})`,
           })
@@ -338,11 +460,11 @@ export default function TyreAssistancePage() {
         serviceType: "tyre",
         serviceTitle: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"} (${currentBooking.category === "emergency" ? "Emergency" : "Replacement"})`,
         serviceCategoryName: "Tyre Assistance",
-        providerName: currentBooking.provider?.name || "MMC Tyre Specialist",
+        providerName: currentBooking.provider?.name || "Motor Market Club Tyre Specialist",
         providerPhone: currentBooking.provider?.phone,
         totalAmount: numericFare,
         isPaid: false,
-        paymentStatus: isPartial ? "Partial Deposit" : "Pending Payment",
+        paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Full Online Payment",
         paymentMethod: "Stripe (Online)",
         status: "accepted",
         statusDisplay: "Accepted",
@@ -354,52 +476,50 @@ export default function TyreAssistancePage() {
         createdAt: new Date().toISOString(),
       });
 
-      const isUuidStr = (str: any): boolean =>
-        typeof str === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
-
       let targetPaymentUrl =
         updated?.redirect_link ||
-        (updated as any)?.content?.url ||
         (updated as any)?.content?.redirect_link ||
+        (updated as any)?.content?.url ||
         (updated as any)?.content?.redirect_url ||
         (updated as any)?.content?.payment_url;
 
-      const content = (updated as any)?.content;
-      const possibleUuid =
-        (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
-        (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
-        (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
-        (content && isUuidStr(content.id) ? content.id : null) ||
-        (isUuidStr(updated?.id) ? updated.id : null);
+      if (!targetPaymentUrl) {
+        const payTargetId =
+          (isUuid(updated?.id) ? updated?.id : null) ||
+          (isUuid(currentBooking.id) ? currentBooking.id : null) ||
+          (typeof window !== "undefined" && isUuid(localStorage.getItem("last_tyre_booking_id"))
+            ? localStorage.getItem("last_tyre_booking_id")
+            : null);
 
-      if (!targetPaymentUrl && possibleUuid) {
-        targetPaymentUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-          String(possibleUuid)
-        )}&is_partial=${isPartial ? 1 : 0}`;
+        if (payTargetId && isUuid(payTargetId)) {
+          targetPaymentUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+            String(payTargetId)
+          )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`;
+        }
       }
 
-      // ONLY redirect if we have a valid Stripe URL and it does NOT contain MMC-TYR-
-      if (
-        typeof targetPaymentUrl === "string" &&
-        targetPaymentUrl.startsWith("http") &&
-        !targetPaymentUrl.includes("payment_id=MMC-")
-      ) {
-        showToast("Redirecting to Stripe secure checkout...", "info");
-        window.location.href = targetPaymentUrl;
-        return;
+      if (targetPaymentUrl && typeof targetPaymentUrl === "string") {
+        if (!targetPaymentUrl.startsWith("http")) {
+          targetPaymentUrl = `${getBackendRootUrl()}${targetPaymentUrl.startsWith("/") ? "" : "/"}${targetPaymentUrl}`;
+        }
+        
+        // Verify payment_id in URL is a genuine UUID, not an MMC- local string
+        const pIdMatch = targetPaymentUrl.match(/payment_id=([^&]+)/);
+        if (pIdMatch && pIdMatch[1] && !isUuid(pIdMatch[1])) {
+          console.warn("[TyrePayment] Blocked invalid non-UUID payment_id redirect:", pIdMatch[1]);
+        } else {
+          showToast("Redirecting to Stripe secure checkout...", "info");
+          window.location.href = targetPaymentUrl;
+          return;
+        }
       }
 
-      // If no valid Stripe UUID or redirect link, NEVER send MMC-TYR-xxx to Demandium Stripe gateway!
-      // Proceed directly to technician assignment / confirmation in the app!
-      console.warn("No Stripe redirect URL returned, proceeding with booking confirmation");
-      await handleTechnicianAssigned();
-      return;
+      showToast("Booking confirmed! Dispatching nearest technician...", "success");
+      setCurrentBooking(updated || currentBooking);
+      setCurrentStep("technician_assigning");
     } catch (err: any) {
       console.warn("Tyre booking error:", err);
-      // NEVER redirect to payment/stripe/pay with MMC-TYR-...
-      await handleTechnicianAssigned();
-      return;
+      showToast(err?.message || "Payment initialization failed. Please try again.", "error");
     }
   };
 
@@ -419,8 +539,8 @@ export default function TyreAssistancePage() {
         : rawRef.replace(/^#/, "");
       const isEmergency = assigned.category === "emergency";
       const notifTitle = isEmergency
-        ? "MMC Emergency Tyre Dispatched! 🚨"
-        : "MMC Tyre Booking Confirmed! 🛞";
+        ? "Motor Market Club Emergency Tyre Dispatched! 🚨"
+        : "Motor Market Club Tyre Booking Confirmed! 🛞";
       const notifBody = `Booking #${refNum} (${isEmergency ? "Emergency Service" : "Tyre Replacement"}) is confirmed! Technician assigned.`;
 
       triggerDevicePushNotification(notifTitle, notifBody);
@@ -466,7 +586,7 @@ export default function TyreAssistancePage() {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-6">
+      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pt-4 sm:pt-6 space-y-6">
         {/* Desktop Top Navigation & Zone Detection Banner */}
         <div className="hidden lg:flex items-center justify-between pb-4 border-b border-white/10">
           {/* Breadcrumb */}
@@ -492,7 +612,7 @@ export default function TyreAssistancePage() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              MMC
+              Motor Market Club
             </span>
             <span className="text-xs text-white/70 font-medium">
               Roadside Tyre Assistance & Mobile Fitting
@@ -528,81 +648,18 @@ export default function TyreAssistancePage() {
           </div>
         </div>
 
-        {/* Desktop Multi-Step Progress Stepper */}
-        <div className="hidden lg:block p-4 rounded-3xl bg-[#141210] border border-white/10 shadow-lg">
-          <div className="grid grid-cols-6 gap-2">
-            {STEP_LABELS.map((step) => {
-              const isDone = currentStepObj.stepNumber > step.stepNumber;
-              const isCurrent = currentStepObj.stepNumber === step.stepNumber;
-              const isAccessible = step.stepNumber <= maxStepReached;
-
-              return (
-                <button
-                  type="button"
-                  key={step.key}
-                  disabled={!isAccessible}
-                  onClick={() => {
-                    if (isAccessible) {
-                      setCurrentStep(step.key);
-                    }
-                  }}
-                  className={`p-2.5 rounded-2xl flex items-center space-x-2.5 transition-all text-left w-full ${isCurrent
-                    ? "bg-[#FAD293]/15 border border-[#FAD293] text-[#FAD293]"
-                    : isAccessible
-                      ? "bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-[#FAD293]/50 cursor-pointer"
-                      : "text-white/30 border border-transparent cursor-not-allowed"
-                    }`}
-                >
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isCurrent
-                      ? "bg-[#FAD293] text-black"
-                      : isDone
-                        ? "bg-white/20 text-white"
-                        : "bg-white/5 text-white/40"
-                      }`}
-                  >
-                    {isDone ? "✓" : step.stepNumber}
-                  </div>
-                  <span className="text-xs font-semibold truncate">
-                    {step.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Mobile Multi-Step Progress Stepper */}
-        <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {STEP_LABELS.map((step) => {
-            const isDone = currentStepObj.stepNumber > step.stepNumber;
-            const isCurrent = currentStepObj.stepNumber === step.stepNumber;
-            const isAccessible = step.stepNumber <= maxStepReached;
-
-            return (
-              <button
-                type="button"
-                key={step.key}
-                disabled={!isAccessible}
-                onClick={() => isAccessible && setCurrentStep(step.key)}
-                className={`px-3 py-1.5 rounded-full flex items-center space-x-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition ${isCurrent
-                    ? "bg-[#FAD293] text-black font-bold"
-                    : isAccessible
-                      ? "bg-white/10 text-white hover:bg-white/20 cursor-pointer"
-                      : "bg-white/5 text-white/30 cursor-not-allowed"
-                  }`}
-              >
-                <span>{isDone ? "✓" : step.stepNumber}</span>
-                <span>{step.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Main Content Responsive Grid (Desktop 2-Column Layout, Mobile Focused View) */}
+        {/* Main Content Responsive Grid (Desktop 2-Column Layout, Immersive Full Width for Flows) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column (Main Active Step) */}
-          <div className="lg:col-span-8 w-full max-w-2xl lg:max-w-none mx-auto">
+          {/* Main Active Step Column */}
+          <div
+            className={`w-full mx-auto ${
+              currentStep === "emergency_flow" ||
+              currentStep === "replacement_tyres" ||
+              currentStep === "schedule_location"
+                ? "lg:col-span-12"
+                : "lg:col-span-8 max-w-2xl lg:max-w-none"
+            }`}
+          >
             {currentStep === "category" && (
               <TyreCategoryStep
                 onSelectCategory={handleSelectCategory}
@@ -610,11 +667,19 @@ export default function TyreAssistancePage() {
               />
             )}
 
-            {currentStep === "assistance_type" && (
-              <AssistanceTypeStep
-                selectedType={selectedAssistanceType}
-                onSelectType={setSelectedAssistanceType}
-                onContinue={handleContinueAssistanceType}
+            {currentStep === "emergency_flow" && (
+              <EmergencyProviderSelectionStep
+                onBack={() => setCurrentStep("category")}
+                onBookingComplete={(booking) => {
+                  setCurrentBooking(booking);
+                  setCurrentStep("booking_confirmed");
+                }}
+              />
+            )}
+
+            {currentStep === "replacement_tyres" && (
+              <TyreReplacementSelectionStep
+                onSelectTyre={handleSelectTyre}
                 onBack={() => setCurrentStep("category")}
               />
             )}
@@ -623,8 +688,15 @@ export default function TyreAssistancePage() {
               <ScheduleLocationStep
                 category={selectedCategory}
                 assistanceType={selectedAssistanceType}
+                selectedTyre={selectedTyre}
                 onSubmit={handleSubmitScheduleAndLocation}
-                onBack={() => setCurrentStep("assistance_type")}
+                onBack={() => {
+                  if (selectedCategory === "replacement") {
+                    setCurrentStep("replacement_tyres");
+                  } else {
+                    setCurrentStep("category");
+                  }
+                }}
               />
             )}
 
@@ -654,8 +726,11 @@ export default function TyreAssistancePage() {
             )}
           </div>
 
-          {/* Right Column (Desktop Live Order Summary & Assistance Hub) */}
-          <div className="hidden lg:block lg:col-span-4 sticky top-6 space-y-4">
+          {/* Right Column (Desktop Live Order Summary & Assistance Hub for Standard Steps) */}
+          {currentStep !== "emergency_flow" &&
+            currentStep !== "replacement_tyres" &&
+            currentStep !== "schedule_location" && (
+              <div className="hidden lg:block lg:col-span-4 sticky top-6 space-y-4">
             {/* Live Assistance Summary Card */}
             <div className="p-6 rounded-3xl bg-[#141210] border border-white/10 space-y-5 shadow-2xl">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -673,16 +748,7 @@ export default function TyreAssistancePage() {
                 <div className="flex justify-between items-center text-white/70">
                   <span>Selected Category:</span>
                   <span className="font-bold text-white capitalize">
-                    {selectedCategory}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-white/70">
-                  <span>Assistance Type:</span>
-                  <span className="font-bold text-[#FAD293] capitalize">
-                    {selectedAssistanceType === "recovery_truck"
-                      ? "Recovery Truck"
-                      : "Mobile Tyre Fitting"}
+                    {selectedCategory === "emergency" ? "Tyre Emergency" : "Tyre Replacement"}
                   </span>
                 </div>
 
@@ -744,7 +810,7 @@ export default function TyreAssistancePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-white truncate">
-                    {currentBooking?.provider?.name || "MMC Certified Provider"}
+                    {currentBooking?.provider?.name || "Motor Market Club Certified Provider"}
                   </h4>
                   <p className="text-[10px] text-white/50 truncate">
                     {currentBooking?.provider?.address || "Mobile Service at Location"}
@@ -772,8 +838,9 @@ export default function TyreAssistancePage() {
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
+    </div>
 
       {/* Full Booking Details Modal / Drawer */}
       {currentBooking && (

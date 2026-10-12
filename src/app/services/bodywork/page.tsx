@@ -843,15 +843,17 @@ export default function BodyworkPage() {
             );
 
             if (confirmedRefId) {
-                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const resolvedAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const vReg = selectedPostForBids?.car_registration_number || "Vehicle";
+                const vModel = selectedPostForBids?.car_model || "Vehicle";
                 saveBookingMeta(confirmedRefId, {
                     price: effectivePrice,
                     serviceTitle: "Bodywork & Paint Repair",
                     serviceCategoryName: "Bodywork & Paint",
                     serviceType: "bodywork",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
-                    vehicleReg: regNo || "Vehicle",
-                    vehicleModel: carBrand || "Vehicle",
+                    vehicleReg: vReg,
+                    vehicleModel: vModel,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -868,8 +870,8 @@ export default function BodyworkPage() {
                     serviceAddress: resolvedAddr,
                     pickupLocation: resolvedAddr,
                     postcode: postcode || "",
-                    vehicleReg: regNo || "",
-                    vehicleModel: carBrand || "",
+                    vehicleReg: vReg,
+                    vehicleModel: vModel,
                     totalAmount: effectivePrice,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
@@ -1083,13 +1085,9 @@ export default function BodyworkPage() {
             navigateToView("quotes");
         } catch (err: any) {
             console.error("Quotation submission error:", err);
-            if (err?.response?.status === 429) {
-                showToast("Server rate limit reached (429). Please wait 15-30 seconds before sending another quote request.", "error");
-            } else {
-                const apiMsg = err?.response?.data?.message || err?.message || "Could not send quotation request. Please try again.";
-                const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
-                showToast(formattedMsg, "error");
-            }
+            const apiMsg = err?.response?.data?.message || err?.message || "Could not send quotation request. Please try again.";
+            const formattedMsg = typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg);
+            showToast(formattedMsg, "error");
         } finally {
             setSubmittingMultiQuote(false);
         }
@@ -1303,7 +1301,7 @@ export default function BodyworkPage() {
             {activeView === "landing" && (
                 <>
                     {/* Hero Section */}
-                    <section className="relative pt-6 pb-24 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto overflow-visible z-10">
+                    <section className="relative pt-6 pb-24 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-visible z-10">
                         {/* Background Ambient Car Image & Rich Automotive Spotlight */}
                         <div className="absolute right-0 top-0 w-full lg:w-3/5 h-full pointer-events-none opacity-55 lg:opacity-75 select-none z-0">
                             <Image
@@ -2014,7 +2012,7 @@ export default function BodyworkPage() {
                     </section>
 
                     {/* Interactive Before & After Comparison Slider */}
-                    <section className="py-16 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto">
+                    <section className="py-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto">
                         <div className="text-center max-w-2xl mx-auto mb-10">
                             <span className="text-xs font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/10 px-3 py-1 rounded-full border border-[#FAD293]/20">
                                 Flawless Transformations
@@ -2084,7 +2082,7 @@ export default function BodyworkPage() {
                     </section>
 
                     {/* Service Catalogue Grid */}
-                    <section className="py-16 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto border-t border-zinc-900">
+                    <section className="py-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto border-t border-zinc-900">
                         <div className="text-center max-w-2xl mx-auto mb-12">
                             <span className="text-xs font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/10 px-3 py-1 rounded-full border border-[#FAD293]/20">
                                 Comprehensive Capabilities
@@ -2172,7 +2170,7 @@ export default function BodyworkPage() {
                     </section>
 
                     {/* How It Works - 4 Steps */}
-                    <section className="py-16 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto border-t border-zinc-900">
+                    <section className="py-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto border-t border-zinc-900">
                         <div className="text-center max-w-2xl mx-auto mb-12">
                             <span className="text-xs font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/10 px-3 py-1 rounded-full border border-[#FAD293]/20">
                                 Simple 4-Step Process

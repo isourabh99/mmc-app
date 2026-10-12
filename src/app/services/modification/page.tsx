@@ -897,7 +897,7 @@ export default function ModificationPage() {
             }
 
             if (confirmedRefId && bookingPaymentMethod !== "stripe") {
-                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const resolvedAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
                     rawId: confirmedRefId,
@@ -909,8 +909,8 @@ export default function ModificationPage() {
                     serviceAddress: resolvedAddr,
                     pickupLocation: resolvedAddr,
                     postcode: postcode || "",
-                    vehicleReg: regNo || "",
-                    vehicleModel: carBrand || "",
+                    vehicleReg: "Vehicle",
+                    vehicleModel: "Vehicle",
                     totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
                     isPaid: false,
                     paymentStatus: "Pending Payment",
@@ -1139,7 +1139,7 @@ export default function ModificationPage() {
                     {/* =====================================================================
                         HERO & QUOTE SECTION
                     ====================================================================== */}
-                    <section className="relative pt-6 pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto overflow-hidden">
+                    <section className="relative pt-6 pb-20 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
                         {/* Background Ambient Glow Layer */}
                         <div className="absolute right-0 top-12 w-full lg:w-2/3 h-full pointer-events-none opacity-20 select-none z-0">
                             <div className="w-full h-full bg-[radial-gradient(#E8AF66_1px,transparent_1px)] [background-size:24px_24px]" />
@@ -1264,7 +1264,7 @@ export default function ModificationPage() {
                                     <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden mb-6 border border-[#E8AF66]/30 shadow-lg group">
                                         <Image
                                             src="/modificatoin.jpeg"
-                                            alt="MMC Modifications - Worn Leather Restored Character"
+                                            alt="Motor Market Club Modifications - Worn Leather Restored Character"
                                             fill
                                             priority
                                             sizes="(max-width: 640px) 100vw, 500px"

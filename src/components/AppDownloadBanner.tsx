@@ -23,7 +23,7 @@ export default function AppDownloadBanner() {
     <>
       <section
         id="app-download-promo"
-        aria-label="Download MMC App — 25% Off"
+        aria-label="Download Motor Market Club App — 25% Off"
         className="relative w-full bg-black py-4 sm:py-6 lg:py-8 overflow-hidden"
       >
         {/* Dynamic ambient gold glow */}
@@ -34,7 +34,7 @@ export default function AppDownloadBanner() {
           }}
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px]">
           {/* Main Card Frame with Gold Sheen Border */}
           <div className="relative w-full rounded-2xl sm:rounded-3xl border border-[#CEA46B]/35 bg-[#0a0705] shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden group">
             {/* Top gold sheen line */}
@@ -44,7 +44,7 @@ export default function AppDownloadBanner() {
             <div className="hidden md:block relative w-full aspect-[1920/640] overflow-hidden">
               <Image
                 src="/offer bnner-web.png"
-                alt="Download the MMC App Today — 25% OFF Smart Repair Services"
+                alt="Download the Motor Market Club App Today — 25% OFF Smart Repair Services"
                 fill
                 priority
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
@@ -107,33 +107,33 @@ export default function AppDownloadBanner() {
             </div>
 
             {/* Mobile Banner (Phone view) */}
-            <div className="block md:hidden relative w-full aspect-[600/380] overflow-hidden">
+            <div className="block md:hidden relative w-full aspect-[600/390] sm:aspect-[600/380] overflow-hidden">
               <Image
                 src="/offer bnner-mobile.png"
-                alt="Download the MMC App Today — 25% OFF Smart Repair Services"
+                alt="Download the Motor Market Club App Today — 25% OFF Smart Repair Services"
                 fill
                 priority
                 className="w-full h-full object-cover"
                 sizes="100vw"
               />
 
-              {/* Mobile SVG Interactive Click Bar */}
-              <div className="absolute inset-x-0 bottom-3 z-30 flex flex-col items-center gap-2 px-3">
-                <div className="grid grid-cols-2 gap-2 w-full max-w-[340px]">
+              {/* Mobile SVG Interactive Click Bar (Aligned under text on the right side) */}
+              <div className="absolute right-2.5 xs:right-3.5 sm:right-5 bottom-2 xs:bottom-2.5 sm:bottom-3 z-30 flex flex-col items-center gap-1.5 w-[63%] max-w-[270px]">
+                <div className="grid grid-cols-2 gap-1.5 xs:gap-2 w-full">
                   <a
                     href={APP_STORE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => handleStoreClick("apple", e)}
-                    className="flex items-center justify-center gap-2 py-1.5 px-2.5 h-[42px] rounded-[9px] bg-black border-[1.5px] border-[#A6A6A6] text-white shadow-lg active:scale-95 select-none"
+                    className="flex items-center justify-center gap-1.5 xs:gap-2 px-1.5 xs:px-2.5 h-[38px] xs:h-[42px] rounded-xl bg-black/95 border border-[#CEA46B]/50 hover:border-[#FAD293] text-white shadow-xl shadow-black/80 active:scale-95 transition-all select-none"
                     aria-label="Download on the Apple App Store"
                   >
-                    <svg className="w-4 h-5 fill-white text-white shrink-0" viewBox="0 0 170 170">
+                    <svg className="w-3.5 h-4.5 xs:w-4 xs:h-5 fill-white text-white shrink-0" viewBox="0 0 170 170">
                       <path fill="currentColor" d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.74 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.85-12.01-14.42-5.77-8.8-10.22-19.11-13.34-30.93-3.13-11.83-4.7-23.01-4.7-33.56 0-14.63 3.63-26.65 10.89-36.07 7.26-9.42 16.48-14.28 27.65-14.59 4.35 0 9.27 1.15 14.77 3.44 5.5 2.29 9.17 3.49 11.02 3.59 1.63 0 5.43-1.25 11.41-3.76 5.98-2.5 10.99-3.65 15.02-3.44 14.63.76 25.86 6.3 33.69 16.63-12.98 7.84-19.34 18.66-19.1 32.48.24 10.74 4.22 19.82 11.95 27.24 3.82 3.69 8.24 6.44 13.26 8.26-2.61 7.64-5.83 15.03-9.66 22.17zM119.22 31.02c0-7.29 2.65-14.15 7.95-20.58 5.3-6.43 11.75-10.24 19.36-11.44.22 1.41.33 2.72.33 3.92 0 7.39-2.73 14.37-8.19 20.93-5.46 6.56-11.99 10.37-19.59 11.44-.22-1.3-.33-2.61-.33-3.92z" />
                     </svg>
                     <div className="flex flex-col text-left leading-none">
-                      <span className="text-[7.5px] font-normal text-white/90 leading-none mb-0.5">Download on the</span>
-                      <span className="text-[13px] font-semibold text-white tracking-tight leading-none">App Store</span>
+                      <span className="text-[6.5px] xs:text-[7.5px] font-normal text-white/80 leading-none mb-0.5">Download on the</span>
+                      <span className="text-[11px] xs:text-[12.5px] font-bold text-white tracking-tight leading-none">App Store</span>
                     </div>
                   </a>
 
@@ -142,28 +142,28 @@ export default function AppDownloadBanner() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => handleStoreClick("google", e)}
-                    className="flex items-center justify-center gap-2 py-1.5 px-2.5 h-[42px] rounded-[9px] bg-black border-[1.5px] border-[#A6A6A6] text-white shadow-lg active:scale-95 select-none"
+                    className="flex items-center justify-center gap-1.5 xs:gap-2 px-1.5 xs:px-2.5 h-[38px] xs:h-[42px] rounded-xl bg-black/95 border border-[#CEA46B]/50 hover:border-[#FAD293] text-white shadow-lg shadow-black/80 active:scale-95 transition-all select-none"
                     aria-label="Get it on Google Play"
                   >
-                    <svg className="w-4 h-4.5 shrink-0" viewBox="0 0 512 512">
+                    <svg className="w-3.5 h-4 xs:w-4 xs:h-4.5 shrink-0" viewBox="0 0 512 512">
                       <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z"/>
                       <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z"/>
                       <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z"/>
                       <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z"/>
                     </svg>
                     <div className="flex flex-col text-left leading-none">
-                      <span className="text-[7px] font-medium text-white/90 tracking-wider uppercase leading-none mb-0.5">GET IT ON</span>
-                      <span className="text-[12.5px] font-semibold text-white tracking-tight leading-none">Google Play</span>
+                      <span className="text-[6px] xs:text-[7px] font-semibold text-white/80 tracking-wider uppercase leading-none mb-0.5">GET IT ON</span>
+                      <span className="text-[10.5px] xs:text-[12px] font-bold text-white tracking-tight leading-none">Google Play</span>
                     </div>
                   </a>
                 </div>
 
                 <button
                   onClick={(e) => handleStoreClick("apple", e)}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#FAD293] underline cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[9.5px] xs:text-[10.5px] font-semibold text-[#FAD293] hover:text-white transition-colors cursor-pointer select-none"
                 >
                   <span>Download the app</span>
-                  <ArrowRight size={11} />
+                  <ArrowRight size={10} className="text-[#FAD293]" />
                 </button>
               </div>
             </div>
@@ -191,7 +191,7 @@ export default function AppDownloadBanner() {
                 <Smartphone size={24} />
               </div>
               <h3 className="text-xl font-bold text-white">
-                Download the MMC App
+                Download the Motor Market Club App
               </h3>
               <p className="text-xs text-white/70">
                 Claim your <span className="text-[#FAD293] font-bold">25% OFF</span> on Smart Repairs & Luxury Services on mobile.

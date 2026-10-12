@@ -161,7 +161,7 @@ function LoginContent() {
         localStorage.removeItem("mmc_custom_notifications");
         try {
           sessionStorage.removeItem("mmc_pending_booking");
-        } catch {}
+        } catch { }
 
         // Fetch and cache user profile immediately
         try {
@@ -260,7 +260,7 @@ function LoginContent() {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     maxLength={6}
-                    placeholder="••••••"
+                    placeholder="••••"
                     value={otp}
                     onChange={(e) => {
                       const value = e.target.value
@@ -284,8 +284,8 @@ function LoginContent() {
                       {resendingOtp
                         ? "Resending..."
                         : countdown > 0
-                        ? `Resend in ${countdown}s`
-                        : "Resend OTP"}
+                          ? `Resend in ${countdown}s`
+                          : "Resend OTP"}
                     </button>
                   </div>
                 </div>

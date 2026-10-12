@@ -684,11 +684,21 @@ export interface PostBidsResponse {
  * Get Received Quotes / Bids from Providers for a Post
  * GET /customer/post/bid?post_id={{post_id}}&limit=10&offset=1
  */
+const alloyBidsCache = new Map<string, { data: PostBidItem[]; timestamp: number }>();
+
 export const getReceivedBidsForPost = async (
   postId: string,
   limit: number = 10,
   offset: number = 1
 ): Promise<PostBidItem[]> => {
+  if (!postId) return [];
+
+  const cacheKey = `${postId}_${limit}_${offset}`;
+  const cached = alloyBidsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 12000) {
+    return cached.data;
+  }
+
   try {
     const zoneId = DEFAULT_ZONE_ID;
 
@@ -706,13 +716,17 @@ export const getReceivedBidsForPost = async (
       }
     );
 
-    if (response.data?.content?.data && Array.isArray(response.data.content.data)) {
-      return response.data.content.data;
+    const data = response.data?.content?.data || (response.data as any)?.data || (response.data as any)?.content;
+    const result = Array.isArray(data) ? data : [];
+    alloyBidsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
+  } catch (error: any) {
+    if (error?.response?.status === 429) {
+      console.warn(`[getReceivedBidsForPost] Rate limited for post ${postId}, returning cached bids.`);
+    } else {
+      console.warn(`Failed to fetch bids for post ${postId}:`, error?.message || error);
     }
-    return [];
-  } catch (error) {
-    console.error(`Failed to fetch bids for post ${postId}:`, error);
-    return [];
+    return cached?.data || [];
   }
 };
 
@@ -1275,7 +1289,7 @@ async function resolveAlloyPaymentUrl(
         if (pId) {
           redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
             String(pId)
-          )}&is_partial=${params.is_partial ?? 0}`;
+          )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(p.callback)}`;
           break;
         }
       } catch (switchErr: any) {
@@ -1290,10 +1304,15 @@ async function resolveAlloyPaymentUrl(
   }
 
   // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
-  if (!redirectLink && effectiveId) {
+  if (!redirectLink && bookingUuid) {
+    const successCb =
+      params.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success");
     redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-      String(effectiveId)
-    )}&is_partial=${params.is_partial ?? 0}`;
+      String(bookingUuid)
+    )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(successCb)}`;
   }
 
   if (redirectLink) {

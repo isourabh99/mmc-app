@@ -159,7 +159,7 @@ export default function Navbar() {
             : "bg-black/90 backdrop-blur-md"
           }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] flex items-center justify-between">
 
           {/* =================================================
             LOGO
@@ -168,11 +168,11 @@ export default function Navbar() {
           <Link
             href="/"
             className="flex items-center group"
-            aria-label="Motor Market Connect home"
+            aria-label="Motor Market Club home"
           >
             <Image
               src="/mmc-logo.jpg"
-              alt="Motor Market Connect"
+              alt="Motor Market Club"
               width={300}
               height={134}
               priority
@@ -494,7 +494,7 @@ export default function Navbar() {
         {/* Panel Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/8 shrink-0">
           <Link href="/" onClick={() => setMenuOpen(false)}>
-            <Image src="/mmc-logo.jpg" alt="MMC" width={120} height={54} className="h-9 w-auto object-contain" />
+            <Image src="/mmc-logo.jpg" alt="Motor Market Club" width={120} height={54} className="h-9 w-auto object-contain" />
           </Link>
           <button
             type="button"

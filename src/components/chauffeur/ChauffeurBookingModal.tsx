@@ -292,7 +292,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
           JSON.stringify({
             booking_id: bookingRef,
             readable_id: bookingRef,
-            provider: bookingChauffeur.provider || { company_name: "MMC Chauffeur Fleet" },
+            provider: bookingChauffeur.provider || { company_name: "Motor Market Club Chauffeur Fleet" },
             schedule: `${startDate} ${pickupTime}`,
             price: numericPrice,
             is_partial: isPartialPayment ? 1 : 0,
@@ -869,7 +869,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-white/50">Official Provider:</span>
                 <span className="font-bold text-white">
-                  {detailsChauffeur.provider?.company_name || "MMC Certified Chauffeur"}
+                  {detailsChauffeur.provider?.company_name || "Motor Market Club Certified Chauffeur"}
                 </span>
               </div>
               {detailsChauffeur.provider?.contact_person_name && (

@@ -27,7 +27,7 @@ interface PendingBooking {
   provider?: any;
   schedule?: string;
   price?: number | string;
-  is_partial?: number | boolean;
+  is_partial?: number | boolean | string;
   deposit_amount?: number;
   service_name?: string;
 }
@@ -38,10 +38,38 @@ function BookingSuccessContent() {
 
   const flag = searchParams.get("flag");
   const isFailed = flag === "fail" || flag === "cancel" || flag === "cancelled";
+  const rawToken = searchParams.get("token");
+
+  let parsedTokenBookingId: string | null = null;
+  if (rawToken) {
+    try {
+      const decoded = atob(rawToken);
+      if (decoded.startsWith("{")) {
+        const parsedObj = JSON.parse(decoded);
+        parsedTokenBookingId =
+          parsedObj.booking_id ||
+          parsedObj.bookingId ||
+          parsedObj.id ||
+          null;
+      } else {
+        const tokenParams = new URLSearchParams(decoded);
+        parsedTokenBookingId =
+          tokenParams.get("booking_id") ||
+          tokenParams.get("bookingId") ||
+          tokenParams.get("id") ||
+          null;
+      }
+    } catch {
+      // Ignored if rawToken is not base64
+    }
+  }
+
   const urlBookingId =
+    parsedTokenBookingId ||
     searchParams.get("booking_id") ||
     searchParams.get("bookingId") ||
-    searchParams.get("id");
+    searchParams.get("id") ||
+    searchParams.get("payment_id");
 
   const [bookingData, setBookingData] = useState<PendingBooking | null>(null);
   const [copied, setCopied] = useState(false);
@@ -87,28 +115,53 @@ function BookingSuccessContent() {
 
       const detectedType = cached?.service_name?.toLowerCase().includes("alloy")
         ? "alloy"
-        : cached?.service_name?.toLowerCase().includes("mod")
-          ? "modification"
-          : cached?.service_name?.toLowerCase().includes("chauffeur")
-            ? "chauffeur"
-            : cached?.service_name?.toLowerCase().includes("hire") || cached?.service_name?.toLowerCase().includes("car")
-              ? "car"
-              : cached?.service_name?.toLowerCase().includes("valet") || cached?.service_name?.toLowerCase().includes("wash")
-                ? "valet"
-                : cached?.service_name?.toLowerCase().includes("mechanic")
-                  ? "mechanical"
-                  : "bodywork";
+        : cached?.service_name?.toLowerCase().includes("tyre") || cached?.service_name?.toLowerCase().includes("tire")
+          ? "tyre"
+          : cached?.service_name?.toLowerCase().includes("emergency") || cached?.service_name?.toLowerCase().includes("recovery")
+            ? "emergency"
+            : cached?.service_name?.toLowerCase().includes("mod")
+              ? "modification"
+              : cached?.service_name?.toLowerCase().includes("chauffeur")
+                ? "chauffeur"
+                : cached?.service_name?.toLowerCase().includes("hire") || cached?.service_name?.toLowerCase().includes("car")
+                  ? "car"
+                  : cached?.service_name?.toLowerCase().includes("valet") || cached?.service_name?.toLowerCase().includes("wash")
+                    ? "valet"
+                    : cached?.service_name?.toLowerCase().includes("mechanic")
+                      ? "mechanical"
+                      : "bodywork";
 
-      // Mark as paid in local bookings cache with full metadata
+      const isPartial =
+        cached?.is_partial === 1 ||
+        cached?.is_partial === true ||
+        cached?.is_partial === "1";
+
+      const depositPaidAmount = isPartial
+        ? Number(cached?.deposit_amount || (rawPrice * 0.25).toFixed(2))
+        : rawPrice;
+
+      const remainingDueAmount = isPartial
+        ? Number((rawPrice * 0.75).toFixed(2))
+        : 0;
+
+      // Mark in local bookings cache with accurate partial / full payment flags
       saveBookingMeta(effectiveBookingId, {
-        isPaid: true,
-        paymentStatus: "paid",
+        isPaid: !isPartial,
+        isPartiallyPaid: isPartial,
+        is_partial: isPartial ? 1 : 0,
+        paidAmount: depositPaidAmount,
+        dueAmount: remainingDueAmount,
+        paymentStatus: isPartial ? "Partially Paid" : "paid",
         price: rawPrice,
         serviceTitle: cached?.service_name || "Vehicle Service",
         providerName: cached?.provider?.company_name,
         serviceType: detectedType,
         scheduleDate: schedParts[0] || new Date().toISOString().split("T")[0],
-        scheduleTime: schedParts[1] ? schedParts[1].slice(0, 5) : "11:00",
+        scheduleTime: String(sched).toLowerCase().includes("immediate")
+          ? "Immediate Dispatch"
+          : schedParts[1]
+            ? schedParts[1].slice(0, 5)
+            : "11:00",
       });
 
       const detectedCategory =
@@ -122,26 +175,38 @@ function BookingSuccessContent() {
                 ? "Mechanical Diagnostic & Repair"
                 : detectedType === "alloy"
                   ? "Alloy Wheel Refurbishment"
-                  : detectedType === "modification"
-                    ? "Custom Vehicle Modification"
-                    : "Bodywork & Paint Repair";
+                  : detectedType === "tyre"
+                    ? "Tyre Assistance & Mobile Fitting"
+                    : detectedType === "emergency"
+                      ? "Emergency Breakdown & Recovery"
+                      : detectedType === "modification"
+                        ? "Custom Vehicle Modification"
+                        : "Bodywork & Paint Repair";
 
       saveConfirmedBooking({
         id: String(effectiveBookingId),
         rawId: effectiveBookingId,
         serviceType: detectedType,
-        serviceTitle: cached?.service_name ,
+        serviceTitle: cached?.service_name,
         serviceCategoryName: detectedCategory,
-        providerName: cached?.provider?.company_name ,
+        providerName: cached?.provider?.company_name,
         providerPhone: cached?.provider?.company_phone,
         totalAmount: rawPrice,
-        isPaid: true,
-        paymentStatus: "Paid",
+        paidAmount: depositPaidAmount,
+        dueAmount: remainingDueAmount,
+        isPaid: !isPartial,
+        isPartiallyPaid: isPartial,
+        is_partial: isPartial ? 1 : 0,
+        paymentStatus: isPartial ? "Partially Paid" : "Paid",
         paymentMethod: "Stripe (Online)",
         status: "accepted",
         statusDisplay: "Accepted",
         scheduleDate: schedParts[0] || new Date().toISOString().split("T")[0],
-        scheduleTime: schedParts[1] ? schedParts[1].slice(0, 5) : "11:00",
+        scheduleTime: String(sched).toLowerCase().includes("immediate")
+          ? "Immediate Dispatch"
+          : schedParts[1]
+            ? schedParts[1].slice(0, 5)
+            : "11:00",
         fullScheduleDisplay: sched,
         createdAt: new Date().toISOString(),
       });

@@ -36,7 +36,7 @@ const steps = [
   {
     number: "04",
     title: "Book & Drive Away",
-    desc: "Confirm your booking securely through MMC. Track the job, pay safely, and leave a review.",
+    desc: "Confirm your booking securely through Motor Market Club. Track the job, pay safely, and leave a review.",
     icon: (
       <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -64,7 +64,7 @@ export default function HowItWorksSection() {
         />
       </div>
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
         <div className="text-center mb-16">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
@@ -95,7 +95,7 @@ export default function HowItWorksSection() {
             </span>
           </h2>
           <p className="text-white/50 text-lg max-w-2xl mx-auto">
-            From request to completion, MMC handles everything so you can focus on the road ahead.
+            From request to completion, Motor Market Club handles everything so you can focus on the road ahead.
           </p>
         </div>
 

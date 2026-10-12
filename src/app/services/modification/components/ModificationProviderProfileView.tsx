@@ -108,7 +108,7 @@ export default function ModificationProviderProfileView({
                                 </span>
                                 {isMMC && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E8AF66] bg-[#E8AF66]/10 px-2.5 py-0.5 rounded-full border border-[#E8AF66]/30 uppercase tracking-wider">
-                                        MMC Certified Partner
+                                        Motor Market Club Certified Partner
                                     </span>
                                 )}
                             </div>

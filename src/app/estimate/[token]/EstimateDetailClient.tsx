@@ -7,6 +7,7 @@ import Image from "next/image";
 import {
   Receipt,
   CheckCircle2,
+  Check,
   BadgeCheck,
   Clock,
   Car,
@@ -28,6 +29,7 @@ import {
   User,
   Image as ImageIcon,
   Tag,
+  Info,
   X,
 } from "lucide-react";
 import {
@@ -51,8 +53,10 @@ function EstimateDetailInner() {
   // Selected Image for Lightbox Modal
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Accept Flow
-  const [paymentMethod, setPaymentMethod] = useState<string>("cash_after_service");
+  // Accept / Payment Flow
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isPartialPayment, setIsPartialPayment] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [acceptedSuccess, setAcceptedSuccess] = useState(false);
 
@@ -130,11 +134,12 @@ function EstimateDetailInner() {
 
   useEffect(() => {
     const authToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const activeToken = getToken();
     if (!authToken) {
-      const activeToken = getToken();
-      const returnPath = activeToken && activeToken !== "[token]" && activeToken !== "[id]"
-        ? `/estimate/${activeToken}`
-        : "/estimate";
+      const returnPath =
+        activeToken && activeToken !== "[token]" && activeToken !== "[id]"
+          ? `/estimate/${encodeURIComponent(activeToken)}`
+          : "/estimate";
       router.push(`/login?redirect=${encodeURIComponent(returnPath)}`);
       return;
     }
@@ -145,7 +150,7 @@ function EstimateDetailInner() {
     if (typeof window !== "undefined" && navigator.clipboard) {
       const token = estimate?.link_token || estimate?.id || getToken();
       const shareUrl = token
-        ? `${window.location.origin}/estimate/${token}`
+        ? `${window.location.origin}/estimate/${encodeURIComponent(token)}`
         : `${window.location.origin}/estimate`;
       navigator.clipboard.writeText(shareUrl);
       showToast("Estimate link copied to clipboard!", "success");
@@ -159,18 +164,56 @@ function EstimateDetailInner() {
   };
 
   const handleAccept = async () => {
-    const tokenToAccept = estimate?.link_token || estimate?.id || tokenParam;
-    if (!tokenToAccept) return;
+    if (!estimate && !tokenParam) return;
+    const authToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!authToken) {
+      const activeToken = getToken();
+      const returnPath = activeToken && activeToken !== "[token]" && activeToken !== "[id]"
+        ? `/estimate/${encodeURIComponent(activeToken)}`
+        : "/estimate";
+      showToast("Please login to accept and authorize this estimate.", "info");
+      router.push(`/login?redirect=${encodeURIComponent(returnPath)}`);
+      return;
+    }
     try {
       setAccepting(true);
-      const res = await acceptCustomerEstimate(tokenToAccept, paymentMethod);
-      setAcceptedSuccess(true);
-      setEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: paymentMethod } : null));
-      showToast(res.message || "Quotation accepted successfully!", "success");
+      const isPartialNum = isPartialPayment ? 1 : 0;
+      const res = await acceptCustomerEstimate(estimate || tokenParam, "stripe", isPartialNum);
 
       if (res.redirect_url) {
+        if (typeof window !== "undefined" && estimate) {
+          try {
+            const grandTotalVal = Number(
+              estimate.total_amount ??
+              estimate.grand_total ??
+              estimate.price ??
+              0
+            );
+            const depVal = Math.round(grandTotalVal * 0.25 * 100) / 100;
+            sessionStorage.setItem(
+              "mmc_pending_booking",
+              JSON.stringify({
+                booking_id: res.data?.booking_id || res.data?.id || estimate.id,
+                readable_id: estimate.readable_id || res.data?.readable_id,
+                service_name: serviceName,
+                price: grandTotalVal,
+                deposit_amount: isPartialNum === 1 ? depVal : grandTotalVal,
+                is_partial: isPartialNum,
+                provider: estimate.provider,
+                schedule: estimate.service_schedule || new Date().toISOString(),
+              })
+            );
+          } catch {}
+        }
+        showToast("Redirecting to Stripe secure checkout...", "info");
         window.location.href = res.redirect_url;
+        return;
       }
+
+      setAcceptedSuccess(true);
+      setEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: "stripe" } : null));
+      setShowPaymentModal(false);
+      showToast(res.message || "Quotation authorized successfully!", "success");
     } catch (err: any) {
       showToast(err.message || "Failed to accept estimate", "error");
     } finally {
@@ -291,7 +334,7 @@ function EstimateDetailInner() {
             <div className="flex items-center gap-3">
               <Image
                 src="/mmc-logo.jpg"
-                alt="Motor Market Connect"
+                alt="Motor Market Club"
                 width={160}
                 height={60}
                 className="h-10 w-auto object-contain rounded-lg"
@@ -301,7 +344,7 @@ function EstimateDetailInner() {
                 <span className="text-[10px] font-black text-[#f2cb87] uppercase tracking-widest block">
                   Official Provider Estimate
                 </span>
-                <span className="text-xs text-white/50">Motor Market Connect UK</span>
+                <span className="text-xs text-white/50">Motor Market Club UK</span>
               </div>
             </div>
 
@@ -607,60 +650,53 @@ function EstimateDetailInner() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Ready to proceed?</h4>
-                    <p className="text-xs text-white/50">Select your preferred payment method to authorize this estimate</p>
+                {/* Total Quote Box with 25% Deposit Eligible Badge */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#1c1712] border border-[#3a2a17] space-y-4 shadow-lg">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">
+                        TOTAL QUOTE AMOUNT
+                      </span>
+                      <span className="text-2xl sm:text-3xl font-black text-white">
+                        £{grandTotal.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#f2cb87]/10 border border-[#f2cb87]/30 text-xs font-bold text-[#f2cb87] self-start sm:self-auto">
+                      <span className="w-2 h-2 rounded-full bg-[#f2cb87] animate-pulse" />
+                      <span>25% Deposit Eligible</span>
+                    </div>
                   </div>
 
-                  {/* Payment Method Switcher */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("cash_after_service")}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${paymentMethod === "cash_after_service"
-                          ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
-                          : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                        }`}
-                    >
-                      <Banknote size={14} />
-                      <span>Pay After Service</span>
-                    </button>
+                  {/* Terms Acceptance Checkbox */}
+                  <label className="flex items-start gap-3 cursor-pointer group pt-1 border-t border-white/5">
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-[#f2cb87] accent-[#f2cb87] focus:ring-[#f2cb87] cursor-pointer"
+                    />
+                    <span className="text-xs text-zinc-300 group-hover:text-white transition-colors leading-relaxed">
+                      I accept the estimate terms, deposit policies, and authorize the workshop repair service.
+                    </span>
+                  </label>
 
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("stripe")}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${paymentMethod === "stripe"
-                          ? "border-[#f2cb87] bg-[#f2cb87]/15 text-[#f2cb87]"
-                          : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                        }`}
-                    >
-                      <CreditCard size={14} />
-                      <span>Pay by Card / Stripe</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                  <div className="flex items-center gap-2 text-xs text-white/50">
-                    <ShieldCheck size={16} className="text-[#f2cb87]" />
-                    <span>Protected by MMC Certified Workshop Guarantee</span>
-                  </div>
-
+                  {/* Confirm Booking CTA */}
                   <button
                     type="button"
-                    onClick={handleAccept}
-                    disabled={accepting}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] px-8 py-3.5 text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-xl shadow-[#d09a50]/25 disabled:opacity-50 cursor-pointer"
+                    disabled={!termsAccepted}
+                    onClick={() => setShowPaymentModal(true)}
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base transition-all shadow-xl shadow-[#D5A054]/25 flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {accepting ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <CheckCircle2 size={16} />
-                    )}
-                    <span>{accepting ? "Authorizing Estimate..." : "Accept & Authorize Estimate"}</span>
-                    <ArrowRight size={14} />
+                    <Sparkles size={16} />
+                    <span>Confirm Booking</span>
+                    <ArrowRight size={16} />
                   </button>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-xs text-white/50 pt-1">
+                  <ShieldCheck size={15} className="text-[#f2cb87]" />
+                  <span>Protected by MMC Certified Workshop Guarantee</span>
                 </div>
               </div>
             )}
@@ -686,6 +722,167 @@ function EstimateDetailInner() {
             alt="Vehicle damage preview"
             className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl border border-white/10 shadow-2xl"
           />
+        </div>
+      )}
+
+      {/* ─── SELECT PAYMENT METHOD MODAL (Deposit 25% vs Full Online) ─── */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl border border-[#3a2a17] bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-white">Select Payment Method</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Choose how you want to pay for this repair estimate
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Payment Options */}
+            <div className="space-y-3 pt-1">
+              {/* Option 1: Deposit (25% Advance) */}
+              <div
+                onClick={() => setIsPartialPayment(true)}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                  isPartialPayment
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                      <Banknote className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">Deposit</span>
+                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
+                          25% ADVANCE
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay 25% deposit now to secure reservation
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                      isPartialPayment
+                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                        : "border-zinc-700 bg-zinc-900"
+                    }`}
+                  >
+                    {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
+                    <span className="text-sm font-extrabold text-[#E8AF66]">
+                      £{(Math.round(grandTotal * 0.25 * 100) / 100).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Due on vehicle arrival (75%):</span>
+                    <span className="font-semibold text-zinc-300">
+                      £{(Math.round((grandTotal - Math.round(grandTotal * 0.25 * 100) / 100) * 100) / 100).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 2: Online Payment (Full 100%) */}
+              <div
+                onClick={() => setIsPartialPayment(false)}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
+                  !isPartialPayment
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-white block">Online Payment</span>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Pay full amount now online
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                      !isPartialPayment
+                        ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                        : "border-zinc-700 bg-zinc-900"
+                    }`}
+                  >
+                    {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
+                  <span className="text-zinc-300">Amount Due Now:</span>
+                  <span className="text-sm font-extrabold text-white">£{grandTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Informational Callout Box */}
+            <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-3.5 flex items-start gap-3 text-xs">
+              <Info className="w-4 h-4 text-[#E8AF66] shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-bold text-[#E8AF66] block">
+                  {isPartialPayment ? "25% Advance Payment Required" : "100% Online Secure Payment"}
+                </span>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  {isPartialPayment
+                    ? "You must pay a 25% deposit upfront to confirm your reservation. The remaining 75% will be paid once the vehicle is delivered or handed over."
+                    : "Pay the full quotation amount upfront securely via Stripe for instant vehicle service authorization."}
+                </p>
+              </div>
+            </div>
+
+            {/* Pay CTA */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleAccept}
+                disabled={accepting}
+                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {accepting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-zinc-950" />
+                    <span>Redirecting to Payment Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {isPartialPayment
+                        ? `PAY DEPOSIT (£${(Math.round(grandTotal * 0.25 * 100) / 100).toFixed(2)})`
+                        : `PAY FULL AMOUNT (£${grandTotal.toFixed(2)})`}
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-zinc-950" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

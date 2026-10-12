@@ -65,15 +65,6 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
   ]);
   const [chatInput, setChatInput] = useState<string>("");
 
-  const handleConfirm = async () => {
-    setIsConfirming(true);
-    try {
-      await onConfirm();
-    } catch (err) {
-      console.error("Confirmation error:", err);
-      setIsConfirming(false);
-    }
-  };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();

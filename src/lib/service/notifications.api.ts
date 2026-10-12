@@ -383,13 +383,21 @@ function normalizeBidNotification(
   };
 }
 
-/**
- * 100% Dynamic Fetch of Customer Booking Notifications from Live API
- * Strictly calls:
- * GET /customer/booking?limit=10&offset=1&booking_status=all&service_type=all&booking_type=car
- * GET /customer/post?limit=10&offset=1
- */
-export async function fetchBookingNotifications(): Promise<{
+let cachedNotifsResult: {
+  notifications: BookingNotification[];
+  unreadCount: number;
+  isLive: boolean;
+  isAuthenticated: boolean;
+} | null = null;
+let lastNotifsFetchTime = 0;
+let inFlightNotifsPromise: Promise<{
+  notifications: BookingNotification[];
+  unreadCount: number;
+  isLive: boolean;
+  isAuthenticated: boolean;
+}> | null = null;
+
+export async function fetchBookingNotifications(forceRefresh = false): Promise<{
   notifications: BookingNotification[];
   unreadCount: number;
   isLive: boolean;
@@ -399,7 +407,35 @@ export async function fetchBookingNotifications(): Promise<{
     return { notifications: [], unreadCount: 0, isLive: false, isAuthenticated: false };
   }
 
-  // Strictly require user login token
+  const now = Date.now();
+  if (!forceRefresh && cachedNotifsResult && now - lastNotifsFetchTime < 20000) {
+    return cachedNotifsResult;
+  }
+
+  if (inFlightNotifsPromise) {
+    return inFlightNotifsPromise;
+  }
+
+  inFlightNotifsPromise = (async () => {
+    try {
+      const res = await doFetchBookingNotifications();
+      cachedNotifsResult = res;
+      lastNotifsFetchTime = Date.now();
+      return res;
+    } finally {
+      inFlightNotifsPromise = null;
+    }
+  })();
+
+  return inFlightNotifsPromise;
+}
+
+async function doFetchBookingNotifications(): Promise<{
+  notifications: BookingNotification[];
+  unreadCount: number;
+  isLive: boolean;
+  isAuthenticated: boolean;
+}> {
   const token = localStorage.getItem("token");
   if (!token) {
     return {
