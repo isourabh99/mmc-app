@@ -1039,7 +1039,7 @@ export default function AlloyWheelPage() {
             );
 
             if (confirmedRefId) {
-                const resolvedAddr = postcode || bookingPostItem?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const resolvedAddr = postcode || (bookingPostItem as any)?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 saveBookingMeta(confirmedRefId, {
                     price: effectivePrice,
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
@@ -1420,7 +1420,7 @@ export default function AlloyWheelPage() {
                     {/* =====================================================================
                         HERO & QUOTE SECTION
                     ====================================================================== */}
-                    <section className="relative pt-6 pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto overflow-hidden">
+                    <section className="relative pt-6 pb-20 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
                         {/* Background Car Image Ambient Layer */}
                         <div className="absolute right-0 top-12 w-full lg:w-2/3 h-full pointer-events-none opacity-25 lg:opacity-40 select-none z-0">
                             <Image
@@ -1744,8 +1744,8 @@ export default function AlloyWheelPage() {
 
                     {/* Technicians Quick Bar if searched & available */}
                     {hasSearched && providers.length > 0 && (
-                        <div className="bg-gradient-to-r from-zinc-950 via-[#16171B] to-zinc-950 border-y border-zinc-800/80 py-4 px-4 sm:px-6 lg:px-12">
-                            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="bg-gradient-to-r from-zinc-950 via-[#16171B] to-zinc-950 border-y border-zinc-800/80 py-4 px-4 sm:px-8 lg:px-[50px]">
+                            <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
                                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                                     <div>
@@ -1772,8 +1772,8 @@ export default function AlloyWheelPage() {
                     {/* =====================================================================
           TRUST & VALUE PROPOSITION BAR (CHAMPAGNE / LIGHT BANNER)
       ====================================================================== */}
-                    <section className="bg-[#EFE7DE] text-zinc-950 py-7 px-4 sm:px-6 lg:px-12 w-full shadow-inner">
-                        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 items-center">
+                    <section className="bg-[#EFE7DE] text-zinc-950 py-7 px-4 sm:px-8 lg:px-[50px] w-full shadow-inner">
+                        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 items-center">
                             {/* Pillar 1 */}
                             <div className="flex items-center gap-3.5">
                                 <div className="w-10 h-10 rounded-full bg-zinc-950/10 flex items-center justify-center text-zinc-950 shrink-0">
@@ -1839,7 +1839,7 @@ export default function AlloyWheelPage() {
                     {/* =====================================================================
           BEFORE & AFTER SECTION ("Bring Back the Shine to Your Wheels")
       ====================================================================== */}
-                    <section className="py-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto">
+                    <section className="py-20 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto">
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
                             {/* Left Column: Heading, Description, CTA, Happy Customers */}
                             <div className="lg:col-span-6 space-y-6">

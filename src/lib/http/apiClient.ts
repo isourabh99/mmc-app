@@ -66,15 +66,18 @@ apiClient.interceptors.response.use(
   async (error) => {
     const config = error.config;
 
-    // Handle 429 Rate Limiting with automatic backoff retry
-    if (error?.response?.status === 429 && config && !config._retry429) {
-      config._retry429 = true;
-      const retryAfterHeader = error.response.headers?.["retry-after"];
-      const delayMs = retryAfterHeader ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 3000) : 1500;
+    // Handle 429 Rate Limiting with automatic backoff retry (up to 3 attempts)
+    if (error?.response?.status === 429 && config) {
+      config._retry429Count = (config._retry429Count || 0) + 1;
+      if (config._retry429Count <= 3) {
+        const retryAfterHeader = error.response.headers?.["retry-after"];
+        const delayMs = retryAfterHeader
+          ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 3000)
+          : config._retry429Count * 1200;
 
-      console.warn(`[apiClient] Rate limited (429). Retrying request in ${delayMs}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return apiClient(config);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return apiClient(config);
+      }
     }
 
     // Friendly message for 429 if retry also failed

@@ -53,18 +53,16 @@ const companyLinks = [
 ];
 
 const supportLinks = [
-  // { label: "Help Centre", href: "/faqs" },
+  { label: "Help & FAQs", href: "/faqs" },
   { label: "Contact Us", href: "/contact" },
-  // { label: "Dispute Resolution", href: "/contact" },
-  // { label: "Safety Policy", href: "/faqs" },
-  // { label: "Provider Support", href: "/contact" },
+  // { label: "How It Works", href: "/how-it-works" },
 ];
 
 const legalLinks = [
-  { label: "Privacy Policy", href: "/faqs" },
-  { label: "Terms of Service", href: "/faqs" },
-  // { label: "Cookie Policy", href: "/faqs" },
-  // { label: "Accessibility", href: "/faqs" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Terms & Conditions", href: "/terms-and-conditions" },
+  { label: "Cancellation Policy", href: "/cancellation-policy" },
+  { label: "Refund Policy", href: "/refund-policy" },
 ];
 
 const socials = [
@@ -156,7 +154,7 @@ export default function Footer() {
         }}
       />
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         {/* Main Grid Layout Fixed: Using 6 columns on lg screens so Brand takes 2 cols and the 4 link columns take 1 col each */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-10 lg:gap-8 mb-14">
           
@@ -166,7 +164,7 @@ export default function Footer() {
               <div className="flex items-center gap-3 mb-4">
                 <Image
                   src="/mmc-logo.jpg"
-                  alt="Motor Market Connect"
+                  alt="Motor Market Club"
                   width={360}
                   height={160}
                   className="h-16 w-auto object-contain object-left"
@@ -182,7 +180,7 @@ export default function Footer() {
               {/* Newsletter Subscription */}
               <div className="mb-6 max-w-sm">
                 <p className="text-xs text-white/60 mb-2.5 tracking-wide font-medium">
-                  Stay updated with MMC news
+                  Stay updated with Motor Market Club news
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -261,7 +259,7 @@ export default function Footer() {
 
         {/* Bottom Bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
-          <p>© 2025 Motor Market Connect Club Ltd. All rights reserved.</p>
+          <p>© 2026 Motor Market Club Ltd. All rights reserved.</p>
           <div className="flex items-center gap-1.5">
             <span>Designed & Developed by</span>
             <a

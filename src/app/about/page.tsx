@@ -1,13 +1,16 @@
-import TrustSection from "@/components/TrustSection";
+"use client";
+
+import React from "react";
+import CmsPageRenderer from "@/components/common/CmsPageRenderer";
 
 export default function AboutPage() {
   return (
-    <>
-      <div className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto text-center">
-        <h1 className="text-4xl font-bold mb-4">About Us</h1>
-        <p className="text-white/60">Built on Trust & Excellence.</p>
-      </div>
-      <TrustSection />
-    </>
+    <CmsPageRenderer
+      pageKey="about-us"
+      fallbackTitle="About Motor Market Club"
+      badgeLabel="Who We Are"
+      defaultHtmlContent="<p>At Motor Market Club we are committed to providing reliable, affordable, and high-quality car care services that keep your vehicle running at its best. Whether it's routine maintenance, diagnostics, or major repairs, our team of experienced technicians is dedicated to delivering exceptional service with honesty and transparency.</p><p>We understand that your car is an essential part of your daily life, which is why we focus on quick turnaround times, genuine spare parts, and customer satisfaction.</p>"
+      showTrustSection={true}
+    />
   );
 }

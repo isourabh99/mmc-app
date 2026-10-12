@@ -483,7 +483,7 @@ export default function MechanicalPage() {
         damage_description: damageDesc || notes || "Mechanical inspection and repairs requested",
         car_registration_number: regNo || "BD51 SMR",
         car_model: carModel || "Vehicle",
-        notes: notes || damageDesc || "Mechanical booking via MMC app",
+        notes: notes || damageDesc || "Mechanical booking via Motor Market Club app",
         answers,
         postcode: postcode || "London, UK",
         zone_id: DEFAULT_ZONE_ID,
@@ -527,10 +527,14 @@ export default function MechanicalPage() {
         typeof str === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
-      if (!redirectUrl && bId) {
+      if (!redirectUrl && bId && !String(bId).startsWith("MMC-MEC-")) {
+        const callbackUrl =
+          typeof window !== "undefined"
+            ? `${window.location.origin}/booking-success`
+            : "https://mmcclub.co.uk/booking-success";
         redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
           String(bId)
-        )}`;
+        )}&is_partial=${isPartialPayment ? 1 : 0}&callback=${encodeURIComponent(callbackUrl)}`;
       }
 
       try {
@@ -558,7 +562,7 @@ export default function MechanicalPage() {
         serviceType: "mechanical",
         serviceTitle: "Mechanical Diagnostic & Repair",
         serviceCategoryName: "Mechanical & Garage",
-        providerName: selectedProvider?.company_name || "MMC Mechanical Partner",
+        providerName: selectedProvider?.company_name || "Motor Market Club Mechanical Partner",
         providerPhone: selectedProvider?.company_phone,
         serviceAddress: resolvedMecAddr,
         pickupLocation: resolvedMecAddr,
@@ -644,7 +648,7 @@ export default function MechanicalPage() {
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#E8AF66]/10 border border-[#E8AF66]/20">
                   <Wrench className="w-3.5 h-3.5 text-[#E8AF66]" />
                   <span className="text-[11px] font-bold text-[#E8AF66] uppercase tracking-wider">
-                    MMC Certified Garage &amp; Mobile Mechanics
+                    Motor Market Club Certified Garage &amp; Mobile Mechanics
                   </span>
                 </div>
 
@@ -727,7 +731,7 @@ export default function MechanicalPage() {
                   <div className="relative -mx-6 -mt-6 sm:-mx-7 sm:-mt-7 mb-6 overflow-hidden rounded-t-2xl border-b border-zinc-800/80 aspect-[16/9] shadow-lg group">
                     <Image
                       src="/mechnical.png"
-                      alt="MMC Mechanical Services - Keep Your Drive Running Smooth"
+                      alt="Motor Market Club Mechanical Services - Keep Your Drive Running Smooth"
                       fill
                       priority
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 600px"
@@ -863,7 +867,7 @@ export default function MechanicalPage() {
                           {loadingServices ? (
                             <div className="py-6 flex flex-col items-center justify-center text-zinc-400 gap-2">
                               <RefreshCw className="w-5 h-5 animate-spin text-[#E8AF66]" />
-                              <span className="text-xs">Loading services from MMC...</span>
+                              <span className="text-xs">Loading services from Motor Market Club...</span>
                             </div>
                           ) : services.length === 0 ? (
                             <div className="py-6 text-center text-zinc-400 space-y-2">
@@ -1033,7 +1037,7 @@ export default function MechanicalPage() {
       {/* VIEW: PROVIDERS / MECHANICS LIST (Matching Screenshot 5)              */}
       {/* --------------------------------------------------------------------- */}
       {view === "providers" && (
-        <section className="max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-12 animate-fade-in space-y-6 pb-28">
+        <section className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto py-8 sm:py-10 px-4 sm:px-8 lg:px-[50px] animate-fade-in space-y-6 pb-28">
           {/* Top Search Context Banner */}
           <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1.5 min-w-0">
@@ -1944,7 +1948,7 @@ export default function MechanicalPage() {
                 </div>
 
                 <div className="text-[11px] text-zinc-400 bg-black/40 p-2.5 rounded-xl border border-zinc-800/80">
-                  Encrypted 256-bit secure gateway. Funds are held safely under MMC Customer Protection Guarantee.
+                  Encrypted 256-bit secure gateway. Funds are held safely under Motor Market Club Customer Protection Guarantee.
                 </div>
               </div>
             </div>
@@ -1986,7 +1990,7 @@ export default function MechanicalPage() {
             {/* Security Guarantee Notice */}
             <div className="flex items-center gap-3 text-xs text-zinc-400 px-1">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>MMC Verified Provider Guarantee • Free cancellation up to 2 hours before appointment</span>
+              <span>Motor Market Club Verified Provider Guarantee • Free cancellation up to 2 hours before appointment</span>
             </div>
 
             {/* Final Confirmation Button */}

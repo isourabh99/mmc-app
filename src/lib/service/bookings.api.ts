@@ -90,7 +90,9 @@ export const MMC_CATEGORY_IDS = {
 };
 
 export const getDigitalPaymentCallbackUrl = (): string => {
-  return `${getApiBaseUrl()}/digital-payment-booking-response`;
+  return typeof window !== "undefined"
+    ? `${window.location.origin}/booking-success`
+    : `${getBackendRootUrl()}/booking-success`;
 };
 
 /**
@@ -106,9 +108,14 @@ export function saveBookingMeta(
     vehicleModel?: string;
     vehicleReg?: string;
     providerName?: string;
+    providerPhone?: string;
     price?: number;
     totalAmount?: number;
     isPaid?: boolean;
+    isPartiallyPaid?: boolean;
+    is_partial?: number | boolean;
+    paidAmount?: number;
+    dueAmount?: number;
     paymentStatus?: string;
     scheduleDate?: string;
     scheduleTime?: string;
@@ -116,15 +123,16 @@ export function saveBookingMeta(
 ) {
   if (typeof window === "undefined" || !bookingId) return;
   try {
-    const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
+    const raw = localStorage.getItem("mmc_bookings_metadata");
+    const existing = raw && raw.trim() ? JSON.parse(raw) : {};
     const key = String(bookingId).toLowerCase().trim();
     const prev = existing[key] || {};
     const priceVal =
       meta.price !== undefined
         ? Number(meta.price)
         : meta.totalAmount !== undefined
-        ? Number(meta.totalAmount)
-        : prev.price;
+          ? Number(meta.totalAmount)
+          : prev.price;
 
     existing[key] = {
       ...prev,
@@ -143,7 +151,8 @@ export function saveBookingMeta(
 export function getBookingMeta(bookingId: string | number) {
   if (typeof window === "undefined" || !bookingId) return null;
   try {
-    const existing = JSON.parse(localStorage.getItem("mmc_bookings_metadata") || "{}");
+    const raw = localStorage.getItem("mmc_bookings_metadata");
+    const existing = raw && raw.trim() ? JSON.parse(raw) : {};
     const key = String(bookingId).toLowerCase().trim();
     if (existing[key]) return existing[key];
     for (const [k, v] of Object.entries(existing)) {
@@ -163,7 +172,7 @@ export function getBookingMeta(bookingId: string | number) {
 export function isFakeDummyId(id: any): boolean {
   if (!id) return true;
   const str = String(id).trim();
-  if (/^(AW|BW|MOD|MMC|tmp|temp)[-_]\d{8,}/i.test(str)) return true;
+  if (/^(AW|BW|MOD|MMC|EMG|VAL|TYR|tmp|temp)[-_]\d+/i.test(str)) return true;
   return false;
 }
 
@@ -504,7 +513,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
           return localIdCandidates.some((c) => bCandidates.includes(c));
         });
       }
-    } catch {}
+    } catch { }
 
     // 3. Check mmc_pending_booking in sessionStorage
     try {
@@ -525,7 +534,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
           }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // Status mapping
@@ -540,30 +549,66 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
 
   // Payment info — correctly handle partial payments & local confirmed payment flags
-  const rawDueAmount = raw.due_amount !== undefined ? Number(raw.due_amount) : undefined;
-  const rawPaidAmount = raw.paid_amount !== undefined ? Number(raw.paid_amount) : undefined;
+  let rawDueAmount =
+    raw.due_amount !== undefined && raw.due_amount !== null
+      ? Number(raw.due_amount)
+      : meta?.dueAmount !== undefined
+        ? Number(meta.dueAmount)
+        : localConfirmed?.dueAmount !== undefined
+          ? Number(localConfirmed.dueAmount)
+          : undefined;
 
-  const hasDueRemaining = rawDueAmount !== undefined && rawDueAmount > 0;
+  let rawPaidAmount =
+    raw.paid_amount !== undefined && raw.paid_amount !== null
+      ? Number(raw.paid_amount)
+      : meta?.paidAmount !== undefined
+        ? Number(meta.paidAmount)
+        : localConfirmed?.paidAmount !== undefined
+          ? Number(localConfirmed.paidAmount)
+          : undefined;
 
-  const isPaid = !hasDueRemaining && Boolean(
-    raw.is_paid === 1 ||
-    raw.is_paid === "1" ||
-    raw.is_paid === true ||
-    raw.payment_status === "paid" ||
-    meta?.isPaid === true ||
-    localConfirmed?.isPaid === true ||
-    (rawDueAmount !== undefined && rawDueAmount <= 0 && (rawPaidAmount !== undefined && rawPaidAmount > 0))
+  // Check if Demandium returned partial_payments array
+  if (Array.isArray(raw.partial_payments) && raw.partial_payments.length > 0) {
+    const latestPartial = raw.partial_payments[raw.partial_payments.length - 1];
+    if (latestPartial?.due_amount !== undefined && latestPartial?.due_amount !== null) {
+      rawDueAmount = Number(latestPartial.due_amount);
+    }
+    if (latestPartial?.paid_amount !== undefined && latestPartial?.paid_amount !== null) {
+      rawPaidAmount = Number(latestPartial.paid_amount);
+    }
+  }
+
+  const isPartialFlag = Boolean(
+    raw.is_partial === 1 ||
+    raw.is_partial === "1" ||
+    raw.is_partial === true ||
+    raw.payment_status === "partially_paid" ||
+    raw.payment_status === "partial" ||
+    meta?.is_partial === 1 ||
+    meta?.isPartiallyPaid === true ||
+    localConfirmed?.isPartiallyPaid === true ||
+    pendingSession?.is_partial === 1 ||
+    pendingSession?.is_partial === true ||
+    (rawDueAmount !== undefined && rawDueAmount > 0)
+  );
+
+  const hasDueRemaining = (rawDueAmount !== undefined && rawDueAmount > 0) || isPartialFlag;
+
+  // Booking is ONLY fully paid if NOT partial and NO due remaining
+  const isPaid = !isPartialFlag && !hasDueRemaining && Boolean(
+    (raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true || raw.payment_status === "paid") &&
+    (rawDueAmount === undefined || rawDueAmount <= 0)
   );
 
   // Detect partial payment
-  const isPartiallyPaid = !isPaid && Boolean(
+  const isPartiallyPaid = isPartialFlag || (!isPaid && Boolean(
     hasDueRemaining && (
       (rawPaidAmount !== undefined && rawPaidAmount > 0) ||
       raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true ||
-      raw.is_partial === 1 || raw.is_partial === "1" ||
-      localConfirmed?.isPartiallyPaid
+      localConfirmed?.isPartiallyPaid ||
+      meta?.isPartiallyPaid
     )
-  );
+  ));
 
   const paymentStatus = isPaid ? "Paid" : isPartiallyPaid ? "Partially Paid" : "Pending Payment";
   let paymentMethod = "Online (Stripe)";
@@ -576,10 +621,10 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   const rawDueSum = Number(raw.paid_amount || 0) + Number(raw.due_amount || 0);
   const detailSum = Array.isArray(raw.detail)
     ? raw.detail.reduce((sum: number, d: any) => {
-        const cost = Number(d.total_cost || d.service_cost || 0);
-        const qty = Number(d.quantity || 1);
-        return sum + (d.total_cost ? cost : cost * qty);
-      }, 0)
+      const cost = Number(d.total_cost || d.service_cost || 0);
+      const qty = Number(d.quantity || 1);
+      return sum + (d.total_cost ? cost : cost * qty);
+    }, 0)
     : 0;
 
   // Resolve total amount from all possible candidates with priority
@@ -916,18 +961,28 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   // Compute canonical paid / due amounts to expose on the item
   let computedPaidAmount = 0;
   let computedDueAmount = 0;
+
   if (isPaid) {
     computedPaidAmount = totalAmount;
     computedDueAmount = 0;
+  } else if (isPartiallyPaid) {
+    if (rawPaidAmount !== undefined && rawPaidAmount > 0 && rawPaidAmount < totalAmount) {
+      computedPaidAmount = rawPaidAmount;
+      computedDueAmount = rawDueAmount !== undefined && rawDueAmount > 0 ? rawDueAmount : Math.max(0, totalAmount - rawPaidAmount);
+    } else if (rawDueAmount !== undefined && rawDueAmount > 0) {
+      computedDueAmount = rawDueAmount;
+      computedPaidAmount = Math.max(0, totalAmount - rawDueAmount);
+    } else {
+      // Default standard deposit (25% deposit, 75% due)
+      computedPaidAmount = Number((totalAmount * 0.25).toFixed(2));
+      computedDueAmount = Number((totalAmount * 0.75).toFixed(2));
+    }
   } else if (rawDueAmount !== undefined && rawDueAmount >= 0) {
     computedDueAmount = rawDueAmount;
     computedPaidAmount = Math.max(0, totalAmount - rawDueAmount);
   } else if (rawPaidAmount !== undefined && rawPaidAmount > 0) {
     computedPaidAmount = rawPaidAmount;
     computedDueAmount = Math.max(0, totalAmount - rawPaidAmount);
-  } else if (raw.is_partial === 1 || raw.is_partial === "1") {
-    computedPaidAmount = totalAmount * 0.25;
-    computedDueAmount = totalAmount * 0.75;
   } else if (!isPaid) {
     computedDueAmount = totalAmount;
     computedPaidAmount = 0;
@@ -1121,16 +1176,96 @@ export async function fetchAllCustomerBookings(
 
   // Read locally saved bookings to merge or backfill any missing items
   if (typeof window !== "undefined") {
+    const findMatchingReal = (item: any): UnifiedBookingItem | undefined => {
+      const itemAmount = Number(
+        item.totalAmount || item.total_amount || item.price || item.raw?.total_booking_amount || 0
+      );
+      const itemType = item.serviceType || detectServiceType(item);
+
+      return Array.from(unifiedMap.values()).find((real) => {
+        if (isFakeDummyId(real.id)) return false;
+        if (real.id.toLowerCase() === String(item.id || "").toLowerCase()) return true;
+        if (real.rawId && String(real.rawId).toLowerCase() === String(item.rawId || "").toLowerCase()) return true;
+        // Price match (within £2) and matching service type or category
+        const realAmount = real.totalAmount;
+        const priceMatches = itemAmount > 0 && Math.abs(realAmount - itemAmount) < 2;
+        const typeMatches = itemType === "all" || real.serviceType === itemType || real.serviceType === "emergency";
+        return priceMatches && typeMatches;
+      });
+    };
+
+    const mergeLocalIntoReal = (real: UnifiedBookingItem, local: any) => {
+      const localTitle = local.serviceTitle || local.service_name || local.name;
+      if (
+        localTitle &&
+        localTitle !== "Specialist Vehicle Service" &&
+        localTitle !== "Emergency Roadside"
+      ) {
+        real.serviceTitle = localTitle;
+      }
+      const localProvider = local.providerName || local.provider?.company_name;
+      if (localProvider && !real.providerName) {
+        real.providerName = localProvider;
+      }
+      const localPhone = local.providerPhone || local.provider?.company_phone;
+      if (localPhone && !real.providerPhone) {
+        real.providerPhone = localPhone;
+      }
+      const localReg = local.vehicleReg || local.car_registration_number;
+      if (localReg && !real.vehicleReg) {
+        real.vehicleReg = localReg;
+      }
+      const localModel = local.vehicleModel || local.car_model;
+      if (localModel && !real.vehicleModel) {
+        real.vehicleModel = localModel;
+      }
+      if (local.paidAmount && local.paidAmount > 0) {
+        real.paidAmount = Math.max(real.paidAmount || 0, local.paidAmount);
+      }
+      if (local.dueAmount && local.dueAmount > 0) {
+        real.dueAmount = real.dueAmount > 0 ? real.dueAmount : local.dueAmount;
+      }
+      if (local.isPartiallyPaid) {
+        real.isPartiallyPaid = true;
+      }
+      saveBookingMeta(real.id, {
+        serviceTitle: real.serviceTitle,
+        providerName: real.providerName,
+        providerPhone: real.providerPhone,
+        vehicleReg: real.vehicleReg,
+        vehicleModel: real.vehicleModel,
+        paidAmount: real.paidAmount,
+        dueAmount: real.dueAmount,
+        isPartiallyPaid: real.isPartiallyPaid,
+      });
+    };
+
     try {
       const localRaw = localStorage.getItem("mmc_confirmed_bookings");
       if (localRaw) {
         const localList: any[] = JSON.parse(localRaw);
+        const cleanedLocalList: any[] = [];
+
         localList.forEach((b: any) => {
           const bId = String(b.id || b.rawId || "").trim();
-          if (bId && !isFakeDummyId(bId)) {
-            addToMap({ ...b, ...(b.raw || {}) });
+          if (!bId) return;
+
+          const matchingReal = findMatchingReal(b);
+          if (matchingReal) {
+            mergeLocalIntoReal(matchingReal, b);
+            return; // Merged into existing real server booking, skip adding duplicate
           }
+
+          if (isFakeDummyId(bId)) {
+            // Drop client-generated temporary dummy IDs so they never duplicate
+            return;
+          }
+
+          addToMap({ ...b, ...(b.raw || {}) });
+          cleanedLocalList.push(b);
         });
+
+        localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(cleanedLocalList));
       }
     } catch (e) {
       console.warn("[Bookings] Could not read local bookings:", e);
@@ -1141,11 +1276,16 @@ export async function fetchAllCustomerBookings(
       if (pendingRaw) {
         const pending = JSON.parse(pendingRaw);
         const pId = String(pending.booking_id || pending.readable_id || "").trim();
-        if (pId && !isFakeDummyId(pId)) {
-          addToMap(pending);
+        if (pId) {
+          const matchingReal = findMatchingReal(pending);
+          if (matchingReal) {
+            mergeLocalIntoReal(matchingReal, pending);
+          } else if (!isFakeDummyId(pId)) {
+            addToMap(pending);
+          }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // Sort: newest bookings strictly at the top
@@ -1160,4 +1300,55 @@ export async function fetchAllCustomerBookings(
 
   console.log("[Bookings] Total unique bookings:", allList.length, allList.map(b => `${b.id}(${b.status}, £${b.totalAmount})`));
   return allList;
+}
+
+/**
+ * Switch / Initiate payment for a booking
+ * POST /customer/booking/switch-payment-method
+ * Body: { booking_id: string, payment_method: string, callback?: string }
+ */
+export async function switchBookingPaymentMethod(
+  bookingId: string,
+  paymentMethod: string = "stripe",
+  callback?: string
+): Promise<{ success: boolean; redirect_url?: string; message?: string; data?: any }> {
+  const cleanId = String(bookingId || "").trim();
+  const callbackUrl =
+    callback ||
+    (typeof window !== "undefined"
+      ? `${window.location.origin}/booking-success`
+      : `${getApiBaseUrl()}/digital-payment-booking-response`);
+
+  const response = await apiClient.post("/customer/booking/switch-payment-method", {
+    booking_id: cleanId,
+    payment_method: paymentMethod,
+    callback: callbackUrl,
+  });
+
+  const data = response.data;
+  const content = data?.content;
+  const sRaw = typeof content === "object" && content !== null ? content : data || {};
+
+  const redirectUrl =
+    (typeof content === "string" && content.startsWith("http") ? content : null) ||
+    sRaw?.redirect_url ||
+    sRaw?.redirect_link ||
+    sRaw?.payment_url ||
+    sRaw?.url ||
+    sRaw?.stripe_url ||
+    sRaw?.link ||
+    data?.redirect_url ||
+    data?.url ||
+    (sRaw?.payment_id || sRaw?.id || sRaw?.booking_id
+      ? `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+        String(sRaw?.payment_id || sRaw?.id || sRaw?.booking_id)
+      )}&is_partial=0&callback=${encodeURIComponent(callbackUrl)}`
+      : undefined);
+
+  return {
+    success: true,
+    message: data?.message || "Payment initiated successfully",
+    redirect_url: redirectUrl,
+    data: data?.content || data,
+  };
 }

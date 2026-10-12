@@ -151,8 +151,10 @@ export interface CarDetailResponse {
 }
 
 export const getDigitalPaymentCallbackUrl = (): string => {
-  const apiBase = getApiBaseUrl();
-  return `${apiBase}/digital-payment-booking-response`;
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/booking-success`;
+  }
+  return "https://mmcclub.co.uk/booking-success";
 };
 
 export interface CarBookingPayload {
@@ -344,8 +346,8 @@ export const getCarList = async (
       list = content;
     } else if (content && Array.isArray(content.data)) {
       list = content.data;
-    } else if (Array.isArray(response.data?.data)) {
-      list = response.data.data;
+    } else if (Array.isArray((response.data as any)?.data)) {
+      list = (response.data as any).data;
     }
 
     if (list.length > 0) {

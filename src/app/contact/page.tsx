@@ -137,7 +137,7 @@ export default function ContactPage() {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto space-y-16">
+      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-16">
         {/* Header Section */}
         <div className="text-center max-w-3xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-[#FAD293]">
@@ -402,7 +402,7 @@ export default function ContactPage() {
                 Message Sent Successfully!
               </h3>
               <p className="text-xs sm:text-sm text-white/60 leading-relaxed max-w-sm mx-auto">
-                Thank you, <span className="text-white font-semibold">{submittedInquiry.name}</span>! Your inquiry has been dispatched to our MMC support desk.
+                Thank you, <span className="text-white font-semibold">{submittedInquiry.name}</span>! Your inquiry has been dispatched to our Motor Market Club support desk.
               </p>
             </div>
 

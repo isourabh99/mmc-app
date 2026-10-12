@@ -60,14 +60,14 @@ export default function MatchingSection() {
         }}
       />
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left: Showcase Image Banner */}
           <div className="relative w-full rounded-3xl overflow-hidden border border-[#FAD293]/25 shadow-2xl group bg-black/40">
             <div className="relative w-full aspect-[16/9] overflow-hidden rounded-3xl">
               <Image
                 src="/qoutes-2.png"
-                alt="Motor Market Connect - Choose With Confidence"
+                alt="Motor Market Club - Choose With Confidence"
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"

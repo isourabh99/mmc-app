@@ -754,11 +754,21 @@ export interface PostBidItem {
   provider: ProviderItem;
 }
 
+const bidsCache = new Map<string, { data: PostBidItem[]; timestamp: number }>();
+
 export const getReceivedBidsForPost = async (
   postId: string,
   limit: number = 10,
   offset: number = 1
 ): Promise<PostBidItem[]> => {
+  if (!postId) return [];
+
+  const cacheKey = `${postId}_${limit}_${offset}`;
+  const cached = bidsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 12000) {
+    return cached.data;
+  }
+
   try {
     const zoneId = DEFAULT_ZONE_ID;
     const response = await apiClient.get<any>("/customer/post/bid", {
@@ -767,13 +777,16 @@ export const getReceivedBidsForPost = async (
     });
 
     const data = response.data?.content?.data || response.data?.data || response.data?.content;
-    if (Array.isArray(data)) {
-      return data;
+    const result = Array.isArray(data) ? data : [];
+    bidsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
+  } catch (err: any) {
+    if (err?.response?.status === 429) {
+      console.warn(`[getReceivedBidsForPost] Rate limited for post ${postId}, using cached result if available.`);
+    } else {
+      console.warn("Could not load bids for post:", err?.message || err);
     }
-    return [];
-  } catch (err) {
-    console.error("Failed to load bids for post:", err);
-    return [];
+    return cached?.data || [];
   }
 };
 
@@ -1249,7 +1262,7 @@ async function resolveBodyworkPaymentUrl(
         if (pId) {
           redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
             String(pId)
-          )}&is_partial=${params.is_partial ?? 0}`;
+          )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(p.callback)}`;
           break;
         }
       } catch (switchErr: any) {
@@ -1264,10 +1277,15 @@ async function resolveBodyworkPaymentUrl(
   }
 
   // Fallback to direct Demandium Stripe pay endpoint if any valid booking identifier exists
-  if (!redirectLink && effectiveId) {
+  if (!redirectLink && bookingUuid) {
+    const successCb =
+      params.callback ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}/booking-success`
+        : "https://mmcclub.co.uk/booking-success");
     redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-      String(effectiveId)
-    )}&is_partial=${params.is_partial ?? 0}`;
+      String(bookingUuid)
+    )}&is_partial=${params.is_partial ?? 0}&callback=${encodeURIComponent(successCb)}`;
   }
 
   if (redirectLink) {

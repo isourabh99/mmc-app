@@ -16,7 +16,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "MMC — Motor Market Connect Club | Premium Automotive Marketplace",
+  title: "Motor Market Club | Premium Automotive Marketplace",
   description:
     "Connect with certified automotive service providers across Smart Repair, Denting & Painting, Modifications, Tyres, Car Wash, Chauffeur, and Car Rental. Get instant quotes from trusted professionals.",
   keywords:
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     apple: "/mmc-logo.jpg?v=2",
   },
   openGraph: {
-    title: "MMC — Motor Market Connect Club",
+    title: "Motor Market Club",
     description:
       "Premium automotive marketplace connecting you with certified service providers.",
     type: "website",

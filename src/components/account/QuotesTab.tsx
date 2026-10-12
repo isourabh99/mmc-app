@@ -79,7 +79,7 @@ export const QuotesTab: React.FC = () => {
       <div className="relative w-full overflow-hidden rounded-3xl border border-[#33271d] aspect-[1672/941] shadow-xl group">
         <Image
           src="/qoutes.png"
-          alt="MMC Quotation Requests & Specialist Offers"
+          alt="Motor Market Club Quotation Requests & Specialist Offers"
           fill
           priority
           sizes="(max-width: 1024px) 100vw, 900px"

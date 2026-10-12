@@ -10,14 +10,14 @@ const PROMO_SLIDES = [
     id: "lease-return",
     title: "Lease Return & Smart Repairs",
     image: "/newhome.png",
-    alt: "MMC Lease Return - Leave a Better Impression, 25% Off Smart Repairs",
+    alt: "Motor Market Club Lease Return - Leave a Better Impression, 25% Off Smart Repairs",
     href: "#get-quote",
   },
   {
     id: "all-services",
     title: "All-in-One Service Hub",
     image: "/home page.png",
-    alt: "MMC - Every Car Service. One Connected Place. Book. Compare. Connect.",
+    alt: "Motor Market Club - Every Car Service. One Connected Place. Book. Compare. Connect.",
     href: "/services",
   },
 ];
@@ -52,7 +52,7 @@ export default function HomePromoBanner() {
         }}
       />
 
-      <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-6">
+      <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px] space-y-4 sm:space-y-6">
         {/* Top Header & Interactive Tab Switcher */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-1">
           <div className="flex items-center gap-3">
@@ -66,7 +66,7 @@ export default function HomePromoBanner() {
                 backgroundClip: "text",
               }}
             >
-              MMC Exclusive Highlights
+              Motor Market Club Exclusive Highlights
             </span>
           </div>
 

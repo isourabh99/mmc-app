@@ -131,9 +131,16 @@ export const updateFCMTokenToBackend = async (fcmToken: string) => {
     }
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) return null;
-    const response = await apiClient.post("/customer/update-fcm-token", {
-      fcm_token: fcmToken,
-    });
+    let response;
+    try {
+      response = await apiClient.put("/customer/update-fcm-token", {
+        fcm_token: fcmToken,
+      });
+    } catch {
+      response = await apiClient.post("/customer/update-fcm-token", {
+        fcm_token: fcmToken,
+      });
+    }
     return response.data;
   } catch (err) {
     return null;

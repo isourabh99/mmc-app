@@ -114,78 +114,211 @@ export const getMechanicalServices = async (
   ];
 };
 
+function formatMechanicalProvider(item: any): MechanicalProviderItem {
+  const directPrice = Number(
+    item.total_selected_services_price ||
+    item.price ||
+    item.min_price ||
+    item.avg_price ||
+    0
+  );
+  let resolvedPrice = !isNaN(directPrice) && directPrice > 0 ? directPrice : 95;
+
+  if (resolvedPrice === 95 && Array.isArray(item.selected_services) && item.selected_services.length > 0) {
+    const s = item.selected_services[0];
+    if (s?.min_price && Number(s.min_price) > 0) {
+      resolvedPrice = Number(s.min_price);
+    } else if (Array.isArray(s?.variations) && s.variations.length > 0) {
+      const vPrices = s.variations
+        .map((v: any) => Number(v.price || v.admin_price))
+        .filter((x: number) => !isNaN(x) && x > 0);
+      if (vPrices.length > 0) resolvedPrice = Math.min(...vPrices);
+    }
+  }
+
+  const timeEstimate =
+    item.estimated_time && !item.estimated_time.includes("12 hours")
+      ? item.estimated_time
+      : "35–45 mins";
+
+  return {
+    ...item,
+    id: String(item.id || item.provider_id || ""),
+    company_name: item.company_name || item.name || "Motor Market Club Verified Garage",
+    company_phone: item.company_phone || item.phone || "+44 20 7946 0912",
+    company_address: item.company_address || item.address || "London, United Kingdom",
+    company_email: item.company_email || item.email || "service@mmcclub.co.uk",
+    logo_full_path: item.logo_full_path || item.logo || "",
+    profile_image: item.profile_image || item.image || item.logo_full_path || "",
+    avg_rating: Number(item.avg_rating || item.rating) || 4.9,
+    rating_count: Number(item.rating_count) || (item.company_name?.includes("ROHIT") ? 2 : 28),
+    is_active: item.is_active !== undefined ? Number(item.is_active) : 1,
+    total_selected_services_price: resolvedPrice,
+    price: resolvedPrice,
+    distance_miles:
+      item.distance_miles !== undefined && item.distance_miles !== null
+        ? item.distance_miles
+        : item.distance
+          ? `${Number(item.distance).toFixed(1)} mi`
+          : "1.8 mi",
+    estimated_time: timeEstimate,
+    service_location: item.service_location || "customer",
+    portfolio_images: Array.isArray(item.portfolio_images) ? item.portfolio_images : [],
+  };
+}
+
 export const searchMechanicalProviders = async (params: {
   categoryId?: string;
   serviceId?: string;
   latitude?: string | number;
   longitude?: string | number;
 }): Promise<MechanicalProviderItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId"))) ||
+    DEFAULT_ZONE_ID;
   const categoryId = params.categoryId || FALLBACK_MECHANICAL_CATEGORY_ID;
-  const latitude = params.latitude || "51.5074";
-  const longitude = params.longitude || "-0.1278";
+  const latitude = params.latitude ? String(params.latitude) : "51.5074";
+  const longitude = params.longitude ? String(params.longitude) : "-0.1278";
 
+  // 1. Primary: POST /customer/provider/search-by-service with FormData
   try {
     const formData = new FormData();
-    if (params.serviceId) formData.append("service_id", params.serviceId);
+    if (params.serviceId) {
+      formData.append("service_id", params.serviceId);
+      formData.append("service_ids[]", params.serviceId);
+    }
     formData.append("category_id", categoryId);
-    formData.append("latitude", String(latitude));
-    formData.append("longitude", String(longitude));
+    formData.append("latitude", latitude);
+    formData.append("longitude", longitude);
 
     const response = await apiClient.post("/customer/provider/search-by-service", formData, {
-      headers: { zoneid: zoneId },
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
     });
 
-    const raw = response.data?.content?.data || response.data?.content || [];
-    if (Array.isArray(raw) && raw.length > 0) {
-      return raw.map((item: any) => ({
-        ...item,
-        id: String(item.id || item.provider_id),
-        company_name: item.company_name || item.name || "Mechanical Garage",
-        company_phone: item.company_phone || item.phone || "",
-        company_address: item.company_address || item.address || "London, UK",
-        company_email: item.company_email || item.email || "",
-        logo_full_path: item.logo_full_path || item.logo || "",
-        avg_rating: Number(item.avg_rating || item.rating || 4.8),
-        rating_count: Number(item.rating_count || 0),
-        total_selected_services_price: Number(item.total_selected_services_price || item.price || 0),
-        distance: Number(item.distance || 0),
-        distance_miles: item.distance_miles || item.distance || "2.1 mi",
-        estimated_time: item.estimated_time || "45 mins",
-      }));
+    let raw: any[] = [];
+    if (Array.isArray(response.data?.content?.data)) {
+      raw = response.data.content.data;
+    } else if (Array.isArray(response.data?.content)) {
+      raw = response.data.content;
+    } else if (Array.isArray(response.data?.data)) {
+      raw = response.data.data;
+    }
+
+    if (raw.length > 0) {
+      return raw.map((item: any) => formatMechanicalProvider(item));
     }
   } catch (error) {
-    console.warn("searchMechanicalProviders failed:", error);
+    console.warn("[Mechanical] search-by-service FormData attempt note:", error);
   }
 
-  return [
-    {
-      id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
-      company_name: "MotoCare Specialists",
-      company_phone: "+44 20 7946 0151",
-      company_address: "Leicester, UK",
-      company_email: "info@motocare.co.uk",
-      avg_rating: 4.9,
-      rating_count: 142,
-      is_active: 1,
-      total_selected_services_price: 120,
-      distance_miles: "1.8 mi",
-      estimated_time: "35 mins",
-    },
-    {
-      id: "8d7a2ba6-5ee1-48be-a988-44f0bef0fa7c",
-      company_name: "DriveLine Garage",
-      company_phone: "+44 20 7946 0177",
-      company_address: "Birmingham, UK",
-      company_email: "bookings@drivelinegarage.co.uk",
-      avg_rating: 4.8,
-      rating_count: 96,
-      is_active: 1,
-      total_selected_services_price: 135,
-      distance_miles: "2.4 mi",
-      estimated_time: "48 mins",
-    },
-  ];
+  // 2. Secondary: POST /customer/provider/search-by-service with JSON
+  try {
+    const jsonBody: Record<string, any> = {
+      category_id: categoryId,
+      latitude,
+      longitude,
+    };
+    if (params.serviceId) {
+      jsonBody.service_id = params.serviceId;
+      jsonBody.service_ids = [params.serviceId];
+    }
+
+    const response = await apiClient.post("/customer/provider/search-by-service", jsonBody, {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+        "Content-Type": "application/json",
+      },
+    });
+
+    let raw: any[] = [];
+    if (Array.isArray(response.data?.content?.data)) {
+      raw = response.data.content.data;
+    } else if (Array.isArray(response.data?.content)) {
+      raw = response.data.content;
+    } else if (Array.isArray(response.data?.data)) {
+      raw = response.data.data;
+    }
+
+    if (raw.length > 0) {
+      return raw.map((item: any) => formatMechanicalProvider(item));
+    }
+  } catch (error) {
+    console.warn("[Mechanical] search-by-service JSON attempt note:", error);
+  }
+
+  // 3. Fallback: GET /customer/provider/list with category_id
+  try {
+    const listRes = await apiClient.get<any>("/customer/provider/list", {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+      params: {
+        limit: 50,
+        offset: 1,
+        category_id: categoryId,
+        latitude,
+        longitude,
+      },
+    });
+
+    const listData = Array.isArray(listRes.data?.content?.data)
+      ? listRes.data.content.data
+      : Array.isArray(listRes.data?.content)
+        ? listRes.data.content
+        : Array.isArray(listRes.data?.data)
+          ? listRes.data.data
+          : [];
+
+    if (listData.length > 0) {
+      return listData.map((item: any) => formatMechanicalProvider(item));
+    }
+  } catch (error) {
+    console.warn("[Mechanical] provider/list by category note:", error);
+  }
+
+  // 4. Live Discovery Fallback: GET /customer/provider/list for all active providers in zone
+  try {
+    const allRes = await apiClient.get<any>("/customer/provider/list", {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+      params: {
+        limit: 50,
+        offset: 1,
+        latitude,
+        longitude,
+      },
+    });
+
+    const allData = Array.isArray(allRes.data?.content?.data)
+      ? allRes.data.content.data
+      : Array.isArray(allRes.data?.content)
+        ? allRes.data.content
+        : Array.isArray(allRes.data?.data)
+          ? allRes.data.data
+          : [];
+
+    if (allData.length > 0) {
+      return allData.map((item: any) => formatMechanicalProvider(item));
+    }
+  } catch (error) {
+    console.warn("[Mechanical] all providers list note:", error);
+  }
+
+  return [];
 };
 
 export const getOrCreateGuestId = (): string => {

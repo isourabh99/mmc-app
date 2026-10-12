@@ -74,7 +74,7 @@ export default function ModificationTechniciansView({
     });
 
     return (
-        <div className="max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-12 animate-fade-in space-y-6 pb-28">
+        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto py-8 sm:py-10 px-4 sm:px-8 lg:px-[50px] animate-fade-in space-y-6 pb-28">
             {/* Top Search Context Banner */}
             <div className="bg-[#141518] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1.5 min-w-0">

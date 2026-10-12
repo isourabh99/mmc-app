@@ -163,11 +163,11 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
                   WebkitTextFillColor: "transparent",
                 }}
               >
-                MMC
+                Motor Market Club
               </span>
             </div>
             <span className="text-xs font-medium text-white/80">
-              {booking.provider?.name || "Motor Market Connect"}
+              {booking.provider?.name || "Motor Market Club"}
             </span>
           </div>
 

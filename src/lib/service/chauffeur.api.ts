@@ -231,8 +231,10 @@ export const searchChauffeurs = async ({
 };
 
 export const getDigitalPaymentCallbackUrl = (): string => {
-  const apiBase = getApiBaseUrl();
-  return `${apiBase}/digital-payment-booking-response`;
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/booking-success`;
+  }
+  return "https://mmcclub.co.uk/booking-success";
 };
 
 export interface ChauffeurBookingCoordinates {

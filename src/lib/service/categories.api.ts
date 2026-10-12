@@ -39,15 +39,29 @@ export const getCategories = async (
   limit: number = 10,
   offset: number = 1
 ): Promise<CategoryResponse> => {
-  const response = await apiClient.get<CategoryResponse>(
-    "/customer/category",
-    {
-      params: {
-        limit,
-        offset,
-      },
-    }
-  );
+  try {
+    const response = await apiClient.get<CategoryResponse>(
+      "/customer/category",
+      {
+        params: {
+          limit,
+          offset,
+        },
+      }
+    );
 
-  return response.data;
+    return response.data;
+  } catch (err) {
+    console.warn("getCategories: Backend returned an error or is unreachable. Using local fallback categories.", err);
+    return {
+      response_code: "default_fallback",
+      message: "Fallback categories",
+      content: {
+        current_page: 1,
+        data: [],
+        total: 0,
+        per_page: limit,
+      },
+    };
+  }
 };
