@@ -91,7 +91,7 @@ function EstimateHubContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090706] text-white py-4 sm:py-6 font-sans selection:bg-[#e7bd78] selection:text-black">
+    <div className="min-h-screen bg-[#090706] text-white pt-2 sm:pt-4 pb-8 sm:pb-12 font-sans selection:bg-[#e7bd78] selection:text-black">
       <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px]">
         {/* Sleek Page Header */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-[#33271d]/80 bg-[#120e0b]/90 backdrop-blur-md px-5 py-3.5 shadow-xl">

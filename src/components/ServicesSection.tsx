@@ -158,7 +158,7 @@ export default function ServicesSection() {
   return (
     <section
       id="services"
-      className="py-14 sm:py-20 bg-black relative overflow-hidden"
+      className="py-6 sm:py-12 lg:py-16 bg-black relative overflow-hidden"
     >
       {/* Background accent */}
       <div
@@ -170,7 +170,7 @@ export default function ServicesSection() {
 
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
         {/* Header */}
-        <div className="text-center mb-12 sm:mb-16">
+        <div className="text-center mb-6 sm:mb-10 lg:mb-14">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div
               className="h-px w-12"

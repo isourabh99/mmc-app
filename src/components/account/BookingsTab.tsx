@@ -168,6 +168,34 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
     [bookings]
   );
 
+  // Close booking detail modal and cleanly refresh the URL
+  const handleCloseDetailModal = useCallback(() => {
+    setSelectedBookingForModal(null);
+    setHighlightedBookingId(null);
+    setPendingBookingIdToOpen(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      let changed = false;
+      ["bookingId", "booking_id", "id", "payment_success"].forEach((key) => {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          changed = true;
+        }
+      });
+      if (changed) {
+        const search = url.searchParams.toString();
+        window.history.replaceState({}, "", url.pathname + (search ? `?${search}` : ""));
+      }
+    }
+  }, []);
+
+  // Sync initialBookingId prop dynamically if it changes
+  useEffect(() => {
+    if (initialBookingId) {
+      setPendingBookingIdToOpen(String(initialBookingId));
+    }
+  }, [initialBookingId]);
+
   // Listen for global custom event to open booking detail instantly from notifications
   useEffect(() => {
     const handleOpenEvent = (e: any) => {
@@ -943,12 +971,18 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       {/* 8. COMPREHENSIVE BOOKING DETAILS MODAL                                    */}
       {/* ========================================================================= */}
       {selectedBookingForModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-3xl bg-[#14110e] border border-white/20 p-6 sm:p-7 space-y-5 shadow-2xl text-left my-8 animate-in fade-in zoom-in-95 duration-200">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto cursor-pointer"
+          onClick={handleCloseDetailModal}
+        >
+          <div
+            className="relative w-full max-w-2xl rounded-3xl bg-[#14110e] border border-white/20 p-6 sm:p-7 space-y-5 shadow-2xl text-left my-8 animate-in fade-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Close Button */}
             <button
               type="button"
-              onClick={() => setSelectedBookingForModal(null)}
+              onClick={handleCloseDetailModal}
               className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white transition cursor-pointer"
             >
               <X size={18} />
@@ -1099,7 +1133,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setSelectedBookingForModal(null)}
+                  onClick={handleCloseDetailModal}
                   className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
                 >
                   Close

@@ -128,7 +128,7 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white relative py-20 px-4 sm:px-6 lg:px-8 selection:bg-[#FAD293] selection:text-black">
+    <div className="min-h-screen bg-black text-white relative pt-4 sm:pt-6 pb-16 px-4 sm:px-6 lg:px-8 selection:bg-[#FAD293] selection:text-black">
       {/* Luxury Ambient Glow Background */}
       <div
         className="fixed top-0 left-1/2 -translate-x-1/2 w-[850px] h-[400px] rounded-full blur-[160px] opacity-15 pointer-events-none z-0"
@@ -137,7 +137,7 @@ export default function ContactPage() {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-16">
+      <div className="relative z-10 max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-8 sm:space-y-10">
         {/* Header Section */}
         <div className="text-center max-w-3xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-[#FAD293]">

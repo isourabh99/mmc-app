@@ -36,7 +36,7 @@ export default function QuoteSection() {
   return (
     <section
       id="get-quote"
-      className="py-16 sm:py-24 relative overflow-hidden"
+      className="py-6 sm:py-12 lg:py-16 relative overflow-hidden"
       style={{ background: "linear-gradient(180deg, #050400, #000)" }}
     >
       <div
@@ -51,7 +51,7 @@ export default function QuoteSection() {
       />
 
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-14 items-center">
           {/* Left: Graphic Banner */}
           <div className="relative w-full rounded-3xl overflow-hidden border border-[#CEA46B]/25 bg-[#120E0B] shadow-[0_25px_80px_rgba(0,0,0,0.6)]">
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#FAD293]/60 to-transparent z-10" />

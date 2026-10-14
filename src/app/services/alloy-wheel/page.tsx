@@ -1420,7 +1420,7 @@ export default function AlloyWheelPage() {
                     {/* =====================================================================
                         HERO & QUOTE SECTION
                     ====================================================================== */}
-                    <section className="relative pt-6 pb-20 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
+                    <section className="relative pt-2 sm:pt-4 pb-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
                         {/* Background Car Image Ambient Layer */}
                         <div className="absolute right-0 top-12 w-full lg:w-2/3 h-full pointer-events-none opacity-25 lg:opacity-40 select-none z-0">
                             <Image

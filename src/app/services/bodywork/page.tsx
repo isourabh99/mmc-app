@@ -1301,7 +1301,7 @@ export default function BodyworkPage() {
             {activeView === "landing" && (
                 <>
                     {/* Hero Section */}
-                    <section className="relative pt-6 pb-24 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-visible z-10">
+                    <section className="relative pt-2 sm:pt-4 pb-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-visible z-10">
                         {/* Background Ambient Car Image & Rich Automotive Spotlight */}
                         <div className="absolute right-0 top-0 w-full lg:w-3/5 h-full pointer-events-none opacity-55 lg:opacity-75 select-none z-0">
                             <Image
@@ -1320,7 +1320,7 @@ export default function BodyworkPage() {
                         {/* Breadcrumbs */}
                         <nav
                             aria-label="Breadcrumb"
-                            className="relative z-10 flex items-center gap-2 text-xs sm:text-sm text-zinc-400 mb-8"
+                            className="relative z-10 flex items-center gap-2 text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-6"
                         >
                             <Link href="/" className="hover:text-white transition-colors">
                                 Home

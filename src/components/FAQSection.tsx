@@ -44,7 +44,7 @@ export default function FAQSection({
     <section
       id="faqs"
       className={`${
-        isStandalone ? "pt-6 pb-16 sm:pt-10 sm:pb-20" : "py-16 sm:py-24"
+        isStandalone ? "pt-1 pb-10 sm:pt-3 sm:pb-14" : "py-6 sm:py-12 lg:py-16"
       } bg-black relative overflow-hidden ${className}`}
     >
       <div
@@ -53,7 +53,7 @@ export default function FAQSection({
       />
 
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
-        <div className="text-center mb-14">
+        <div className={`text-center ${isStandalone ? "mb-4 sm:mb-8" : "mb-6 sm:mb-10"}`}>
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
             <span

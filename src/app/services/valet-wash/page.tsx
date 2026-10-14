@@ -614,7 +614,7 @@ export default function VehicleWashValetPage() {
       />
 
       {/* 1. Desktop Breadcrumb & Hero Header Section */}
-      <section className="border-b border-white/8 bg-gradient-to-b from-white/[0.04] to-transparent pt-6 pb-8 relative z-20">
+      <section className="border-b border-white/8 bg-gradient-to-b from-white/[0.04] to-transparent pt-2 sm:pt-4 pb-6 relative z-20">
         <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-4">
           {/* Breadcrumb Navigation */}
           <div className="flex items-center justify-between gap-4">

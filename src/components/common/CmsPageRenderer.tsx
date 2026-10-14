@@ -49,13 +49,13 @@ export default function CmsPageRenderer({
   const sanitizedHtml = typeof rawHtml === "string" ? rawHtml.replace(/\bMMC\b/g, "Motor Market Club") : "";
 
   return (
-    <div className="min-h-screen bg-[#090706] text-white pt-24 sm:pt-28 pb-20 selection:bg-[#FAD293] selection:text-black">
+    <div className="min-h-screen bg-[#090706] text-white pt-1 sm:pt-3 pb-12 selection:bg-[#FAD293] selection:text-black">
       {/* Background ambient gold glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-[#f2cb87]/5 rounded-full blur-[160px]" />
       </div>
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-6 sm:space-y-8 animate-fade-in">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-3 sm:space-y-4 animate-fade-in">
         {/* Breadcrumbs */}
         <nav className="flex items-center gap-2 text-xs text-white/50">
           <Link href="/" className="hover:text-[#f2cb87] transition-colors">
@@ -66,7 +66,7 @@ export default function CmsPageRenderer({
         </nav>
 
         {/* Page Header Card */}
-        <div className="relative overflow-hidden rounded-3xl border border-[#3a2c1e]/70 bg-gradient-to-br from-[#1c1409] via-[#161009] to-[#100c06] p-6 sm:p-10 shadow-2xl space-y-4">
+        <div className="relative overflow-hidden rounded-3xl border border-[#3a2c1e]/70 bg-gradient-to-br from-[#1c1409] via-[#161009] to-[#100c06] p-4 sm:p-6 lg:p-7 shadow-2xl space-y-2.5">
           <div className="absolute top-0 right-0 w-72 h-72 bg-[#f2cb87]/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#FAD293]/60 to-transparent" />
 
@@ -101,7 +101,7 @@ export default function CmsPageRenderer({
         </div>
 
         {/* TinyMCE Rich Content Body Card */}
-        <div className="relative rounded-3xl border border-[#3a2c1e]/60 bg-[#120d08]/90 backdrop-blur-2xl p-6 sm:p-10 lg:p-12 shadow-2xl space-y-6">
+        <div className="relative rounded-3xl border border-[#3a2c1e]/60 bg-[#120d08]/90 backdrop-blur-2xl p-5 sm:p-8 lg:p-10 shadow-2xl space-y-5">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#f2cb87]/30 to-transparent pointer-events-none" />
 
           {loading ? (

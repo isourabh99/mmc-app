@@ -1091,7 +1091,7 @@
     );
 
     return (
-      <div className="min-h-screen bg-[#070605] text-white relative overflow-x-hidden py-8 sm:py-14">
+      <div className="min-h-screen bg-[#070605] text-white relative overflow-x-hidden pt-2 sm:pt-4 pb-12 sm:pb-16">
         {/* Luxury Atmospheric Background Glows */}
         <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-[850px] h-[450px] rounded-full blur-[170px] opacity-20 pointer-events-none"

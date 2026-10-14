@@ -290,21 +290,29 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
     const dueAmt = isPartialNum === 1 ? Number((totalAmount * 0.75).toFixed(2)) : 0;
 
     try {
-      // 1. Add emergency service to cart (POST /customer/cart/add)
-      await addTyreToCart({
-        provider_id: provId,
-        service_id: TYRE_EMERGENCY_SERVICE_ID,
-        category_id: TYRE_CATEGORY_ID,
-        variant_key: situationType,
-        quantity: 1,
-        is_terms_accepted: 1,
-        zone_id: zoneId,
-      });
+      const callbackUrl = "https://mmcclub.co.uk/backend/api/v1/digital-payment-booking-response";
 
-      const callbackUrl =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/booking-success`
-          : "https://mmcclub.co.uk/booking-success";
+      // STEP 1: Add emergency service to cart (POST /customer/cart/add)
+      showToast("Adding tyre emergency service to cart...", "info");
+      try {
+        await addTyreToCart({
+          provider_id: provId,
+          service_id: TYRE_EMERGENCY_SERVICE_ID,
+          category_id: TYRE_CATEGORY_ID,
+          variant_key: situationType || "puncture",
+          quantity: 1,
+          is_terms_accepted: 1,
+          zone_id: zoneId,
+          callback: callbackUrl,
+          is_partial: isPartialNum,
+        });
+      } catch (cartErr: any) {
+        console.error("Cart add failed:", cartErr);
+        showToast(cartErr?.message || "Failed to add emergency service to cart.", "error");
+        return;
+      }
+
+      showToast("Service added to cart successfully!", "success");
 
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, "0");
@@ -312,7 +320,8 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         now.getHours()
       )}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-      // 2. Send booking request (POST /customer/booking/request/send)
+      // STEP 2: Send booking request (POST /customer/booking/request/send)
+      showToast("Creating booking session...", "info");
       const bookingRes = await sendBookingRequestToBackend({
         provider_id: provId,
         payment_method: "stripe",
@@ -320,28 +329,36 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         is_partial: isPartialNum,
         zone_id: zoneId,
         service_schedule: serviceSchedule,
-        service_address_id: "6",
+        service_address_id: "9",
         service_location: "customer",
         booking_type: "emergency",
         car_registration_number: (vehicleReg || "UK22-XYZ-9999").toUpperCase(),
         car_model: vehicleModel || "Honda Civic",
         notes: customSituation || `Emergency tyre repair requested (${situationType}) with online payment.`,
-        postcode: "SW1A 1AA",
-        latitude: String(latitude || "51.5074"),
-        longitude: String(longitude || "-0.1278"),
-        amount: totalAmount,
-        paid_amount: depositAmt,
-        due_amount: dueAmt,
-        total_cost: totalAmount,
         callback: callbackUrl,
       });
 
-      const confirmedRefId =
-        bookingRes?.content?.booking_id ||
-        bookingRes?.content?.id ||
-        bookingRes?.booking_id ||
-        bookingRes?.id ||
-        provId;
+      console.log("[EmergencyPayment] Booking response:", bookingRes);
+
+      // STEP 3: Extract redirect_link from response
+      let redirectUrl =
+        bookingRes?.content?.redirect_link ||
+        bookingRes?.redirect_link ||
+        bookingRes?.url ||
+        bookingRes?.redirect_url ||
+        bookingRes?.content?.url ||
+        bookingRes?.content?.payment_url;
+
+      const pIdMatch = typeof redirectUrl === "string" ? redirectUrl.match(/payment_id=([^&]+)/) : null;
+      const rawBookingId = bookingRes?.content?.booking_id || bookingRes?.content?.id || bookingRes?.booking_id;
+      const paymentUuid =
+        (pIdMatch ? decodeURIComponent(pIdMatch[1]) : null) ||
+        (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+        (typeof rawBookingId === "string" ? rawBookingId : null) ||
+        bookingRes?.content?.payment_id ||
+        null;
+
+      const confirmedRefId = paymentUuid || `MMC-EMG-${Date.now()}`;
 
       try {
         sessionStorage.setItem(
@@ -349,17 +366,19 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           JSON.stringify({
             booking_id: confirmedRefId,
             readable_id: confirmedRefId,
+            payment_id: paymentUuid,
             provider: {
               company_name: selectedProvider.company_name || "Emergency Mobile Tyre Provider",
               company_phone: selectedProvider.company_phone || "+44 20 7946 0912",
             },
             schedule: `${serviceSchedule}`,
-            price: Number(selectedProvider.price || 50),
+            price: totalAmount,
             is_partial: isPartialNum,
             deposit_amount: depositAmt,
             service_name: `Tyre Assistance: Emergency (${situationType})`,
           })
         );
+        localStorage.setItem("last_tyre_booking_id", String(confirmedRefId));
       } catch { }
 
       try {
@@ -370,7 +389,7 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           vehicleModel: vehicleModel || "Vehicle",
           vehicleReg: (vehicleReg || "UK22-XYZ-9999").toUpperCase(),
           providerName: selectedProvider.company_name,
-          price: Number(selectedProvider.price || 50),
+          price: totalAmount,
           isPaid: isPartialNum === 0,
           isPartiallyPaid: isPartialNum === 1,
           paidAmount: depositAmt,
@@ -378,37 +397,17 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         });
       } catch { }
 
-      let redirectUrl =
-        bookingRes?.redirect_link ||
-        bookingRes?.content?.redirect_link ||
-        bookingRes?.content?.url ||
-        bookingRes?.content?.redirect_url ||
-        bookingRes?.content?.payment_url;
-
-      if (typeof redirectUrl === "string") {
-        redirectUrl = redirectUrl.replace(/\\\//g, "/");
+      if (!redirectUrl && paymentUuid && isUuid(paymentUuid) && paymentUuid !== provId && paymentUuid !== DEFAULT_PROVIDER_ID) {
+        redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+          String(paymentUuid)
+        )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`;
       }
 
-      if (!redirectUrl) {
-        const pId = bookingRes?.content?.id || bookingRes?.content?.booking_id || provId;
-        if (pId && isUuid(pId)) {
-          redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-            String(pId)
-          )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`;
-        }
-      }
-
+      // STEP 4: Redirect user to Stripe payment URL
       if (redirectUrl && typeof redirectUrl === "string") {
         redirectUrl = redirectUrl.replace(/\\\//g, "/");
         if (!redirectUrl.startsWith("http")) {
           redirectUrl = `${getBackendRootUrl()}${redirectUrl.startsWith("/") ? "" : "/"}${redirectUrl}`;
-        }
-        if (!redirectUrl.includes("callback=")) {
-          const sep = redirectUrl.includes("?") ? "&" : "?";
-          redirectUrl = `${redirectUrl}${sep}callback=${encodeURIComponent(callbackUrl)}`;
-        }
-        if (!redirectUrl.includes("is_partial=")) {
-          redirectUrl = `${redirectUrl}&is_partial=${isPartialNum}`;
         }
         console.log("[EmergencyPayment] Redirecting to Stripe:", redirectUrl);
         showToast("Redirecting to Stripe secure checkout...", "info");

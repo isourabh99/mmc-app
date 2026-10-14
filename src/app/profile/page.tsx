@@ -426,7 +426,7 @@ export default function ProfilePage() {
 
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white px-4 sm:px-6 py-5 sm:py-6">
+    <main className="min-h-screen bg-[#050505] text-white px-4 sm:px-6 pt-2 sm:pt-4 pb-8 sm:pb-12">
       <div className="max-w-7xl mx-auto">
         
 

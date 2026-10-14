@@ -185,31 +185,36 @@ export default function Navbar() {
         ================================================= */}
 
           <div className="hidden lg:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="text-sm text-white/70 hover:text-white transition-colors duration-200 tracking-wide relative group"
-              >
-                {link.label}
+            {navLinks.map((link) => {
+              const isActive = pathname === link.href || (link.href !== "/" && pathname?.startsWith(link.href));
+              return (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className={`text-sm transition-colors duration-200 tracking-wide relative group py-1 ${
+                    isActive ? "text-[#FAD293] font-semibold" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  {link.label}
 
-                <span
-                  className="
-                  absolute
-                  -bottom-0.5
-                  left-0
-                  w-0
-                  h-px
-                  bg-gradient-to-r
-                  from-[#FAD293]
-                  to-[#CEA46B]
-                  group-hover:w-full
-                  transition-all
-                  duration-300
-                "
-                />
-              </Link>
-            ))}
+                  <span
+                    className={`
+                    absolute
+                    -bottom-0.5
+                    left-0
+                    h-0.5
+                    rounded-full
+                    bg-gradient-to-r
+                    from-[#FAD293]
+                    to-[#CEA46B]
+                    transition-all
+                    duration-300
+                    ${isActive ? "w-full" : "w-0 group-hover:w-full"}
+                  `}
+                  />
+                </Link>
+              );
+            })}
           </div>
 
           {/* =================================================
@@ -219,11 +224,6 @@ export default function Navbar() {
           <div className="hidden lg:flex items-center gap-3">
 
             {/* =================================================
-              NOTIFICATIONS
-          ================================================= */}
-
-
-            {/* =================================================
               EMERGENCY ASSISTANCE
           ================================================= */}
 
@@ -231,11 +231,11 @@ export default function Navbar() {
               href="/emergency-assistance"
               title="Emergency Vehicle Assistance"
               className="
+              h-10
               flex
               items-center
               gap-2
               px-4
-              py-2
               rounded-full
               bg-red-600
               text-white
@@ -252,7 +252,9 @@ export default function Navbar() {
               <Siren size={17} strokeWidth={2.2} />
               <span>Emergency</span>
             </Link>
+
             <NotificationCenter variant="desktop" />
+
             {/* =================================================
               LOGIN / GET STARTED / PROFILE
           ================================================= */}
@@ -260,15 +262,16 @@ export default function Navbar() {
             {!isLoggedIn ? (
               <>
                 {/* LOGIN */}
-
                 <Link
                   href="/login"
                   className="
+                  h-10
+                  flex
+                  items-center
                   text-sm
                   text-white/70
                   hover:text-white
                   px-5
-                  py-2
                   rounded-full
                   border
                   border-white/10
@@ -281,14 +284,15 @@ export default function Navbar() {
                 </Link>
 
                 {/* GET STARTED */}
-
                 <Link
                   href="/get-started"
                   className="
+                  h-10
+                  flex
+                  items-center
                   text-sm
                   font-semibold
                   px-5
-                  py-2
                   rounded-full
                   transition-all
                   duration-300
@@ -306,14 +310,15 @@ export default function Navbar() {
               </>
             ) : (
               /* USER PROFILE ICON & DROPDOWN */
-              <div ref={dropdownRef} className="relative">
+              <div ref={dropdownRef} className="relative flex items-center">
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
                   aria-label="Account Menu"
                   className={`
+                  h-10
                   flex items-center gap-2.5
-                  pl-2 pr-3 py-1.5
+                  pl-1.5 pr-3.5
                   rounded-full
                   border
                   text-[#FAD293]
@@ -325,7 +330,7 @@ export default function Navbar() {
                     }
                 `}
                 >
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[1.5px] shadow-sm flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[1.5px] shadow-sm flex items-center justify-center shrink-0">
                     <div className="w-full h-full rounded-full bg-[#111] flex items-center justify-center overflow-hidden">
                       {user?.profile_image_full_path ? (
                         <img
@@ -340,13 +345,10 @@ export default function Navbar() {
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-xs font-bold text-white max-w-[90px] truncate leading-tight">
-                      {user?.first_name || "Account"}
-                    </span>
-
-                  </div>
-                  <ChevronDown size={13} className={`text-white/50 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
+                  <span className="text-xs font-bold text-white max-w-[90px] truncate leading-none">
+                    {user?.first_name || "Account"}
+                  </span>
+                  <ChevronDown size={14} className={`text-white/50 shrink-0 transition-transform duration-200 ${userDropdownOpen ? "rotate-180 text-[#FAD293]" : ""}`} />
                 </button>
 
                 {/* DROPDOWN MENU */}
