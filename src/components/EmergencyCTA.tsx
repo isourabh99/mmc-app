@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default function EmergencyCTA() {
   return (
-    <section id="emergency" className="py-10 sm:py-14 lg:py-16 relative overflow-hidden bg-black">
+    <section id="emergency" className="py-4 sm:py-10 lg:py-14 relative overflow-hidden bg-black">
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div
           className="relative rounded-3xl overflow-hidden border border-[#CEA46B]/30 bg-gradient-to-br from-[#120e0b] via-[#0d0a08] to-[#070504] shadow-[0_20px_60px_rgba(0,0,0,0.9)]"

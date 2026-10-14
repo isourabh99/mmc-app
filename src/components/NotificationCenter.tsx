@@ -31,6 +31,7 @@ import {
   dismissNotification,
   clearAllNotifications,
 } from "@/lib/service/notifications.api";
+import NotificationDetailModal from "@/components/NotificationDetailModal";
 
 interface NotificationCenterProps {
   variant?: "desktop" | "mobile";
@@ -45,6 +46,7 @@ export default function NotificationCenter({
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState<BookingNotification[]>([]);
+  const [selectedNotification, setSelectedNotification] = useState<BookingNotification | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
@@ -102,6 +104,45 @@ export default function NotificationCenter({
     };
   }, [loadNotifications]);
 
+  // Sync selected notification from URL query on load or change
+  useEffect(() => {
+    if (typeof window !== "undefined" && notifications.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryId = urlParams.get("notificationId");
+      if (queryId) {
+        const found = notifications.find(
+          (n) =>
+            String(n.id) === queryId ||
+            String(n.bookingId) === queryId ||
+            String(n.readableId) === queryId
+        );
+        if (found) {
+          setSelectedNotification(found);
+        }
+      }
+    }
+  }, [notifications]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryId = urlParams.get("notificationId");
+      if (!queryId) {
+        setSelectedNotification(null);
+      } else {
+        const found = notifications.find(
+          (n) =>
+            String(n.id) === queryId ||
+            String(n.bookingId) === queryId ||
+            String(n.readableId) === queryId
+        );
+        if (found) setSelectedNotification(found);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [notifications]);
+
   // Click outside to close dropdown
   useEffect(() => {
     if (!isOpen) return;
@@ -147,53 +188,7 @@ export default function NotificationCenter({
     setUnreadCount((prev) => Math.max(0, prev - 1));
     setIsOpen(false);
     if (onCloseMobileMenu) onCloseMobileMenu();
-
-    // 1. Quotation notifications -> navigate to appropriate Quotes Hub
-    if (item.category === "alloy" || item.targetUrl?.includes("alloy-wheel")) {
-      router.push(item.targetUrl || "/services/alloy-wheel?view=quotes");
-      return;
-    }
-    if (item.targetUrl) {
-      router.push(item.targetUrl);
-      return;
-    }
-    if (item.category === "quote" || item.bookingType === "quote") {
-      const text = `${item.title} ${item.subtitle || ""} ${item.description}`.toLowerCase();
-      if (text.includes("alloy") || text.includes("wheel") || text.includes("rim")) {
-        router.push("/services/alloy-wheel?view=quotes");
-      } else if (text.includes("mod") || text.includes("tuning")) {
-        router.push("/services/modification?view=quotes");
-      } else {
-        router.push("/services/bodywork?view=quotes");
-      }
-      return;
-    }
-
-    // 2. Booking notifications -> deep link to exact status tab and open booking detail
-    const targetStatus =
-      item.status === "completed"
-        ? "completed"
-        : item.status === "ongoing" || item.status === "accepted"
-        ? "ongoing"
-        : item.status === "canceled"
-        ? "canceled"
-        : "pending";
-
-    const targetBookingId = item.bookingId || item.readableId;
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("mmc-open-booking-modal", {
-          detail: {
-            bookingId: targetBookingId,
-            readableId: item.readableId,
-            status: targetStatus,
-          },
-        })
-      );
-    }
-
-    router.push(`/account?tab=bookings&status=${targetStatus}&bookingId=${encodeURIComponent(String(targetBookingId))}`);
+    setSelectedNotification(item);
   };
 
   const handleDismiss = (e: React.MouseEvent, id: string) => {
@@ -578,6 +573,17 @@ export default function NotificationCenter({
           </div>
         </>
       )}
+
+      {/* Comprehensive Notification Detail Modal */}
+      <NotificationDetailModal
+        notification={selectedNotification}
+        onClose={() => setSelectedNotification(null)}
+        onDismiss={(id) => {
+          dismissNotification(id);
+          setNotifications((prev) => prev.filter((n) => n.id !== id));
+        }}
+        urlParamKey="notificationId"
+      />
     </div>
   );
 }

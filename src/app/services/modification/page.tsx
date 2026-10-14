@@ -1139,7 +1139,7 @@ export default function ModificationPage() {
                     {/* =====================================================================
                         HERO & QUOTE SECTION
                     ====================================================================== */}
-                    <section className="relative pt-6 pb-20 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
+                    <section className="relative pt-2 sm:pt-4 pb-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-hidden">
                         {/* Background Ambient Glow Layer */}
                         <div className="absolute right-0 top-12 w-full lg:w-2/3 h-full pointer-events-none opacity-20 select-none z-0">
                             <div className="w-full h-full bg-[radial-gradient(#E8AF66_1px,transparent_1px)] [background-size:24px_24px]" />

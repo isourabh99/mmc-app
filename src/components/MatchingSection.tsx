@@ -45,7 +45,7 @@ export default function MatchingSection() {
   return (
     <section
       id="matching"
-      className="py-16 sm:py-24 relative overflow-hidden"
+      className="py-6 sm:py-12 lg:py-16 relative overflow-hidden"
       style={{
         background:
           "linear-gradient(135deg, #000000 0%, #080500 50%, #000000 100%)",
@@ -61,7 +61,7 @@ export default function MatchingSection() {
       />
 
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-14 items-center">
           {/* Left: Showcase Image Banner */}
           <div className="relative w-full rounded-3xl overflow-hidden border border-[#FAD293]/25 shadow-2xl group bg-black/40">
             <div className="relative w-full aspect-[16/9] overflow-hidden rounded-3xl">

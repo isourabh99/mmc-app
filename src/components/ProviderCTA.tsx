@@ -2,7 +2,7 @@
 
 export default function ProviderCTA() {
   return (
-    <section id="become-provider" className="py-16 sm:py-24 relative overflow-hidden">
+    <section id="become-provider" className="py-6 sm:py-12 lg:py-16 relative overflow-hidden">
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div
           className="relative rounded-3xl overflow-hidden"
@@ -92,7 +92,9 @@ export default function ProviderCTA() {
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <a
-                  href="#provider-signup"
+                  href="https://mmcclub.co.uk/backend/provider/auth/login"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   id="provider-signup-btn"
                   className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full font-bold text-black text-sm transition-all duration-300 hover:shadow-[0_0_35px_rgba(250,210,147,0.4)] hover:scale-105"
                   style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
@@ -102,13 +104,7 @@ export default function ProviderCTA() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </a>
-                <a
-                  href="#learn-more"
-                  id="provider-learn-more-btn"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-full font-semibold text-sm border border-white/15 text-white/70 hover:text-white hover:border-[#FAD293]/40 transition-all duration-300"
-                >
-                  Learn More
-                </a>
+            
               </div>
             </div>
 

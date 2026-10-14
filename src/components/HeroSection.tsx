@@ -28,7 +28,7 @@ export default function HeroSection() {
   return (
     <section
       id="hero"
-      className="relative min-h-[260px] sm:min-h-[460px] md:min-h-[520px] lg:min-h-[580px] 2xl:min-h-[640px] overflow-hidden bg-[#050505] text-white flex items-center pt-20 sm:pt-28 md:pt-32 lg:pt-36 2xl:pt-40 pb-6 sm:pb-16 lg:pb-20 2xl:pb-24"
+      className="relative min-h-[260px] sm:min-h-[460px] md:min-h-[520px] lg:min-h-[580px] 2xl:min-h-[640px] overflow-hidden bg-[#050505] text-white flex items-center pt-4 sm:pt-10 md:pt-14 lg:pt-16 2xl:pt-20 pb-6 sm:pb-12 lg:pb-16 2xl:pb-20"
     >
       {/* =========================================================
           BACKGROUND IMAGE

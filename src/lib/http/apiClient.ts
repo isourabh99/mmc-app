@@ -49,7 +49,7 @@ apiClient.interceptors.request.use(
         zoneId ||
         "550e8400-e29b-41d4-a716-446655440000";
 
-      if (guestId) {
+      if (!token && guestId) {
         if (!config.headers["guest-id"]) config.headers["guest-id"] = guestId;
         if (!config.headers.guest_id) config.headers.guest_id = guestId;
       }

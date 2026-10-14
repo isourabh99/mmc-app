@@ -33,7 +33,7 @@ export default function FAQsPage() {
   const cmsContent = pageData?.content || pageData?.value;
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pt-10 pb-16">
       <FAQSection isStandalone />
     </div>
   );

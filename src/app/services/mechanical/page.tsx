@@ -640,7 +640,7 @@ export default function MechanicalPage() {
       {/* VIEW: HERO LANDING & QUOTE FORM (Matching Screenshot 1 & 2)           */}
       {/* --------------------------------------------------------------------- */}
       {view === "hero" && (
-        <main className="relative pt-6 pb-20">
+        <main className="relative pt-2 sm:pt-4 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
               {/* Left Column: Hero Content & Badges */}

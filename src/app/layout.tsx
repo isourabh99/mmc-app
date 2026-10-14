@@ -64,7 +64,7 @@ export default function RootLayout({
         <ToastProvider>
           <FirebaseNotificationListener />
           <Navbar />
-          <main className="flex-grow pt-20">{children}</main>
+          <main className="flex-grow pt-16 sm:pt-[72px]">{children}</main>
           <Footer />
         </ToastProvider>
       </body>

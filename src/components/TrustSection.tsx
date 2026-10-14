@@ -62,11 +62,11 @@ export default function TrustSection() {
   return (
     <section
       id="about"
-      className="py-16 sm:py-24 relative overflow-hidden"
+      className="py-6 sm:py-12 lg:py-16 relative overflow-hidden"
       style={{ background: "linear-gradient(180deg, #000000, #050400)" }}
     >
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
-        <div className="text-center mb-16">
+        <div className="text-center mb-6 sm:mb-10 lg:mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
             <span
