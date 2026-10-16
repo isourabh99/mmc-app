@@ -32,21 +32,45 @@ apiClient.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
 
-      const zoneId =
+      let storedZone =
         localStorage.getItem("zone_id") ||
         localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId") ||
-        "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+        localStorage.getItem("zoneId");
 
-      if (zoneId) {
-        if (!config.headers.zoneid) config.headers.zoneid = zoneId;
-        if (!config.headers.ZoneId) config.headers.ZoneId = zoneId;
-        if (!config.headers["zone-id"]) config.headers["zone-id"] = zoneId;
+      if (
+        !storedZone ||
+        storedZone === "undefined" ||
+        storedZone === "null" ||
+        storedZone === "[object Object]" ||
+        storedZone.trim().length === 0
+      ) {
+        storedZone = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+      }
+
+      const hasZoneHeader =
+        (config.headers?.get &&
+          (config.headers.get("zoneid") ||
+            config.headers.get("zoneId") ||
+            config.headers.get("zone-id"))) ||
+        config.headers.zoneid ||
+        config.headers.ZoneId ||
+        config.headers["zone-id"];
+
+      if (!hasZoneHeader) {
+        if (config.headers?.set) {
+          config.headers.set("zoneid", storedZone);
+          config.headers.set("ZoneId", storedZone);
+          config.headers.set("zone-id", storedZone);
+        } else {
+          config.headers.zoneid = storedZone;
+          config.headers.ZoneId = storedZone;
+          config.headers["zone-id"] = storedZone;
+        }
       }
 
       const guestId =
         localStorage.getItem("guest_id") ||
-        zoneId ||
+        storedZone ||
         "550e8400-e29b-41d4-a716-446655440000";
 
       if (!token && guestId) {

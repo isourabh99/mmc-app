@@ -57,6 +57,7 @@ import {
   type MechanicalServiceItem,
   DEFAULT_ZONE_ID,
   FALLBACK_MECHANICAL_CATEGORY_ID,
+  REAL_MECHANICAL_SERVICES,
 } from "@/lib/service/mechanical.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveConfirmedBooking } from "@/lib/service/bookings.api";
@@ -87,8 +88,8 @@ export default function MechanicalPage() {
 
   // Categories & Services state
   const [categories, setCategories] = useState<MechanicalCategoryItem[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  const [services, setServices] = useState<MechanicalServiceItem[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(FALLBACK_MECHANICAL_CATEGORY_ID);
+  const [services, setServices] = useState<MechanicalServiceItem[]>(REAL_MECHANICAL_SERVICES);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [showServicesDropdown, setShowServicesDropdown] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -169,11 +170,14 @@ export default function MechanicalPage() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Load categories and initial services
+  // Initialize Zone & Categories
   // ---------------------------------------------------------------------------
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
+    localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
+
     const initData = async () => {
-      setLoadingServices(true);
       try {
         const catList = await getMechanicalCategories();
         setCategories(catList);
@@ -182,22 +186,18 @@ export default function MechanicalPage() {
           String(item.name || "").toLowerCase().includes("mechanic")
         );
         const catId = preferredCategory?.id || catList[0]?.id || FALLBACK_MECHANICAL_CATEGORY_ID;
-        setSelectedCategoryId(catId);
-
-        const svcList = await getMechanicalServices(catId);
-        setServices(svcList);
-        // Do not auto-select service; user selects manually
+        if (catId && catId !== selectedCategoryId) {
+          setSelectedCategoryId(catId);
+        }
       } catch (err) {
-        console.error("Failed to load mechanical metadata:", err);
-      } finally {
-        setLoadingServices(false);
+        console.error("Failed to load mechanical categories:", err);
       }
     };
 
     initData();
   }, []);
 
-  // When selected category changes, reload services
+  // When selected category changes, reload dynamic services
   useEffect(() => {
     if (!selectedCategoryId) return;
     let isCancelled = false;
@@ -207,10 +207,11 @@ export default function MechanicalPage() {
       try {
         const svcList = await getMechanicalServices(selectedCategoryId);
         if (!isCancelled) {
-          setServices(svcList);
+          setServices(Array.isArray(svcList) && svcList.length > 0 ? svcList : REAL_MECHANICAL_SERVICES);
         }
       } catch (err) {
         console.error("Failed to load services for category:", err);
+        if (!isCancelled) setServices(REAL_MECHANICAL_SERVICES);
       } finally {
         if (!isCancelled) setLoadingServices(false);
       }
@@ -384,6 +385,7 @@ export default function MechanicalPage() {
       const results = await searchMechanicalProviders({
         categoryId: selectedCategoryId,
         serviceId: primaryServiceId,
+        serviceIds: selectedServiceIds,
         latitude: userLat || "51.5074",
         longitude: userLon || "-0.1278",
       });
@@ -473,7 +475,8 @@ export default function MechanicalPage() {
         provider_id: selectedProvider.id,
         service_id: primaryServiceId,
         category_id: catId,
-        payment_method: "stripe",
+        amount: numericPrice,
+        payment_method: paymentMethod || "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         service_schedule: formattedSchedule,
         service_address_id: "6",
@@ -486,6 +489,8 @@ export default function MechanicalPage() {
         notes: notes || damageDesc || "Mechanical booking via Motor Market Club app",
         answers,
         postcode: postcode || "London, UK",
+        latitude: userLat || "51.5074",
+        longitude: userLon || "-0.1278",
         zone_id: DEFAULT_ZONE_ID,
         car_image: heroCarImage,
         payment_platform: "app",

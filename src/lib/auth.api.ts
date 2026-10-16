@@ -122,7 +122,7 @@ export const sendOtp = sendLoginOtp;
 
 /**
  * Sync FCM device push token with backend customer session
- * POST /customer/update-fcm-token
+ * PUT /customer/update/fcm-token
  */
 export const updateFCMTokenToBackend = async (fcmToken: string) => {
   try {
@@ -133,13 +133,19 @@ export const updateFCMTokenToBackend = async (fcmToken: string) => {
     if (!token) return null;
     let response;
     try {
-      response = await apiClient.put("/customer/update-fcm-token", {
+      response = await apiClient.put("/customer/update/fcm-token", {
         fcm_token: fcmToken,
       });
     } catch {
-      response = await apiClient.post("/customer/update-fcm-token", {
-        fcm_token: fcmToken,
-      });
+      try {
+        response = await apiClient.put("/customer/update-fcm-token", {
+          fcm_token: fcmToken,
+        });
+      } catch {
+        response = await apiClient.post("/customer/update-fcm-token", {
+          fcm_token: fcmToken,
+        });
+      }
     }
     return response.data;
   } catch (err) {
