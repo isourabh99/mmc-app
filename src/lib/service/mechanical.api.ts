@@ -20,8 +20,12 @@ export interface MechanicalServiceItem {
   short_description?: string;
   category_id?: string;
   min_bidding_price?: number;
+  price?: number;
   avg_rating?: number;
   rating_count?: number;
+  is_active?: number;
+  thumbnail?: string | null;
+  thumbnail_full_path?: string | null;
 }
 
 export interface MechanicalProviderItem {
@@ -48,31 +52,172 @@ export interface MechanicalProviderItem {
   [key: string]: any;
 }
 
+export const REAL_MECHANICAL_SERVICES: MechanicalServiceItem[] = [
+  {
+    id: "1bfb175c-91a2-4c80-9690-c362320665d9",
+    name: "Engine Diagnostics",
+    short_description: "Advanced electronic diagnostics to identify engine and sensor faults.",
+    description: "Advanced electronic diagnostics to identify engine and sensor faults.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+    thumbnail_full_path: "https://mmcclub.co.uk/backend/storage/app/public/service/2026-09-30-6abcfee07c069.png",
+  },
+  {
+    id: "666f487f-c8c0-40eb-9c11-4c615f82be31",
+    name: "Cooling System Repair",
+    short_description: "Radiator, coolant pump, and thermostat replacement or repair.",
+    description: "Radiator, coolant pump, and thermostat replacement or repair.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+    thumbnail_full_path: "https://mmcclub.co.uk/backend/storage/app/public/service/2026-09-30-6abcff065b8ae.png",
+  },
+  {
+    id: "708ffdf0-3e78-4a26-9cf0-bcb952c6ed86",
+    name: "Clutch Repair & Replacement",
+    short_description: "Complete clutch kit replacement or repair services.",
+    description: "Complete clutch kit replacement or repair services.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+    thumbnail_full_path: "https://mmcclub.co.uk/backend/storage/app/public/service/2026-09-30-6abcff564f9b9.png",
+  },
+  {
+    id: "9e7f6431-96f8-4bdd-aa95-9b90afd19fb0",
+    name: "Suspension & Steering Repair",
+    short_description: "Shock absorbers, struts, and steering rack repairs.",
+    description: "Shock absorbers, struts, and steering rack repairs.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "f49d54f2-0f88-46b4-81c9-abd8a1db8239",
+    name: "Timing Belt/Chain Replacement",
+    short_description: "Professional replacement of timing belt or chain to prevent engine damage.",
+    description: "Professional replacement of timing belt or chain to prevent engine damage.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "1d51203b-9ddd-4675-bf2d-ead878ecfa0d",
+    name: "Oil & Filter Change",
+    short_description: "Engine oil and filter replacement.",
+    description: "Engine oil and filter replacement.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "39818c93-6bd1-4528-84be-88956b4703a6",
+    name: "Brake Pads & Discs Replacement",
+    short_description: "Professional replacement of brake pads and discs.",
+    description: "Professional replacement of brake pads and discs.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "4299fa6d-98e7-48aa-a819-4836614e963f",
+    name: "Battery Diagnosis & Replacement",
+    short_description: "Checking battery health and replacing if needed.",
+    description: "Checking battery health and replacing if needed.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "b398599b-ad7b-45d2-b57e-5d7093a5d10b",
+    name: "Exhaust Repair & Maintenance",
+    short_description: "Repairing and maintaining the car exhaust system.",
+    description: "Repairing and maintaining the car exhaust system.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+  {
+    id: "d7579f6f-779e-4875-8ba3-e21eb3d4d7ce",
+    name: "Full Engine Service",
+    short_description: "Comprehensive engine check and service.",
+    description: "Comprehensive engine check and service.",
+    category_id: FALLBACK_MECHANICAL_CATEGORY_ID,
+    min_bidding_price: 0,
+    price: 0,
+    avg_rating: 0,
+    rating_count: 0,
+    is_active: 1,
+  },
+];
+
 export const getMechanicalCategories = async (): Promise<MechanicalCategoryItem[]> => {
   const zoneId = DEFAULT_ZONE_ID;
 
   try {
     const response = await apiClient.get("/customer/category", {
-      headers: { zoneid: zoneId },
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
       params: { limit: 50, offset: 1 },
     });
 
     const raw = response.data?.content?.data || response.data?.content || [];
-    if (Array.isArray(raw)) {
-      return raw.filter((item) => {
+    if (Array.isArray(raw) && raw.length > 0) {
+      const filtered = raw.filter((item) => {
         const name = String(item.name || "").toLowerCase();
         return name.includes("mechan") || name.includes("repair") || name.includes("garage");
       });
+      if (filtered.length > 0) {
+        return filtered.map((c: any) => ({
+          id: c.id,
+          name: c.name || "Mechanic",
+          description: c.description || "Mechanical & Garage Services",
+          parent_id: c.parent_id,
+          is_active: c.is_active ?? 1,
+          image: c.image,
+          image_full_path: c.image_full_path,
+        }));
+      }
     }
   } catch (error) {
-    console.warn("mechanical categories failed:", error);
+    console.warn("mechanical categories fetch error:", error);
   }
 
   return [
     {
       id: FALLBACK_MECHANICAL_CATEGORY_ID,
-      name: "Mechanical & Garage Services",
-      description: "Mechanical and garage repairs",
+      name: "Mechanic",
+      description: "Mechanical & Garage Services",
       is_active: 1,
     },
   ];
@@ -81,37 +226,90 @@ export const getMechanicalCategories = async (): Promise<MechanicalCategoryItem[
 export const getMechanicalServices = async (
   categoryId: string = FALLBACK_MECHANICAL_CATEGORY_ID
 ): Promise<MechanicalServiceItem[]> => {
+  const targetCategory = categoryId || FALLBACK_MECHANICAL_CATEGORY_ID;
   const zoneId = DEFAULT_ZONE_ID;
+  const combinedMap = new Map<string, MechanicalServiceItem>();
 
+  const mapItem = (item: any): MechanicalServiceItem => ({
+    id: String(item.id),
+    name: item.name || item.service_name || "Mechanical Service",
+    description: item.description || item.short_description || "",
+    short_description: item.short_description || item.description || "",
+    category_id: item.category_id || targetCategory,
+    min_bidding_price: Number(item.min_bidding_price || item.price || 0),
+    price: Number(item.price || item.min_bidding_price || 0),
+    avg_rating: Number(item.avg_rating || 0),
+    rating_count: Number(item.rating_count || 0),
+    is_active: item.is_active ?? 1,
+    thumbnail: item.thumbnail,
+    thumbnail_full_path: item.thumbnail_full_path,
+  });
+
+  // 1. Primary: Query Demandium category services
   try {
-    const response = await apiClient.get(`/customer/service/category/${categoryId}`, {
-      headers: { zoneid: zoneId },
-      params: { limit: 100, offset: 1 },
+    const response = await apiClient.get(`/customer/service/category/${targetCategory}`, {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+      params: { limit: 50, offset: 1 },
     });
 
-    const raw = response.data?.content?.data || response.data?.content || [];
-    if (Array.isArray(raw) && raw.length > 0) {
-      return raw.map((item: any) => ({
-        id: item.id,
-        name: item.name || item.service_name || "Mechanical Service",
-        description: item.description || item.short_description || "",
-        short_description: item.short_description || item.description || "",
-        category_id: item.category_id || categoryId,
-        min_bidding_price: Number(item.min_bidding_price || item.price || 0),
-        avg_rating: Number(item.avg_rating || 0),
-        rating_count: Number(item.rating_count || 0),
-      }));
+    const content = response.data?.content;
+    const raw = Array.isArray(content)
+      ? content
+      : Array.isArray(content?.data)
+        ? content.data
+        : [];
+
+    if (raw.length > 0) {
+      for (const item of raw) {
+        if (item?.id) combinedMap.set(String(item.id), mapItem(item));
+      }
     }
   } catch (error) {
-    console.warn("mechanical services failed:", error);
+    console.warn("[Mechanical API] Category services query error:", error);
   }
 
-  return [
-    { id: "f473637e-cd69-4796-8d4a-b8eed2f7efca", name: "Engine Diagnostics & Repair", description: "Engine fault and diagnostics", category_id: categoryId, min_bidding_price: 120 },
-    { id: "9e1f8470-6b75-4d8b-bd9a-4839fe6f9b54", name: "Brake Service & Repair", description: "Pads, discs, braking system", category_id: categoryId, min_bidding_price: 140 },
-    { id: "e5b3d18d-8d3d-4569-a0df-f604a90c8a40", name: "Suspension & Steering Fix", description: "Suspension tuning and alignment checks", category_id: categoryId, min_bidding_price: 170 },
-    { id: "d84cc4fe-f6cc-46ce-acc1-56e80df6ff3a", name: "General Mechanical Check", description: "Inspection and repairs", category_id: categoryId, min_bidding_price: 95 },
-  ];
+  // 2. Query Demandium sub-category services
+  try {
+    const responseSub = await apiClient.get(`/customer/service/sub-category/${targetCategory}`, {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+      },
+      params: { limit: 50, offset: 1 },
+    });
+
+    const contentSub = responseSub.data?.content;
+    const rawSub = Array.isArray(contentSub)
+      ? contentSub
+      : Array.isArray(contentSub?.data)
+        ? contentSub.data
+        : [];
+
+    if (rawSub.length > 0) {
+      for (const item of rawSub) {
+        if (item?.id && !combinedMap.has(String(item.id))) {
+          combinedMap.set(String(item.id), mapItem(item));
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[Mechanical API] Sub-category services query error:", error);
+  }
+
+  if (combinedMap.size > 0) {
+    const list = Array.from(combinedMap.values());
+    console.log(`[Mechanical API] Successfully loaded ${list.length} dynamic services from backend for category ${targetCategory}.`);
+    return list;
+  }
+
+  // 3. Fallback to real backend services UUID list if backend network fails
+  console.warn("[Mechanical API] Backend returned 0 services, using fallback real UUID services list.");
+  return REAL_MECHANICAL_SERVICES;
 };
 
 function formatMechanicalProvider(item: any): MechanicalProviderItem {
@@ -170,6 +368,7 @@ function formatMechanicalProvider(item: any): MechanicalProviderItem {
 export const searchMechanicalProviders = async (params: {
   categoryId?: string;
   serviceId?: string;
+  serviceIds?: string[];
   latitude?: string | number;
   longitude?: string | number;
 }): Promise<MechanicalProviderItem[]> => {
@@ -180,142 +379,165 @@ export const searchMechanicalProviders = async (params: {
         localStorage.getItem("zoneId"))) ||
     DEFAULT_ZONE_ID;
   const categoryId = params.categoryId || FALLBACK_MECHANICAL_CATEGORY_ID;
-  const latitude = params.latitude ? String(params.latitude) : "51.5074";
-  const longitude = params.longitude ? String(params.longitude) : "-0.1278";
+  const initialLat = params.latitude ? String(params.latitude) : "51.5074";
+  const initialLon = params.longitude ? String(params.longitude) : "-0.1278";
 
-  // 1. Primary: POST /customer/provider/search-by-service with FormData
-  try {
-    const formData = new FormData();
-    if (params.serviceId) {
-      formData.append("service_id", params.serviceId);
-      formData.append("service_ids[]", params.serviceId);
-    }
-    formData.append("category_id", categoryId);
-    formData.append("latitude", latitude);
-    formData.append("longitude", longitude);
+  const effectiveServiceIds: string[] =
+    Array.isArray(params.serviceIds) && params.serviceIds.length > 0
+      ? params.serviceIds
+      : params.serviceId
+        ? [params.serviceId]
+        : [];
 
-    const response = await apiClient.post("/customer/provider/search-by-service", formData, {
-      headers: {
-        zoneid: zoneId,
-        "zone-id": zoneId,
-        ZoneId: zoneId,
-      },
-    });
+  const queryProviders = async (lat: string, lon: string): Promise<MechanicalProviderItem[]> => {
+    // 1. Primary: POST /customer/provider/search-by-service with FormData
+    try {
+      const formData = new FormData();
+      if (effectiveServiceIds.length > 0) {
+        effectiveServiceIds.forEach((id) => {
+          formData.append("service_ids[]", id);
+        });
+        formData.append("service_id", effectiveServiceIds[0]);
+      }
+      formData.append("category_id", categoryId);
+      formData.append("latitude", lat);
+      formData.append("longitude", lon);
 
-    let raw: any[] = [];
-    if (Array.isArray(response.data?.content?.data)) {
-      raw = response.data.content.data;
-    } else if (Array.isArray(response.data?.content)) {
-      raw = response.data.content;
-    } else if (Array.isArray(response.data?.data)) {
-      raw = response.data.data;
-    }
+      const response = await apiClient.post("/customer/provider/search-by-service", formData, {
+        headers: {
+          zoneid: zoneId,
+          "zone-id": zoneId,
+          ZoneId: zoneId,
+        },
+      });
 
-    if (raw.length > 0) {
-      return raw.map((item: any) => formatMechanicalProvider(item));
-    }
-  } catch (error) {
-    console.warn("[Mechanical] search-by-service FormData attempt note:", error);
-  }
+      let raw: any[] = [];
+      if (Array.isArray(response.data?.content?.data)) {
+        raw = response.data.content.data;
+      } else if (Array.isArray(response.data?.content)) {
+        raw = response.data.content;
+      } else if (Array.isArray(response.data?.data)) {
+        raw = response.data.data;
+      }
 
-  // 2. Secondary: POST /customer/provider/search-by-service with JSON
-  try {
-    const jsonBody: Record<string, any> = {
-      category_id: categoryId,
-      latitude,
-      longitude,
-    };
-    if (params.serviceId) {
-      jsonBody.service_id = params.serviceId;
-      jsonBody.service_ids = [params.serviceId];
+      if (raw.length > 0) {
+        return raw.map((item: any) => formatMechanicalProvider(item));
+      }
+    } catch (error) {
+      console.warn("[Mechanical] search-by-service FormData attempt note:", error);
     }
 
-    const response = await apiClient.post("/customer/provider/search-by-service", jsonBody, {
-      headers: {
-        zoneid: zoneId,
-        "zone-id": zoneId,
-        ZoneId: zoneId,
-        "Content-Type": "application/json",
-      },
-    });
-
-    let raw: any[] = [];
-    if (Array.isArray(response.data?.content?.data)) {
-      raw = response.data.content.data;
-    } else if (Array.isArray(response.data?.content)) {
-      raw = response.data.content;
-    } else if (Array.isArray(response.data?.data)) {
-      raw = response.data.data;
-    }
-
-    if (raw.length > 0) {
-      return raw.map((item: any) => formatMechanicalProvider(item));
-    }
-  } catch (error) {
-    console.warn("[Mechanical] search-by-service JSON attempt note:", error);
-  }
-
-  // 3. Fallback: GET /customer/provider/list with category_id
-  try {
-    const listRes = await apiClient.get<any>("/customer/provider/list", {
-      headers: {
-        zoneid: zoneId,
-        "zone-id": zoneId,
-        ZoneId: zoneId,
-      },
-      params: {
-        limit: 50,
-        offset: 1,
+    // 2. Secondary: POST /customer/provider/search-by-service with JSON
+    try {
+      const jsonBody: Record<string, any> = {
         category_id: categoryId,
-        latitude,
-        longitude,
-      },
-    });
+        latitude: lat,
+        longitude: lon,
+      };
+      if (effectiveServiceIds.length > 0) {
+        jsonBody.service_id = effectiveServiceIds[0];
+        jsonBody.service_ids = effectiveServiceIds;
+      }
 
-    const listData = Array.isArray(listRes.data?.content?.data)
-      ? listRes.data.content.data
-      : Array.isArray(listRes.data?.content)
-        ? listRes.data.content
-        : Array.isArray(listRes.data?.data)
-          ? listRes.data.data
-          : [];
+      const response = await apiClient.post("/customer/provider/search-by-service", jsonBody, {
+        headers: {
+          zoneid: zoneId,
+          "zone-id": zoneId,
+          ZoneId: zoneId,
+          "Content-Type": "application/json",
+        },
+      });
 
-    if (listData.length > 0) {
-      return listData.map((item: any) => formatMechanicalProvider(item));
+      let raw: any[] = [];
+      if (Array.isArray(response.data?.content?.data)) {
+        raw = response.data.content.data;
+      } else if (Array.isArray(response.data?.content)) {
+        raw = response.data.content;
+      } else if (Array.isArray(response.data?.data)) {
+        raw = response.data.data;
+      }
+
+      if (raw.length > 0) {
+        return raw.map((item: any) => formatMechanicalProvider(item));
+      }
+    } catch (error) {
+      console.warn("[Mechanical] search-by-service JSON attempt note:", error);
     }
-  } catch (error) {
-    console.warn("[Mechanical] provider/list by category note:", error);
-  }
 
-  // 4. Live Discovery Fallback: GET /customer/provider/list for all active providers in zone
-  try {
-    const allRes = await apiClient.get<any>("/customer/provider/list", {
-      headers: {
-        zoneid: zoneId,
-        "zone-id": zoneId,
-        ZoneId: zoneId,
-      },
-      params: {
-        limit: 50,
-        offset: 1,
-        latitude,
-        longitude,
-      },
-    });
+    // 3. Fallback: GET /customer/provider/list with category_id
+    try {
+      const listRes = await apiClient.get<any>("/customer/provider/list", {
+        headers: {
+          zoneid: zoneId,
+          "zone-id": zoneId,
+          ZoneId: zoneId,
+        },
+        params: {
+          limit: 50,
+          offset: 1,
+          category_id: categoryId,
+          latitude: lat,
+          longitude: lon,
+        },
+      });
 
-    const allData = Array.isArray(allRes.data?.content?.data)
-      ? allRes.data.content.data
-      : Array.isArray(allRes.data?.content)
-        ? allRes.data.content
-        : Array.isArray(allRes.data?.data)
-          ? allRes.data.data
-          : [];
+      const listData = Array.isArray(listRes.data?.content?.data)
+        ? listRes.data.content.data
+        : Array.isArray(listRes.data?.content)
+          ? listRes.data.content
+          : Array.isArray(listRes.data?.data)
+            ? listRes.data.data
+            : [];
 
-    if (allData.length > 0) {
-      return allData.map((item: any) => formatMechanicalProvider(item));
+      if (listData.length > 0) {
+        return listData.map((item: any) => formatMechanicalProvider(item));
+      }
+    } catch (error) {
+      console.warn("[Mechanical] provider/list by category note:", error);
     }
-  } catch (error) {
-    console.warn("[Mechanical] all providers list note:", error);
+
+    // 4. Live Discovery Fallback: GET /customer/provider/list for all active providers in zone
+    try {
+      const allRes = await apiClient.get<any>("/customer/provider/list", {
+        headers: {
+          zoneid: zoneId,
+          "zone-id": zoneId,
+          ZoneId: zoneId,
+        },
+        params: {
+          limit: 50,
+          offset: 1,
+          latitude: lat,
+          longitude: lon,
+        },
+      });
+
+      const allData = Array.isArray(allRes.data?.content?.data)
+        ? allRes.data.content.data
+        : Array.isArray(allRes.data?.content)
+          ? allRes.data.content
+          : Array.isArray(allRes.data?.data)
+            ? allRes.data.data
+            : [];
+
+      if (allData.length > 0) {
+        return allData.map((item: any) => formatMechanicalProvider(item));
+      }
+    } catch (error) {
+      console.warn("[Mechanical] all providers list note:", error);
+    }
+
+    return [];
+  };
+
+  // Try with user coordinates
+  let providers = await queryProviders(initialLat, initialLon);
+  if (providers.length > 0) return providers;
+
+  // If outside London / UK (e.g. testing from outside UK), fallback to London coordinates
+  if (initialLat !== "51.5074" || initialLon !== "-0.1278") {
+    providers = await queryProviders("51.5074", "-0.1278");
+    if (providers.length > 0) return providers;
   }
 
   return [];
@@ -387,11 +609,7 @@ export const getMechanicalProviderSlots = async (providerId: string, date: strin
     return Array.isArray(raw) ? raw : [];
   } catch (error) {
     console.warn("mechanical slots failed:", error);
-    return [
-      { id: "slot-1", start_time: "09:00:00", end_time: "09:30:00", title: "09:00 AM - 09:30 AM", is_available: true },
-      { id: "slot-2", start_time: "10:00:00", end_time: "10:30:00", title: "10:00 AM - 10:30 AM", is_available: true },
-      { id: "slot-3", start_time: "11:00:00", end_time: "11:30:00", title: "11:00 AM - 11:30 AM", is_available: true },
-    ];
+    return [];
   }
 };
 
@@ -414,10 +632,7 @@ export const getMechanicalProviderQuestions = async (
     return Array.isArray(raw) ? raw : [];
   } catch (error) {
     console.warn("mechanical provider questions failed:", error);
-    return [
-      { id: "q-issue", question_text: "What is the issue with your vehicle?", field_type: "text", is_required: true },
-      { id: "q-priority", question_text: "Is this an emergency or routine repair?", field_type: "select", options: ["Routine", "Emergency"], is_required: true },
-    ];
+    return [];
   }
 };
 
