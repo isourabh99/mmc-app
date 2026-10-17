@@ -38,7 +38,11 @@ function BookingSuccessContent() {
 
   const flag = searchParams.get("flag");
   const isFailed = flag === "fail" || flag === "cancel" || flag === "cancelled";
-  const rawToken = searchParams.get("token");
+  let rawToken = searchParams.get("token");
+  if (!rawToken && typeof window !== "undefined") {
+    const match = window.location.href.match(/[?&]token=([^&]+)/);
+    if (match) rawToken = decodeURIComponent(match[1]);
+  }
 
   let parsedTokenBookingId: string | null = null;
   if (rawToken) {
@@ -59,17 +63,33 @@ function BookingSuccessContent() {
           tokenParams.get("id") ||
           null;
       }
+      if (!parsedTokenBookingId) {
+        const match = decoded.match(/booking_id=([^&]+)/i) || decoded.match(/"booking_id"\s*:\s*"([^"]+)"/i);
+        if (match) parsedTokenBookingId = match[1];
+      }
     } catch {
       // Ignored if rawToken is not base64
     }
   }
 
-  const urlBookingId =
+  let urlBookingId =
     parsedTokenBookingId ||
     searchParams.get("booking_id") ||
     searchParams.get("bookingId") ||
     searchParams.get("id") ||
     searchParams.get("payment_id");
+
+  if (!urlBookingId && typeof window !== "undefined") {
+    const match = window.location.href.match(/[?&]booking_id=([^&]+)/);
+    if (match) urlBookingId = decodeURIComponent(match[1]);
+    if (!urlBookingId) {
+      urlBookingId =
+        localStorage.getItem("last_valet_booking_id") ||
+        localStorage.getItem("last_tyre_booking_id") ||
+        localStorage.getItem("last_booking_id") ||
+        null;
+    }
+  }
 
   const [bookingData, setBookingData] = useState<PendingBooking | null>(null);
   const [copied, setCopied] = useState(false);

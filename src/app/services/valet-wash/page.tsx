@@ -455,7 +455,7 @@ export default function VehicleWashValetPage() {
         is_partial: isPartialPayment ? 1 : 0,
         callback: callbackUrl,
         service_schedule: formattedSchedule,
-        service_address_id: "6",
+        service_address_id: "9",
         service_location: bookingLocationType,
         service_address: locationAddress,
         selected_slot_id: "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
@@ -495,23 +495,6 @@ export default function VehicleWashValetPage() {
       const confirmedId = String(ref || `MMC-VAL-${Date.now().toString().slice(-6)}`);
       setConfirmedBookingRef(confirmedId);
 
-      const isUuidStr = (val: any): boolean =>
-        typeof val === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
-
-      const possibleUuid =
-        (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
-        (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
-        (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
-        (content && isUuidStr(content.id) ? content.id : null) ||
-        (isUuidStr(confirmedId) ? confirmedId : null);
-
-      if (!redirectLink && possibleUuid) {
-        redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-          String(possibleUuid)
-        )}&is_partial=${isPartialPayment ? 1 : 0}`;
-      }
-
       try {
         sessionStorage.setItem(
           "mmc_pending_booking",
@@ -526,6 +509,8 @@ export default function VehicleWashValetPage() {
             service_name: `Valet: ${currentServiceName} (${chosenVarName})`,
           })
         );
+        localStorage.setItem("last_valet_booking_id", confirmedId);
+        localStorage.setItem("last_booking_id", confirmedId);
       } catch { }
 
       saveBookingMeta(confirmedId, {
@@ -541,7 +526,7 @@ export default function VehicleWashValetPage() {
 
       saveConfirmedBooking({
         id: confirmedId,
-        rawId: possibleUuid || confirmedId,
+        rawId: confirmedId,
         readableId: confirmedId,
         serviceType: "valet",
         serviceTitle: `Valet: ${currentServiceName} (${chosenVarName})`,
