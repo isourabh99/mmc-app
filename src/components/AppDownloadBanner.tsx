@@ -83,10 +83,10 @@ export default function AppDownloadBanner() {
                   >
                     {/* Google Play Color SVG */}
                     <svg className="w-[22px] h-[24px] shrink-0" viewBox="0 0 512 512">
-                      <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z"/>
-                      <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z"/>
-                      <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z"/>
-                      <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z"/>
+                      <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z" />
+                      <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z" />
+                      <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z" />
+                      <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z" />
                     </svg>
                     <div className="flex flex-col text-left leading-none">
                       <span className="text-[8.5px] font-medium text-white tracking-[0.08em] uppercase leading-none mb-0.5">GET IT ON</span>
@@ -146,10 +146,10 @@ export default function AppDownloadBanner() {
                     aria-label="Get it on Google Play"
                   >
                     <svg className="w-3.5 h-4 xs:w-4 xs:h-4.5 shrink-0" viewBox="0 0 512 512">
-                      <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z"/>
-                      <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z"/>
-                      <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z"/>
-                      <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z"/>
+                      <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z" />
+                      <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z" />
+                      <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z" />
+                      <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z" />
                     </svg>
                     <div className="flex flex-col text-left leading-none">
                       <span className="text-[6px] xs:text-[7px] font-semibold text-white/80 tracking-wider uppercase leading-none mb-0.5">GET IT ON</span>
@@ -222,10 +222,10 @@ export default function AppDownloadBanner() {
                 className="flex items-center justify-center gap-3 py-2.5 px-4 rounded-[12px] bg-black border-[1.5px] border-[#A6A6A6] hover:border-white transition-all text-white shadow-xl active:scale-95 select-none"
               >
                 <svg className="w-[24px] h-[26px] shrink-0" viewBox="0 0 512 512">
-                  <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z"/>
-                  <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z"/>
-                  <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z"/>
-                  <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z"/>
+                  <path fill="#00E676" d="M260.6 242.4 67.4 435.6c5.8 6.2 14.1 9.8 23.3 9.8 5.7 0 11.2-1.4 16.1-4l246.3-141.5-92.5-57.5z" />
+                  <path fill="#FF3333" d="m353.1 161.7-246.3-141.5c-4.9-2.6-10.4-4-16.1-4-9.2 0-17.5 3.6-23.3 9.8l193.2 193.2 92.5-57.5z" />
+                  <path fill="#FFD400" d="M441.5 233.5l-63.8-36.6-34.9 35.5 34.9 35.5 63.8-36.6c11.9-6.9 19.3-19.4 19.3-33.9s-7.4-27-19.3-33.9z" />
+                  <path fill="#0086F8" d="M67.4 76.4C63.6 82.3 61.4 89.4 61.4 97v318c0 7.6 2.2 14.7 6 20.6l193.2-193.2L67.4 76.4z" />
                 </svg>
                 <div className="flex flex-col text-left leading-none">
                   <span className="text-[9px] font-medium text-white/90 tracking-wider uppercase leading-none mb-0.5">GET IT ON</span>

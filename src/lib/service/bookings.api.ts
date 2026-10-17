@@ -25,6 +25,14 @@ export interface UnifiedBookingItem {
   id: string;
   rawId: string | number;
   readableId?: string | number;
+  serviceNature?: string;
+  partialPayments?: Array<{
+    id?: string;
+    paid_amount: number;
+    due_amount: number;
+    payment_method?: string;
+    created_at?: string;
+  }>;
   serviceType: BookingServiceType;
   serviceCategoryName: string;
   serviceTitle: string;
@@ -119,6 +127,7 @@ export function saveBookingMeta(
     paymentStatus?: string;
     scheduleDate?: string;
     scheduleTime?: string;
+    readableId?: string | number;
   }
 ) {
   if (typeof window === "undefined" || !bookingId) return;
@@ -138,6 +147,7 @@ export function saveBookingMeta(
       ...prev,
       ...meta,
       price: priceVal,
+      readableId: meta.readableId || prev.readableId,
     };
     localStorage.setItem("mmc_bookings_metadata", JSON.stringify(existing));
   } catch (e) {
@@ -177,6 +187,28 @@ export function isFakeDummyId(id: any): boolean {
 }
 
 /**
+ * Check if a string/number is a UUID
+ */
+export function isUuidStr(val: any): boolean {
+  if (!val) return false;
+  const str = String(val).trim().toLowerCase();
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) ||
+    (str.includes("-") && str.length >= 24) ||
+    /^[0-9a-f]{32}$/i.test(str)
+  );
+}
+
+/**
+ * Check if a candidate value is a pure numeric booking ID (e.g. 100138, 100002)
+ */
+export function isPureNumericId(val: any): boolean {
+  if (val === undefined || val === null || val === "") return false;
+  const str = String(val).trim();
+  return /^\d{3,10}$/.test(str);
+}
+
+/**
  * Persist a confirmed service booking into local storage so that page refreshes never lose it
  */
 export function saveConfirmedBooking(booking: any) {
@@ -212,6 +244,7 @@ export function saveConfirmedBooking(booking: any) {
       paymentStatus: booking.paymentStatus,
       scheduleDate: booking.scheduleDate,
       scheduleTime: booking.scheduleTime,
+      readableId: booking.readableId,
     });
 
     window.dispatchEvent(new CustomEvent("mmc-bookings-updated"));
@@ -988,10 +1021,183 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     computedPaidAmount = 0;
   }
 
+  // Extract readable human booking ID exactly as returned by backend (e.g. 100138, 100002, MMCR100156)
+  const isCarService = Boolean(isChauffeur || raw.car || raw.car_id || raw.car_model);
+
+  // Helper to validate non-numeric, non-UUID readable string candidates
+  const isValidReadableId = (val: any): boolean => {
+    if (val === undefined || val === null || val === "") return false;
+    const str = String(val).trim();
+    if (!str || str === "null" || str === "undefined") return false;
+    if (isFakeDummyId(str)) return false;
+    if (isUuidStr(str)) return false;
+    // Discard cached 8-char sliced hex UUIDs (e.g. BF4927C4) when the item ID is a UUID
+    if (/^[0-9A-F]{8}$/.test(str) && /^[0-9a-f]{8}/i.test(idStr)) return false;
+    return str.length > 0 && str.length <= 25;
+  };
+
+  // Candidate pool across all backend response structures (Demandium regular, car_bookings, nested objects)
+  const candidatePool = [
+    raw.readable_id,
+    raw.readableId,
+    raw.booking_readable_id,
+    raw.service_booking_id,
+    raw.booking?.readable_id,
+    raw.car_booking?.readable_id,
+    raw.car_bookings?.[0]?.readable_id,
+    raw.booking_details?.readable_id,
+    raw.post?.readable_id,
+    raw.id, // In car/chauffeur bookings, `id` is the numeric booking ID: 100138!
+    raw.booking?.id,
+    raw.car_booking?.id,
+    raw.car_bookings?.[0]?.id,
+    raw.booking_id, // If numeric
+    raw.order_id,
+    raw.reference_id,
+    raw.reference,
+    raw.booking_reference,
+    raw.display_id,
+    raw.detail?.[0]?.booking_id,
+    raw.detail?.[0]?.readable_id,
+    raw.detail?.[0]?.id,
+    localConfirmed?.readableId,
+    localConfirmed?.booking_id,
+    localConfirmed?.id,
+    meta?.readableId,
+    pendingSession?.readable_id,
+    pendingSession?.booking_id,
+    pendingSession?.id,
+  ];
+
+  let resolvedReadableId: string = "";
+
+  // 1. Highest Priority: Pure numeric ID (e.g. 100138, 100002)
+  for (const c of candidatePool) {
+    if (isPureNumericId(c)) {
+      resolvedReadableId = String(c).trim();
+      break;
+    }
+  }
+
+  // 2. Scan raw keys containing 'id' for numeric 4-8 digit IDs (Demandium range 10000-9999999)
+  if (!resolvedReadableId && typeof raw === "object" && raw !== null) {
+    for (const [key, val] of Object.entries(raw)) {
+      if (key.toLowerCase().includes("id") && isPureNumericId(val)) {
+        const num = Number(val);
+        if (num >= 10000 && num <= 9999999) {
+          resolvedReadableId = String(val).trim();
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Scan sub-objects (car_booking, booking, car)
+  if (!resolvedReadableId) {
+    const subObjs = [raw.car_booking, raw.booking, raw.car, Array.isArray(raw.car_bookings) ? raw.car_bookings[0] : null];
+    for (const sub of subObjs) {
+      if (sub && typeof sub === "object") {
+        for (const [key, val] of Object.entries(sub)) {
+          if (key.toLowerCase().includes("id") && isPureNumericId(val)) {
+            const num = Number(val);
+            if (num >= 10000 && num <= 9999999) {
+              resolvedReadableId = String(val).trim();
+              break;
+            }
+          }
+        }
+        if (resolvedReadableId) break;
+      }
+    }
+  }
+
+  // 4. Second Priority: Valid non-UUID readable strings (e.g. MMC-VAL-1002, MMCR100156)
+  if (!resolvedReadableId) {
+    for (const c of candidatePool) {
+      if (isValidReadableId(c)) {
+        resolvedReadableId = String(c).trim();
+        break;
+      }
+    }
+  }
+
+  // 5. Fallback: Only if NO readable or numeric ID exists anywhere, slice UUID
+  if (!resolvedReadableId) {
+    resolvedReadableId = idStr.length > 12 ? idStr.slice(0, 8).toUpperCase() : idStr;
+  }
+
+  // Detect service nature (Mobile repair, Workshop service, Car Hire, etc.)
+  let serviceNature = "Mobile repair";
+  const rawNature =
+    raw.service_nature ||
+    raw.service_location_type ||
+    raw.repair_type ||
+    raw.service_type ||
+    raw.booking_nature ||
+    raw.category_type ||
+    raw.delivery_type ||
+    raw.sub_category?.name ||
+    raw.category?.name ||
+    "";
+
+  if (typeof rawNature === "string" && rawNature.trim().length > 0) {
+    const lower = rawNature.toLowerCase();
+    if (lower.includes("mobile")) {
+      serviceNature = "Mobile repair";
+    } else if (lower.includes("workshop") || lower.includes("garage")) {
+      serviceNature = "Workshop service";
+    } else if (lower.includes("hire") || lower.includes("rental")) {
+      serviceNature = "Car Hire";
+    } else if (lower.includes("chauffeur")) {
+      serviceNature = "Chauffeur Service";
+    } else {
+      serviceNature = rawNature.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  } else {
+    const combinedNotes = `${raw.notes || ""} ${raw.instructions || ""} ${raw.special_conditions || ""}`.toLowerCase();
+    if (combinedNotes.includes("mobile") || combinedNotes.includes("on-site") || combinedNotes.includes("call-out")) {
+      serviceNature = "Mobile repair";
+    } else if (isCarService) {
+      serviceNature = isChauffeur ? "Chauffeur Service" : "Car Hire";
+    } else {
+      serviceNature = "Mobile repair";
+    }
+  }
+
+  // Extract partial payment transactions list
+  const partialPayments: Array<{
+    id?: string;
+    paid_amount: number;
+    due_amount: number;
+    payment_method?: string;
+    created_at?: string;
+  }> = [];
+
+  if (Array.isArray(raw.partial_payments) && raw.partial_payments.length > 0) {
+    raw.partial_payments.forEach((p: any) => {
+      partialPayments.push({
+        id: p.id ? String(p.id) : undefined,
+        paid_amount: Number(p.paid_amount || 0),
+        due_amount: Number(p.due_amount || 0),
+        payment_method: p.payment_method ? String(p.payment_method).replace(/_/g, " ") : paymentMethod,
+        created_at: p.created_at || raw.created_at,
+      });
+    });
+  } else if (computedPaidAmount > 0) {
+    partialPayments.push({
+      paid_amount: computedPaidAmount,
+      due_amount: computedDueAmount,
+      payment_method: paymentMethod,
+      created_at: raw.created_at || raw.createdAt,
+    });
+  }
+
   return {
     id: idStr,
     rawId,
-    readableId: raw.readable_id || raw.booking_id || rawId,
+    readableId: resolvedReadableId,
+    serviceNature,
+    partialPayments,
     serviceType,
     serviceCategoryName: getServiceCategoryLabel(serviceType),
     serviceTitle,
@@ -1092,15 +1298,49 @@ export async function fetchAllCustomerBookings(
   }
 
   /**
-   * Add a raw booking item to the unified map (avoids duplicates    */
+   * Add a raw booking item to the unified map (avoids duplicates)
+   */
   function addToMap(item: any, hintType?: BookingServiceType) {
     if (!item) return;
     const norm = normalizeBooking(item, hintType);
     const key = norm.id.toLowerCase().trim();
 
-    if (unifiedMap.has(key)) {
-      const existing = unifiedMap.get(key)!;
-      // Merge best fields: never lose price or title if current is better
+    // Find if this booking already exists in unifiedMap under any identifier
+    let matchedKey: string | null = unifiedMap.has(key) ? key : null;
+    if (!matchedKey) {
+      const newKeys = [
+        norm.id,
+        norm.rawId ? String(norm.rawId) : "",
+        norm.readableId ? String(norm.readableId) : "",
+        item.id ? String(item.id) : "",
+        item.booking_id ? String(item.booking_id) : "",
+        item.readable_id ? String(item.readable_id) : "",
+      ]
+        .filter(Boolean)
+        .map((s) => s.toLowerCase().trim());
+
+      for (const [k, v] of unifiedMap.entries()) {
+        const vKeys = [
+          v.id,
+          v.rawId ? String(v.rawId) : "",
+          v.readableId ? String(v.readableId) : "",
+          v.raw?.id ? String(v.raw.id) : "",
+          v.raw?.booking_id ? String(v.raw.booking_id) : "",
+          v.raw?.readable_id ? String(v.raw.readable_id) : "",
+        ]
+          .filter(Boolean)
+          .map((s) => s.toLowerCase().trim());
+
+        if (newKeys.some((nk) => vKeys.includes(nk))) {
+          matchedKey = k;
+          break;
+        }
+      }
+    }
+
+    if (matchedKey) {
+      const existing = unifiedMap.get(matchedKey)!;
+      // Merge best fields: never lose price, title, or pure numeric readableId
       const bestAmount = norm.totalAmount > 0 ? norm.totalAmount : existing.totalAmount;
       const bestTitle =
         norm.serviceTitle && norm.serviceTitle !== "Specialist Vehicle Service"
@@ -1109,10 +1349,17 @@ export async function fetchAllCustomerBookings(
       const bestPaid = norm.isPaid || existing.isPaid;
       const bestProvider = norm.providerName || existing.providerName;
       const bestSchedule = norm.scheduleDate || existing.scheduleDate;
+      const bestReadableId =
+        norm.readableId && isPureNumericId(norm.readableId)
+          ? norm.readableId
+          : existing.readableId && isPureNumericId(existing.readableId)
+            ? existing.readableId
+            : (norm.readableId || existing.readableId);
 
-      unifiedMap.set(key, {
+      unifiedMap.set(matchedKey, {
         ...existing,
         ...norm,
+        readableId: bestReadableId,
         totalAmount: bestAmount,
         serviceTitle: bestTitle,
         isPaid: bestPaid,
@@ -1186,6 +1433,7 @@ export async function fetchAllCustomerBookings(
         if (isFakeDummyId(real.id)) return false;
         if (real.id.toLowerCase() === String(item.id || "").toLowerCase()) return true;
         if (real.rawId && String(real.rawId).toLowerCase() === String(item.rawId || "").toLowerCase()) return true;
+        if (real.readableId && String(real.readableId).toLowerCase() === String(item.readableId || item.readable_id || "").toLowerCase()) return true;
         // Price match (within £2) and matching service type or category
         const realAmount = real.totalAmount;
         const priceMatches = itemAmount > 0 && Math.abs(realAmount - itemAmount) < 2;

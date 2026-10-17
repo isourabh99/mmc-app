@@ -314,8 +314,8 @@ function BookingSuccessContent() {
           <div className="space-y-2 relative">
             <span
               className={`text-[11px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full border inline-block ${isFailed
-                  ? "bg-red-500/10 text-red-400 border-red-500/30"
-                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                ? "bg-red-500/10 text-red-400 border-red-500/30"
+                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                 }`}
             >
               {isFailed ? "Payment Incomplete" : "Booking Confirmed & Verified"}

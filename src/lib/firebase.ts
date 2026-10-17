@@ -130,9 +130,18 @@ export const triggerDevicePushNotification = async (
 ) => {
   if (typeof window === "undefined") return;
 
+  // Extract booking reference if present in title, body, or url
+  let detectedBookingKey = "";
+  const combinedText = `${title} ${body} ${url || ""}`;
+  const refMatch = combinedText.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
+  if (refMatch && refMatch[1]) {
+    detectedBookingKey = `booking_push_${refMatch[1].toLowerCase().trim()}`;
+  }
+
   // Generate unique deduplication key for this event
   const effectiveKey = (
     dedupKey ||
+    detectedBookingKey ||
     `${title.trim()}:${body.trim()}`
   ).toLowerCase().replace(/\s+/g, "_");
 
@@ -141,9 +150,13 @@ export const triggerDevicePushNotification = async (
     console.log("[PushNotification] Deduplicated - already pushed once:", effectiveKey);
     return;
   }
+  if (detectedBookingKey && effectiveKey !== detectedBookingKey && isAlreadyPushed(detectedBookingKey)) {
+    console.log("[PushNotification] Deduplicated by booking ref:", detectedBookingKey);
+    return;
+  }
 
   const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
-  const notifTag = effectiveKey.slice(0, 32);
+  const notifTag = (detectedBookingKey || effectiveKey).slice(0, 32);
 
   // 1. Direct Window Notification API first (Instant on desktop & laptops)
   if ("Notification" in window && Notification.permission === "granted") {

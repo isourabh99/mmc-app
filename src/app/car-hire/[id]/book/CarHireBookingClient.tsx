@@ -43,6 +43,8 @@ import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
+import { triggerDevicePushNotification } from "@/lib/firebase";
+import { saveBookingMeta } from "@/lib/service/bookings.api";
 
 export default function CarHireBookingClient() {
   const params = useParams();
@@ -399,16 +401,29 @@ export default function CarHireBookingClient() {
         setBookingDetails(res.content);
         showToast("Booking Placed successfully!", "success");
 
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-          try {
-            new Notification("MMC Reservation Confirmed! 🚗", {
-              body: `Your hire request for ${car?.brand || "your vehicle"} (Ref: ${res?.content?.booking_id || res?.content?.id || "Confirmed"}) has been placed!`,
-              icon: "/mmc-logo.png",
-              badge: "/mmc-logo.png",
-            });
-          } catch (notifErr) {
-            console.warn("Local booking notification error:", notifErr);
-          }
+        const carTitle = `Car Hire: ${car?.brand || "Vehicle"} ${car?.model || ""}`.trim();
+        saveBookingMeta(bookingRef, {
+          serviceTitle: carTitle,
+          serviceCategoryName: "Car Hire & Rental",
+          serviceType: "car",
+          vehicleModel: `${car?.brand || ""} ${car?.model || ""}`.trim(),
+          providerName: car?.provider?.company_name,
+          price: respTotalAmount,
+          isPaid: false,
+          paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
+          scheduleDate: startDate,
+          scheduleTime: pickupTime,
+        });
+
+        triggerDevicePushNotification(
+          `${carTitle} Confirmed! 🚗`,
+          `Your reservation (Ref: #${bookingRef}) has been placed. Schedule: ${startDate} (${formatTimeTo12Hour(pickupTime)}).`,
+          `/account?tab=bookings&bookingId=${bookingRef}`,
+          `booking_push_${String(bookingRef).toLowerCase().trim()}`
+        );
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
         }
       } else {
         showToast(

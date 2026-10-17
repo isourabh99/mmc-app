@@ -60,7 +60,7 @@ import {
   REAL_MECHANICAL_SERVICES,
 } from "@/lib/service/mechanical.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
-import { saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import { useRouter } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth.api";
 import {
@@ -601,6 +601,46 @@ export default function MechanicalPage() {
       setBookingSuccessData({ readable_id: confirmedMecId, booking_id: confirmedMecId });
       setView("success");
       showToast("Mechanical Booking Confirmed Successfully!", "success");
+
+      saveBookingMeta(confirmedMecId, {
+        serviceTitle: "Mechanical Diagnostic & Repair",
+        serviceCategoryName: "Mechanical & Garage",
+        serviceType: "mechanical",
+        vehicleModel: carModel.trim() || "Vehicle",
+        vehicleReg: regNo.trim() || undefined,
+        providerName: selectedProvider?.company_name,
+        price: numericPrice,
+        isPaid: false,
+        paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
+        scheduleDate: bookingDate,
+        scheduleTime: bookingTime || "11:00",
+      });
+      if (bId && String(bId) !== confirmedMecId) {
+        saveBookingMeta(String(bId), {
+          serviceTitle: "Mechanical Diagnostic & Repair",
+          serviceCategoryName: "Mechanical & Garage",
+          serviceType: "mechanical",
+          vehicleModel: carModel.trim() || "Vehicle",
+          vehicleReg: regNo.trim() || undefined,
+          providerName: selectedProvider?.company_name,
+          price: numericPrice,
+          isPaid: false,
+          paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
+          scheduleDate: bookingDate,
+          scheduleTime: bookingTime || "11:00",
+        });
+      }
+
+      triggerDevicePushNotification(
+        "Mechanical Repair & Service Confirmed! 🔧",
+        `Your appointment with ${selectedProvider?.company_name || "Specialist"} (Ref: #${confirmedMecId}) is confirmed. Schedule: ${formattedSchedule}.`,
+        `/account?tab=bookings&bookingId=${confirmedMecId}`,
+        `booking_push_${confirmedMecId.toLowerCase().trim()}`
+      );
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
+      }
       return;
     } catch (err: any) {
       console.warn("Mechanical booking error:", err);

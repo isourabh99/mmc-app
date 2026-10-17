@@ -50,6 +50,7 @@ import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.ap
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
+import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
   saveServiceFormDraft,
   getServiceFormDraft,
@@ -596,17 +597,15 @@ function ProvidersContent() {
       setIsBookingSuccess(true);
       showToast("Valet Booking Confirmed Successfully!", "success");
 
-      // Trigger native notification pop-up on user device
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        try {
-          new Notification("Motor Market Club Valet Wash Confirmed! 🧼", {
-            body: `Booking Ref #${confirmedId} for ${currentServiceName} has been confirmed!`,
-            icon: "/mmc-logo.png",
-            badge: "/mmc-logo.png",
-          });
-        } catch (notifErr) {
-          console.warn("Valet notification error:", notifErr);
-        }
+      triggerDevicePushNotification(
+        `${currentServiceName || "Valet Wash"} Confirmed! 🧼`,
+        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${effectiveSchedule}.`,
+        `/account?tab=bookings&bookingId=${confirmedId}`,
+        `booking_push_${String(confirmedId).toLowerCase().trim()}`
+      );
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
       }
     } catch (err: any) {
       console.error("Booking error:", err);

@@ -450,13 +450,12 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               key={s.step}
               type="button"
               onClick={() => s.step <= subStep && setSubStep(s.step)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                subStep === s.step
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${subStep === s.step
                   ? "bg-[#FAD293] text-black font-bold shadow-md"
                   : subStep > s.step
-                  ? "bg-white/10 text-white hover:bg-white/15"
-                  : "bg-white/5 text-white/30"
-              }`}
+                    ? "bg-white/10 text-white hover:bg-white/15"
+                    : "bg-white/5 text-white/30"
+                }`}
             >
               <span>{subStep > s.step ? "✓" : s.step}</span>
               <span>{s.label}</span>
@@ -495,17 +494,15 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
                 {/* Option: Puncture */}
                 <div
                   onClick={() => setSituationType("puncture")}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${
-                    situationType === "puncture"
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${situationType === "puncture"
                       ? "bg-[#181410] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
                       : "bg-black/40 border-white/10 hover:border-white/20"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-6 h-6 rounded-full border flex items-center justify-center ${
-                        situationType === "puncture" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                      }`}
+                      className={`w-6 h-6 rounded-full border flex items-center justify-center ${situationType === "puncture" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                        }`}
                     >
                       {situationType === "puncture" && <div className="w-2.5 h-2.5 rounded-full bg-black" />}
                     </div>
@@ -517,17 +514,15 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
                 {/* Option: Burst Tyre */}
                 <div
                   onClick={() => setSituationType("burst-tyre")}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${
-                    situationType === "burst-tyre"
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${situationType === "burst-tyre"
                       ? "bg-[#181410] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
                       : "bg-black/40 border-white/10 hover:border-white/20"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-6 h-6 rounded-full border flex items-center justify-center ${
-                        situationType === "burst-tyre" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                      }`}
+                      className={`w-6 h-6 rounded-full border flex items-center justify-center ${situationType === "burst-tyre" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                        }`}
                     >
                       {situationType === "burst-tyre" && <div className="w-2.5 h-2.5 rounded-full bg-black" />}
                     </div>
@@ -661,20 +656,18 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               {/* Option 1: Mobile Tyre */}
               <div
                 onClick={() => setAssistanceType("mobile_tyre")}
-                className={`p-6 rounded-3xl border transition-all cursor-pointer space-y-4 select-none ${
-                  assistanceType === "mobile_tyre"
+                className={`p-6 rounded-3xl border transition-all cursor-pointer space-y-4 select-none ${assistanceType === "mobile_tyre"
                     ? "bg-[#181410] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-xl"
                     : "bg-black/40 border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="w-12 h-12 rounded-2xl bg-[#FAD293]/10 text-[#FAD293] flex items-center justify-center">
                     <Wrench size={22} />
                   </div>
                   <div
-                    className={`w-6 h-6 rounded-full border flex items-center justify-center ${
-                      assistanceType === "mobile_tyre" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                    }`}
+                    className={`w-6 h-6 rounded-full border flex items-center justify-center ${assistanceType === "mobile_tyre" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                      }`}
                   >
                     {assistanceType === "mobile_tyre" && <div className="w-2.5 h-2.5 rounded-full bg-black" />}
                   </div>
@@ -691,20 +684,18 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               {/* Option 2: Recovery Truck */}
               <div
                 onClick={() => setAssistanceType("recovery_truck")}
-                className={`p-6 rounded-3xl border transition-all cursor-pointer space-y-4 select-none ${
-                  assistanceType === "recovery_truck"
+                className={`p-6 rounded-3xl border transition-all cursor-pointer space-y-4 select-none ${assistanceType === "recovery_truck"
                     ? "bg-[#181410] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-xl"
                     : "bg-black/40 border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="w-12 h-12 rounded-2xl bg-[#FAD293]/10 text-[#FAD293] flex items-center justify-center">
                     <Truck size={22} />
                   </div>
                   <div
-                    className={`w-6 h-6 rounded-full border flex items-center justify-center ${
-                      assistanceType === "recovery_truck" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                    }`}
+                    className={`w-6 h-6 rounded-full border flex items-center justify-center ${assistanceType === "recovery_truck" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                      }`}
                   >
                     {assistanceType === "recovery_truck" && <div className="w-2.5 h-2.5 rounded-full bg-black" />}
                   </div>
@@ -1022,11 +1013,10 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               {/* Option 1: Deposit (25% Advance) -> is_partial: 1 */}
               <div
                 onClick={() => setIsPartialPayment(true)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${
-                  isPartialPayment
+                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${isPartialPayment
                     ? "bg-[#1C1814] border-[#E5B874] ring-1 ring-[#E5B874]/40 shadow-lg"
                     : "bg-[#141210] border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -1047,11 +1037,10 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
                         ? "bg-[#E5B874] border-[#E5B874] text-black"
                         : "border-white/30 bg-transparent"
-                    }`}
+                      }`}
                   >
                     {isPartialPayment && <Check size={14} className="stroke-[3]" />}
                   </div>
@@ -1072,11 +1061,10 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               {/* Option 2: Online Payment (Full) -> is_partial: 0 */}
               <div
                 onClick={() => setIsPartialPayment(false)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${
-                  !isPartialPayment
+                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${!isPartialPayment
                     ? "bg-[#1C1814] border-[#E5B874] ring-1 ring-[#E5B874]/40 shadow-lg"
                     : "bg-[#141210] border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -1094,11 +1082,10 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      !isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
                         ? "bg-[#E5B874] border-[#E5B874] text-black"
                         : "border-white/30 bg-transparent"
-                    }`}
+                      }`}
                   >
                     {!isPartialPayment && <Check size={14} className="stroke-[3]" />}
                   </div>
