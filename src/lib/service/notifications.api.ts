@@ -1,6 +1,6 @@
 import apiClient from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import { isFakeDummyId } from "@/lib/service/bookings.api";
+import { isFakeDummyId, getBookingMeta } from "@/lib/service/bookings.api";
 
 export interface BookingNotification {
   id: string;
@@ -23,6 +23,11 @@ export interface BookingNotification {
   timeAgo: string;
   read: boolean;
   targetUrl?: string;
+  image?: string | null;
+  actionType?: "quote" | "question" | "close" | "booking";
+  actionButtonText?: string;
+  fareBreakdown?: { label: string; amount: string }[];
+  totalFare?: string;
   raw?: any;
 }
 
@@ -137,6 +142,10 @@ function detectBookingCategory(
     item.damage_description,
     item.car_model,
     item.special_conditions,
+    item.service_name,
+    item.service_title,
+    item.category?.name,
+    item.sub_category?.name,
   ]
     .filter(Boolean)
     .join(" ")
@@ -154,18 +163,180 @@ function detectBookingCategory(
   if (combined.includes("alloy") || combined.includes("rim") || combined.includes("diamond")) {
     return "alloy";
   }
-  if (combined.includes("engine") || combined.includes("brake") || combined.includes("oil") || combined.includes("service")) {
+  if (combined.includes("engine") || combined.includes("brake") || combined.includes("oil") || combined.includes("mechanic") || combined.includes("garage") || combined.includes("suspension") || combined.includes("mot")) {
     return "mechanical";
   }
+  if (combined.includes("valet") || combined.includes("wash") || combined.includes("detailing") || combined.includes("clean")) {
+    return "service";
+  }
   return "service";
+}
+
+/**
+ * Detect if a booking item is car hire / chauffeur / luxury rental
+ */
+export function isCarBookingItem(item: any): boolean {
+  if (!item) return false;
+  if (item.car || item.car_id) return true;
+  const bType = String(item.booking_type || "").toLowerCase();
+  if (bType === "car" || bType === "chauffeur") return true;
+  const pType = String(item.pickup_type || "").toLowerCase();
+  if (pType === "chauffeur" || pType === "delivery" || pType === "self") return true;
+  if (item.drop_time || item.drop_location) return true;
+  const sCategory = String(item.car?.service_category || item.category?.name || "").toLowerCase();
+  if (sCategory.includes("hire") || sCategory.includes("chauffeur") || sCategory.includes("luxury rental")) return true;
+  const notes = String(item.notes || "").toLowerCase();
+  if (notes.includes("luxury rental") || notes.includes("car hire") || notes.includes("chauffeur")) return true;
+  return false;
+}
+
+/**
+ * Accurately resolves the human-readable service name for any booking
+ */
+export function resolveBookingServiceName(item: any): string {
+  if (!item) return "Vehicle Service";
+
+  const localIdCandidates = [
+    String(item.id || ""),
+    String(item.booking_id || ""),
+    String(item.readable_id || ""),
+    String(item.rawId || ""),
+  ].filter(Boolean).map((s) => s.toLowerCase().trim());
+
+  // 1. Check local metadata store (saved during booking in all flows)
+  for (const key of localIdCandidates) {
+    const meta = getBookingMeta(key);
+    if (meta?.serviceTitle && typeof meta.serviceTitle === "string" && meta.serviceTitle.trim().length > 2) {
+      return meta.serviceTitle.trim();
+    }
+  }
+
+  // 2. Check local confirmed bookings
+  if (typeof window !== "undefined") {
+    try {
+      const rawConfirmed = localStorage.getItem("mmc_confirmed_bookings");
+      if (rawConfirmed) {
+        const list: any[] = JSON.parse(rawConfirmed);
+        const match = list.find((b: any) => {
+          if (!b) return false;
+          const bCandidates = [
+            b.id,
+            b.rawId,
+            b.readableId,
+            b.booking_id,
+          ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
+          return localIdCandidates.some((c) => bCandidates.includes(c));
+        });
+        if (match?.serviceTitle && typeof match.serviceTitle === "string" && match.serviceTitle.trim().length > 2) {
+          return match.serviceTitle.trim();
+        }
+      }
+    } catch {}
+
+    // 3. Check pending session in sessionStorage
+    try {
+      const rawPending = sessionStorage.getItem("mmc_pending_booking");
+      if (rawPending) {
+        const p = JSON.parse(rawPending);
+        if (p?.service_name || p?.serviceTitle) {
+          const pCandidates = [
+            p.booking_id,
+            p.readable_id,
+            p.id,
+          ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
+          if (localIdCandidates.some((c) => pCandidates.includes(c))) {
+            return (p.service_name || p.serviceTitle).trim();
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Check backend detail items array (Demandium booking details)
+  if (Array.isArray(item.detail) && item.detail.length > 0) {
+    const first = item.detail[0];
+    const name = first.service_name || first.service?.name;
+    if (name && typeof name === "string" && name.trim()) {
+      if (first.variant_key && !name.toLowerCase().includes(first.variant_key.toLowerCase())) {
+        return `${name.trim()} (${first.variant_key.trim()})`;
+      }
+      return name.trim();
+    }
+  }
+
+  // 5. Direct API fields
+  const directCandidates = [
+    item.service_name,
+    item.service?.name,
+    item.serviceTitle,
+    item.serviceName,
+    item.service_title,
+    item.sub_category?.name,
+    item.sub_category_name,
+    item.category?.name,
+    item.category_name,
+    item.service_description,
+    item.damage_description,
+  ];
+  for (const f of directCandidates) {
+    if (f && typeof f === "string" && f.trim().length > 2 && !f.trim().startsWith("{")) {
+      const trimmed = f.trim();
+      // Skip if it's pure number or registration pattern
+      if (!/^\d+$/.test(trimmed) && !/^[A-Z0-9]{5,8}$/i.test(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+
+  // 6. Check tags in special_conditions, notes, damage_description
+  const combined = [
+    item.special_conditions,
+    item.notes,
+    item.damage_description,
+    item.instructions,
+  ].filter(Boolean).join(" ");
+
+  const tagMatch = combined.match(/\[(?:Valet|Service|Package|Mode):\s*([^\]]+)\]/i);
+  if (tagMatch && tagMatch[1]) {
+    return tagMatch[1].trim();
+  }
+  if (/full exterior valet/i.test(combined)) return "Full Exterior Valet";
+  if (/interior valet/i.test(combined)) return "Full Interior Valet";
+  if (/full valet/i.test(combined)) return "Full Valet & Detailing";
+  if (/express wash|mini valet/i.test(combined)) return "Express Valet Wash";
+  if (/tyre fitting|tire fitting/i.test(combined)) return "Mobile Tyre Fitting";
+  if (/puncture repair/i.test(combined)) return "Tyre Puncture Repair";
+  if (/roadside|recovery|towing|breakdown/i.test(combined)) return "Emergency Roadside Assistance";
+  if (/alloy|wheel refurb|diamond cut/i.test(combined)) return "Alloy Wheel Refurbishment";
+  if (/bodywork|scratch|dent|paint/i.test(combined)) return "Bodywork & Paint Repair";
+  if (/mechanic|engine|brake|suspension|diagnostic|mot/i.test(combined)) return "Mechanical Repair & Service";
+  if (/car hire|rental/i.test(combined)) return "Car Hire & Rental";
+  if (/chauffeur/i.test(combined)) return "Chauffeur Service";
+
+  // 7. Category fallback
+  const category = detectBookingCategory(item);
+  switch (category) {
+    case "tyre":
+      return "Tyre Fitting & Repair";
+    case "emergency":
+      return "Emergency Assistance";
+    case "mechanical":
+      return "Mechanical Repair & Service";
+    case "bodywork":
+      return "Bodywork & Paint Repair";
+    case "alloy":
+      return "Alloy Wheel Refurbishment";
+    default:
+      return "Vehicle Service";
+  }
 }
 
 /**
  * Normalizes a regular booking into a clean NotificationItem dynamically
  */
 function normalizeRegularBookingNotification(item: any, readIds: Set<string>): BookingNotification {
-  const id = `notif-reg-${item.id || item.readable_id}`;
   const readableId = item.readable_id || item.id;
+  const id = `notif-reg-${readableId}`;
   const category = detectBookingCategory(item);
   const statusRaw = (item.booking_status || "pending").toLowerCase();
 
@@ -177,46 +348,59 @@ function normalizeRegularBookingNotification(item: any, readIds: Set<string>): B
 
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
   const isPaid = item.is_paid === 1 || item.is_paid === true;
-  const amount = Number(item.total_booking_amount || 0);
+  const amount = Number(item.total_booking_amount || item.total_amount || 0);
 
-  // Title & Subtitle based on provider updates and status
+  const serviceName = resolveBookingServiceName(item);
   const provName = item.provider?.company_name || item.provider_name || "";
-  let title = `Booking #${readableId} (${statusLabel})`;
+  const carModel = item.car_model || "";
+  const carReg = item.car_registration_number || "";
+  const vehicleText = carModel ? `${carModel}${carReg ? ` (${carReg})` : ""}` : carReg;
+
+  // Title: Always lead with the ACTUAL SERVICE NAME!
+  let title = `${serviceName} — #${readableId}`;
   if (status === "accepted") {
-    title = `Booking Accepted by Provider! 🛠️`;
+    title = `${serviceName} Confirmed! 🛠️`;
   } else if (status === "ongoing") {
-    title = `Service In Progress! 🚗`;
+    title = `${serviceName} In Progress! 🚗`;
   } else if (status === "completed") {
-    title = `Service Completed! ✅`;
+    title = `${serviceName} Completed! ✅`;
   } else if (status === "canceled") {
-    title = `Booking Cancelled ⚠️`;
-  } else if (item.car_model) {
-    title = `${item.car_model} — #${readableId}`;
+    title = `${serviceName} Cancelled ⚠️`;
+  } else {
+    // Pending
+    if (carModel) {
+      title = `${serviceName}: ${carModel}`;
+    } else {
+      title = `${serviceName} — #${readableId}`;
+    }
   }
 
+  // Subtitle: Provider, Vehicle details, and reference
   let subtitle = "";
-  if (provName) {
+  if (provName && vehicleText) {
+    subtitle = `${provName} • ${vehicleText} • Ref #${readableId}`;
+  } else if (provName) {
     subtitle = `${provName} • Ref #${readableId}`;
+  } else if (vehicleText) {
+    subtitle = `${vehicleText} • Ref #${readableId}`;
   } else if (item.notes) {
     subtitle = item.notes;
   } else if (item.damage_description) {
     subtitle = `Issue: ${item.damage_description}`;
-  } else if (category === "tyre") {
-    subtitle = `Tyre Fitting & Repair • #${readableId}`;
-  } else if (category === "emergency") {
-    subtitle = `Emergency Assistance • #${readableId}`;
   } else {
     subtitle = `Service Ref #${readableId}`;
   }
 
   // Description / Summary
-  const sched = item.service_schedule ? item.service_schedule.replace(".000000Z", "").replace("T", " ") : "Scheduled Service";
-  const paymentText = isPaid ? "Paid" : "Payment Pending";
+  const sched = item.service_schedule
+    ? item.service_schedule.replace(".000000Z", "").replace("T", " ")
+    : "Scheduled Service";
+  const paymentText = isPaid ? "Paid" : "Pay later";
   const desc = `${sched} • £${amount} (${paymentText})`;
 
   return {
     id,
-    bookingId: item.id,
+    bookingId: item.id || readableId,
     readableId,
     bookingType: "regular",
     category,
@@ -229,10 +413,11 @@ function normalizeRegularBookingNotification(item: any, readIds: Set<string>): B
     isPaid,
     paymentMethod: item.payment_method ? item.payment_method.replace(/_/g, " ") : "Cash After Service",
     scheduleTime: sched,
-    vehicleInfo: item.car_model ? `${item.car_model} ${item.car_registration_number ? `(${item.car_registration_number})` : ""}` : (item.car_registration_number || undefined),
+    vehicleInfo: vehicleText || undefined,
     createdAt: item.created_at || new Date().toISOString(),
     timeAgo: formatTimeAgo(item.created_at || item.service_schedule),
     read: readIds.has(id),
+    targetUrl: `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}`,
     raw: item,
   };
 }
@@ -241,7 +426,8 @@ function normalizeRegularBookingNotification(item: any, readIds: Set<string>): B
  * Normalizes a car booking (car hire or chauffeur) into a clean NotificationItem dynamically
  */
 function normalizeCarBookingNotification(item: any, readIds: Set<string>): BookingNotification {
-  const id = `notif-car-${item.id || item.booking_id}`;
+  const readableId = item.readable_id || item.id || item.booking_id;
+  const id = `notif-car-${readableId}`;
   const car = item.car || {};
   const isChauffeur = item.pickup_type === "chauffeur" || car.service_category === "chauffeur";
   const category: BookingNotification["category"] = isChauffeur ? "chauffeur" : "car_hire";
@@ -257,25 +443,40 @@ function normalizeCarBookingNotification(item: any, readIds: Set<string>): Booki
   const isPaid = item.is_paid === 1 || item.payment_status === "paid";
   const amount = Number(item.total_amount || 0);
 
-  const brand = car.brand || "Vehicle";
+  const brand = car.brand || item.car_model || "Vehicle";
   const model = car.model ? ` ${car.model}` : "";
-  const title = isChauffeur
-    ? `Chauffeur: ${brand}${model}`
-    : `Car Hire: ${brand}${model}`;
+  const servicePrefix = isChauffeur ? "Chauffeur" : "Car Hire";
 
-  const readableId = item.id;
-  const location = item.pickup_location || item.delivery_address || "London";
-  const dates = item.start_date ? `${item.start_date}${item.end_date && item.end_date !== item.start_date ? ` to ${item.end_date}` : ""}` : "Upcoming";
-  const desc = `${dates} • ${location} • £${amount.toFixed(2)}`;
+  let title = `${servicePrefix}: ${brand}${model}`.trim();
+  if (status === "accepted") {
+    title = `${servicePrefix} Confirmed! 🚗`;
+  } else if (status === "ongoing") {
+    title = `${servicePrefix} Active! 🚗`;
+  } else if (status === "completed") {
+    title = `${servicePrefix} Completed! ✅`;
+  } else if (status === "canceled") {
+    title = `${servicePrefix} Cancelled ⚠️`;
+  }
+
+  const location = item.pickup_location || item.delivery_address || "";
+  const dates = item.start_date
+    ? `${item.start_date}${item.end_date && item.end_date !== item.start_date ? ` to ${item.end_date}` : ""}`
+    : "Upcoming";
+  const schedTime = item.pickup_time ? ` ${item.pickup_time}` : "";
+  const paymentText = isPaid ? "Paid" : "Pay later";
+  const desc = `${dates}${schedTime}${location ? ` • ${location}` : ""} • £${amount} (${paymentText})`;
+
+  const statusNote = `${statusLabel} • ${isChauffeur ? "Chauffeur Service" : "Luxury Rental"}`;
+  const subtitle = readableId ? `${statusNote} • Ref #${readableId}` : statusNote;
 
   return {
     id,
-    bookingId: item.booking_id || item.id,
+    bookingId: item.booking_id || item.id || readableId,
     readableId,
     bookingType: "car",
     category,
     title,
-    subtitle: `${statusLabel} • ${isChauffeur ? "Chauffeur Service" : "Luxury Rental"}`,
+    subtitle,
     description: desc,
     status,
     statusLabel,
@@ -287,6 +488,7 @@ function normalizeCarBookingNotification(item: any, readIds: Set<string>): Booki
     createdAt: item.created_at || new Date().toISOString(),
     timeAgo: formatTimeAgo(item.created_at || item.start_date),
     read: readIds.has(id),
+    targetUrl: `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}`,
     raw: item,
   };
 }
@@ -383,6 +585,361 @@ function normalizeBidNotification(
   };
 }
 
+/**
+ * Direct call to GET /customer/notification?limit=10&offset=1
+ * curl --location 'https://mmcclub.co.uk/backend/api/v1/customer/notification?limit=10&offset=1' \
+ * --header 'Accept: application/json' \
+ * --header 'Authorization: Bearer YOUR_CUSTOMER_BEARER_TOKEN'
+ */
+export async function fetchCustomerBackendNotifications(
+  limit: number = 10,
+  offset: number = 1
+): Promise<{
+  data: any[];
+  total?: number;
+  raw?: any;
+}> {
+  if (typeof window === "undefined") return { data: [] };
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("auth_token") ||
+    localStorage.getItem("mmc_token") ||
+    localStorage.getItem("user_token");
+  if (!token) return { data: [] };
+
+  try {
+    const res = await apiClient.get("/customer/notification", {
+      params: { limit, offset },
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      timeout: 10000,
+    });
+
+    const content = res.data?.content;
+    const list =
+      content?.data ||
+      content?.notifications?.data ||
+      content?.notifications ||
+      (Array.isArray(content) ? content : []) ||
+      res.data?.data ||
+      [];
+
+    return {
+      data: Array.isArray(list) ? list : [],
+      total: Number(content?.total || (Array.isArray(list) ? list.length : 0)),
+      raw: res.data,
+    };
+  } catch (err: any) {
+    console.warn("fetchCustomerBackendNotifications warning:", err?.message || err);
+    return { data: [] };
+  }
+}
+
+/**
+ * Resolves full notification image URL from various backend attributes
+ */
+export function resolveNotificationImageUrl(item: any): string | null {
+  if (!item) return null;
+
+  let dataObj = item.data;
+  if (typeof dataObj === "string") {
+    try {
+      dataObj = JSON.parse(dataObj);
+    } catch {}
+  }
+
+  const pickCandidate = (val: any): string | null => {
+    if (!val) return null;
+    if (typeof val === "string" && val.trim().length > 0) return val.trim();
+    if (typeof val === "object") {
+      if (Array.isArray(val) && val.length > 0) {
+        return pickCandidate(val[0]);
+      }
+      return val.url || val.path || val.file_url || val.full_url || val.file_path || null;
+    }
+    return null;
+  };
+
+  const rawUrl =
+    pickCandidate(item.image_full_path) ||
+    pickCandidate(item.cover_image_full_path) ||
+    pickCandidate(item.image) ||
+    pickCandidate(item.cover_image) ||
+    pickCandidate(item.attachment_full_path) ||
+    pickCandidate(item.attachment) ||
+    pickCandidate(item.attachments) ||
+    pickCandidate(item.banner_full_path) ||
+    pickCandidate(item.banner) ||
+    pickCandidate(item.thumbnail_full_path) ||
+    pickCandidate(item.thumbnail) ||
+    pickCandidate(item.icon_url) ||
+    pickCandidate(item.avatar) ||
+    pickCandidate(dataObj?.image_full_path) ||
+    pickCandidate(dataObj?.cover_image_full_path) ||
+    pickCandidate(dataObj?.image) ||
+    pickCandidate(dataObj?.cover_image) ||
+    pickCandidate(dataObj?.attachment_full_path) ||
+    pickCandidate(dataObj?.attachment) ||
+    pickCandidate(dataObj?.attachments) ||
+    pickCandidate(dataObj?.file_url) ||
+    pickCandidate(dataObj?.file) ||
+    pickCandidate(dataObj?.banner) ||
+    pickCandidate(dataObj?.photo) ||
+    pickCandidate(dataObj?.picture) ||
+    pickCandidate(item.raw?.image_full_path) ||
+    pickCandidate(item.raw?.image) ||
+    null;
+
+  if (!rawUrl || typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
+    return null;
+  }
+
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
+    return trimmed;
+  }
+
+  const root = "https://mmcclub.co.uk/backend";
+
+  if (trimmed.startsWith("storage/app/public/")) {
+    return `${root}/${trimmed}`;
+  }
+  if (trimmed.startsWith("/storage/app/public/")) {
+    return `${root}${trimmed}`;
+  }
+  if (trimmed.startsWith("storage/")) {
+    return `${root}/${trimmed}`;
+  }
+  if (trimmed.startsWith("/storage/")) {
+    return `${root}${trimmed}`;
+  }
+  if (trimmed.startsWith("notification/")) {
+    return `${root}/storage/app/public/${trimmed}`;
+  }
+  if (trimmed.startsWith("/notification/")) {
+    return `${root}/storage/app/public${trimmed}`;
+  }
+  if (trimmed.startsWith("/")) {
+    return `${root}${trimmed}`;
+  }
+
+  // If simple filename like "2024-10-16-670fa9b951717.png" or "my-image.jpg"
+  if (!trimmed.includes("/")) {
+    return `${root}/storage/app/public/notification/${trimmed}`;
+  }
+
+  return `${root}/${trimmed}`;
+}
+
+/**
+ * Parses any fare / pricing breakdown from notification object or payload
+ */
+export function extractFareBreakdown(item: any): {
+  breakdown: { label: string; amount: string }[];
+  totalFare?: string;
+} {
+  const breakdown: { label: string; amount: string }[] = [];
+  let totalFare: string | undefined = undefined;
+
+  if (!item) return { breakdown };
+
+  let dataObj = item.data;
+  if (typeof dataObj === "string") {
+    try {
+      dataObj = JSON.parse(dataObj);
+    } catch {}
+  }
+
+  const source = dataObj && typeof dataObj === "object" ? { ...item, ...dataObj } : item;
+
+  // 1. Array breakdown
+  const list = source.breakdown || source.fare_details || source.costs || source.price_breakdown || source.items;
+  if (Array.isArray(list)) {
+    list.forEach((entry: any) => {
+      if (!entry) return;
+      const label = entry.label || entry.name || entry.title || entry.service_name || "Service Item";
+      const amt = entry.amount || entry.price || entry.fee || entry.cost;
+      if (amt !== undefined) {
+        breakdown.push({
+          label: String(label),
+          amount: typeof amt === "number" ? `£${amt.toFixed(2)}` : (String(amt).startsWith("£") ? String(amt) : `£${amt}`),
+        });
+      }
+    });
+  }
+
+  // 2. Direct fee fields
+  if (source.labour_fee || source.labour_amount || source.labour) {
+    const val = source.labour_fee || source.labour_amount || source.labour;
+    breakdown.push({ label: "Labour (Tyre Removal, Fitting)", amount: `£${val}` });
+  }
+  if (source.call_out_fee || source.callout_fee || source.call_out) {
+    const val = source.call_out_fee || source.callout_fee || source.call_out;
+    breakdown.push({ label: "Call-Out Fee", amount: `£${val}` });
+  }
+
+  // Total Fare
+  const totalVal = source.fare_amount || source.total_fare || source.total_amount || source.fare || source.amount;
+  if (totalVal !== undefined && totalVal !== null && totalVal !== "" && Number(totalVal) > 0) {
+    totalFare = typeof totalVal === "number" ? `£${totalVal.toFixed(2)}` : (String(totalVal).startsWith("£") ? String(totalVal) : `£${totalVal}`);
+  }
+
+  return { breakdown, totalFare };
+}
+
+/**
+ * Resolves notification action type, button text, and redirection target
+ */
+export function resolveNotificationActionType(item: any): {
+  actionType: "quote" | "question" | "close" | "booking";
+  actionButtonText: string;
+  targetUrl: string;
+} {
+  const title = String(item.title || "").toLowerCase();
+  const desc = String(item.description || "").toLowerCase();
+  const combined = `${title} ${desc}`;
+
+  // 1. Provider quote / bid offer
+  if (
+    combined.includes("provider bid") ||
+    combined.includes("bid offer") ||
+    combined.includes("quotation") ||
+    combined.includes("submitted a price") ||
+    combined.includes("quote") ||
+    combined.includes("bids")
+  ) {
+    return {
+      actionType: "quote",
+      actionButtonText: "View Quote Bids",
+      targetUrl: "/account?tab=quotes",
+    };
+  }
+
+  // 2. Question / Customer inquiry
+  if (
+    combined.includes("question") ||
+    combined.includes("inquiry") ||
+    combined.includes("enquiry") ||
+    combined.includes("message") ||
+    combined.includes("ask")
+  ) {
+    return {
+      actionType: "question",
+      actionButtonText: "View Question",
+      targetUrl: "/account?tab=quotes",
+    };
+  }
+
+  // 3. Specific Booking reference
+  const refMatch = combined.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
+  if (refMatch || item.booking_id || item.data?.booking_id) {
+    const bookingId = item.booking_id || item.data?.booking_id || (refMatch ? refMatch[1] : null);
+    return {
+      actionType: "booking",
+      actionButtonText: "View Booking",
+      targetUrl: `/account?tab=bookings&bookingId=${encodeURIComponent(String(bookingId))}`,
+    };
+  }
+
+  // 4. Normal push notification / general notice ("YE TO DEKH KR CLOSE KRA DENA")
+  return {
+    actionType: "close",
+    actionButtonText: "Close",
+    targetUrl: "",
+  };
+}
+
+/**
+ * Normalizes an official backend customer notification (/customer/notification)
+ */
+function normalizeBackendCustomerNotification(
+  item: any,
+  readIds: Set<string>
+): BookingNotification {
+  const notifId = String(item.id || `api-notif-${Date.now()}`);
+  const id = `notif-api-${notifId}`;
+
+  const titleRaw = item.title || "Motor Market Club Update";
+  const descRaw = item.description || "";
+  const combinedText = `${titleRaw} ${descRaw}`;
+
+  // Extract booking reference if embedded
+  const refMatch = combinedText.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
+  const detectedRef = refMatch ? refMatch[1] : undefined;
+
+  const bookingId = item.booking_id || item.data?.booking_id || detectedRef || notifId;
+  const readableId = item.readable_id || detectedRef || notifId.slice(0, 8);
+
+  const { actionType, actionButtonText, targetUrl } = resolveNotificationActionType(item);
+  const imageUrl = resolveNotificationImageUrl(item);
+  const { breakdown, totalFare } = extractFareBreakdown(item);
+
+  // Detect category from text
+  const textLower = combinedText.toLowerCase();
+  let category: BookingNotification["category"] = "service";
+  if (actionType === "quote") {
+    category = "quote";
+  } else if (textLower.includes("hire") || textLower.includes("rental") || textLower.includes("rent")) {
+    category = "car_hire";
+  } else if (textLower.includes("chauffeur")) {
+    category = "chauffeur";
+  } else if (textLower.includes("tyre") || textLower.includes("tire") || textLower.includes("puncture")) {
+    category = "tyre";
+  } else if (textLower.includes("emergency") || textLower.includes("breakdown") || textLower.includes("recovery")) {
+    category = "emergency";
+  } else if (textLower.includes("alloy") || textLower.includes("rim")) {
+    category = "alloy";
+  } else if (textLower.includes("dent") || textLower.includes("bodywork") || textLower.includes("paint") || textLower.includes("scratch")) {
+    category = "bodywork";
+  } else if (textLower.includes("mechanic") || textLower.includes("brake") || textLower.includes("engine") || textLower.includes("mot") || textLower.includes("oil")) {
+    category = "mechanical";
+  }
+
+  // Detect status
+  let status: BookingNotification["status"] = "pending";
+  if (textLower.includes("completed") || textLower.includes("done") || textLower.includes("finished")) {
+    status = "completed";
+  } else if (textLower.includes("accepted") || textLower.includes("confirmed")) {
+    status = "accepted";
+  } else if (textLower.includes("ongoing") || textLower.includes("in progress") || textLower.includes("en route") || textLower.includes("dispatched")) {
+    status = "ongoing";
+  } else if (textLower.includes("canceled") || textLower.includes("cancelled") || textLower.includes("rejected")) {
+    status = "canceled";
+  }
+
+  const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+  const createdAt = item.created_at || new Date().toISOString();
+
+  return {
+    id,
+    bookingId,
+    readableId,
+    bookingType: category === "car_hire" || category === "chauffeur" ? "car" : (category === "quote" ? "quote" : "regular"),
+    category,
+    title: titleRaw,
+    subtitle: detectedRef ? `Ref #${detectedRef} • ${statusLabel}` : (actionType === "quote" ? "Specialist Quote Offer" : undefined),
+    description: descRaw,
+    status,
+    statusLabel,
+    totalAmount: Number(item.amount || item.total_amount || 0),
+    isPaid: textLower.includes("paid") || Boolean(item.is_paid),
+    paymentMethod: item.payment_method || "Online",
+    scheduleTime: item.schedule || "Notice",
+    createdAt,
+    timeAgo: formatTimeAgo(createdAt),
+    read: readIds.has(id) || readIds.has(notifId),
+    targetUrl: targetUrl || (detectedRef ? `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}` : ""),
+    image: imageUrl,
+    actionType,
+    actionButtonText,
+    fareBreakdown: breakdown,
+    totalFare,
+    raw: item,
+  };
+}
+
 let cachedNotifsResult: {
   notifications: BookingNotification[];
   unreadCount: number;
@@ -422,6 +979,22 @@ export async function fetchBookingNotifications(forceRefresh = false): Promise<{
       cachedNotifsResult = res;
       lastNotifsFetchTime = Date.now();
       return res;
+    } catch (globalErr) {
+      console.error("fetchBookingNotifications error:", globalErr);
+      const isAuth =
+        typeof window !== "undefined" &&
+        Boolean(
+          localStorage.getItem("token") ||
+            localStorage.getItem("auth_token") ||
+            localStorage.getItem("mmc_token") ||
+            localStorage.getItem("user")
+        );
+      return {
+        notifications: [],
+        unreadCount: 0,
+        isLive: false,
+        isAuthenticated: isAuth,
+      };
     } finally {
       inFlightNotifsPromise = null;
     }
@@ -436,7 +1009,15 @@ async function doFetchBookingNotifications(): Promise<{
   isLive: boolean;
   isAuthenticated: boolean;
 }> {
-  const token = localStorage.getItem("token");
+  const token =
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("token") ||
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("mmc_token") ||
+        localStorage.getItem("user_token") ||
+        (localStorage.getItem("user") ? "active_user" : null))) ||
+    null;
+
   if (!token) {
     return {
       notifications: [],
@@ -449,122 +1030,53 @@ async function doFetchBookingNotifications(): Promise<{
   const readIds = getReadNotificationIds();
   const dismissedIds = getDismissedNotificationIds();
 
-  let rawRegularBookings: any[] = [];
-  let rawCarBookings: any[] = [];
-  let rawQuotePosts: any[] = [];
+  // Extract current authenticated user identifiers
+  const currentUid = getCurrentUserId();
+  const userIds = new Set<string>();
+  if (currentUid) userIds.add(String(currentUid).toLowerCase().trim());
+  try {
+    const rawUser = localStorage.getItem("user");
+    if (rawUser) {
+      const u = JSON.parse(rawUser);
+      if (u.id) userIds.add(String(u.id).toLowerCase().trim());
+      if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
+      if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
+      if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
+      if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
+    }
+  } catch {}
+
+  const isBookingOwnedByCurrentUser = (item: any): boolean => {
+    if (!item) return false;
+    if (isFakeDummyId(item.id || item.booking_id || item.readable_id)) return false;
+    if (userIds.size === 0) return true;
+    const bCustomerIds = [
+      item.customer_id,
+      item.user_id,
+      item.customer?.id,
+      item.customer?.user_id,
+    ]
+      .filter(Boolean)
+      .map((x) => String(x).toLowerCase().trim());
+    if (bCustomerIds.length > 0) {
+      return bCustomerIds.some((cid) => userIds.has(cid));
+    }
+    return true;
+  };
+
+  let rawBackendNotifications: any[] = [];
   let isLive = false;
 
-  // 1. Fetch general customer bookings (tyre, emergency, bodywork, valet, etc.)
+  // 1. Fetch official backend customer notifications: GET /customer/notification?limit=10&offset=1
   try {
-    const res = await apiClient.get("/customer/booking", {
-      params: {
-        limit: 20,
-        offset: 1,
-        booking_status: "all",
-        service_type: "all",
-        booking_type: "all",
-      },
-      timeout: 10000,
-    });
-
-    // Extract current authenticated user identifiers
-    const currentUid = getCurrentUserId();
-    const userIds = new Set<string>();
-    if (currentUid) userIds.add(String(currentUid).toLowerCase().trim());
-    try {
-      const rawUser = localStorage.getItem("user");
-      if (rawUser) {
-        const u = JSON.parse(rawUser);
-        if (u.id) userIds.add(String(u.id).toLowerCase().trim());
-        if (u.user_id) userIds.add(String(u.user_id).toLowerCase().trim());
-        if (u.customer_id) userIds.add(String(u.customer_id).toLowerCase().trim());
-        if (u.uuid) userIds.add(String(u.uuid).toLowerCase().trim());
-        if (u.phone) userIds.add(String(u.phone).toLowerCase().trim());
-      }
-    } catch {}
-
-    const isBookingOwnedByCurrentUser = (item: any): boolean => {
-      if (!item) return false;
-      if (isFakeDummyId(item.id || item.booking_id || item.readable_id)) return false;
-      if (userIds.size === 0) return true;
-      const bCustomerIds = [
-        item.customer_id,
-        item.user_id,
-        item.customer?.id,
-        item.customer?.user_id,
-      ]
-        .filter(Boolean)
-        .map((x) => String(x).toLowerCase().trim());
-      if (bCustomerIds.length > 0) {
-        return bCustomerIds.some((cid) => userIds.has(cid));
-      }
-      return true;
-    };
-
-    if (res.data?.content) {
-      const content = res.data.content;
-      const incoming: any[] = [];
-
-      if (Array.isArray(content.regular_bookings?.data)) {
-        incoming.push(...content.regular_bookings.data);
-      } else if (Array.isArray(content.regular_bookings)) {
-        incoming.push(...content.regular_bookings);
-      }
-
-      if (Array.isArray(content.bookings?.data)) {
-        incoming.push(...content.bookings.data);
-      } else if (Array.isArray(content.bookings)) {
-        incoming.push(...content.bookings);
-      }
-
-      if (Array.isArray(content.data)) {
-        incoming.push(...content.data);
-      }
-
-      incoming.filter(isBookingOwnedByCurrentUser).forEach((b) => rawRegularBookings.push(b));
-
-      if (Array.isArray(content.car_bookings?.data)) {
-        content.car_bookings.data.filter(isBookingOwnedByCurrentUser).forEach((c: any) => rawCarBookings.push(c));
-      } else if (Array.isArray(content.car_bookings)) {
-        content.car_bookings.filter(isBookingOwnedByCurrentUser).forEach((c: any) => rawCarBookings.push(c));
-      }
-
+    const backendRes = await fetchCustomerBackendNotifications(10, 1);
+    if (backendRes.data && backendRes.data.length > 0) {
+      rawBackendNotifications = backendRes.data;
       isLive = true;
     }
   } catch (err: any) {
-    console.warn("Live customer bookings fetch failed:", err?.message || err);
+    console.warn("Backend /customer/notification fetch warning:", err?.message || err);
   }
-
-  // 2. Also fetch car bookings explicitly to ensure all chauffeur rides are present
-  try {
-    const resCar = await apiClient.get("/customer/booking", {
-      params: {
-        limit: 10,
-        offset: 1,
-        booking_status: "all",
-        service_type: "all",
-        booking_type: "car",
-      },
-      timeout: 8000,
-    });
-
-    if (resCar.data?.content) {
-      const contentCar = resCar.data.content;
-      const carList =
-        contentCar?.car_bookings?.data ||
-        contentCar?.car_bookings ||
-        contentCar?.data ||
-        (Array.isArray(contentCar) ? contentCar : []);
-
-      if (Array.isArray(carList)) {
-        carList.forEach((c: any) => {
-          if (!rawCarBookings.some((existing) => existing.id === c.id)) {
-            rawCarBookings.push(c);
-          }
-        });
-      }
-    }
-  } catch {}
 
   // Only use live confirmed bookings from the API
 
@@ -691,7 +1203,15 @@ async function doFetchBookingNotifications(): Promise<{
 
   const list: BookingNotification[] = [];
 
-  // Convert received specialist bid offers (belonging strictly to this user's requests)
+  // 1. Convert official backend notifications from GET /customer/notification?limit=10&offset=1
+  rawBackendNotifications.forEach((item) => {
+    const notif = normalizeBackendCustomerNotification(item, readIds);
+    if (!dismissedIds.has(notif.id) && !dismissedIds.has(String(item.id))) {
+      list.push(notif);
+    }
+  });
+
+  // 2. Convert received specialist bid offers (belonging strictly to this user's requests)
   rawReceivedBids.forEach(({ bid, post }) => {
     const notif = normalizeBidNotification(bid, post, readIds);
     if (!dismissedIds.has(notif.id)) {
@@ -699,105 +1219,14 @@ async function doFetchBookingNotifications(): Promise<{
     }
   });
 
-  // Convert live regular bookings
-  rawRegularBookings.forEach((item) => {
-    const notif = normalizeRegularBookingNotification(item, readIds);
-    if (!dismissedIds.has(notif.id)) {
-      list.push(notif);
-    }
-  });
-
-  // Convert live car bookings
-  rawCarBookings.forEach((item) => {
-    const notif = normalizeCarBookingNotification(item, readIds);
-    if (!dismissedIds.has(notif.id)) {
-      list.push(notif);
-    }
-  });
-
-  // Convert live quote posts (if bids received or active request)
-  rawQuotePosts.forEach((item) => {
-    if (Number(item.bids_count || 0) > 0) {
-      const notif = normalizeQuotePostNotification(item, readIds);
+  // 2. If backend notifications list is empty, fall back to received bid offers
+  if (list.length === 0 && rawReceivedBids.length > 0) {
+    rawReceivedBids.forEach(({ bid, post }) => {
+      const notif = normalizeBidNotification(bid, post, readIds);
       if (!dismissedIds.has(notif.id)) {
         list.push(notif);
       }
-    }
-  });
-
-  // Provider Status Transition Detection & Notification (Scoped to user)
-  if (typeof window !== "undefined") {
-    try {
-      const statusStorageKey = getUserStorageKey("mmc_known_booking_statuses");
-      const knownStatusesRaw = localStorage.getItem(statusStorageKey);
-      const knownStatuses: Record<string, string> = knownStatusesRaw ? JSON.parse(knownStatusesRaw) : {};
-      let statusesUpdated = false;
-
-      [...rawRegularBookings, ...rawCarBookings].forEach((item) => {
-        const bId = String(item.id || item.booking_id || item.readable_id || "");
-        if (!bId) return;
-        const currentStatus = (item.booking_status || item.status || "pending").toLowerCase();
-        const prevStatus = knownStatuses[bId];
-
-        if (prevStatus && prevStatus !== currentStatus) {
-          statusesUpdated = true;
-          knownStatuses[bId] = currentStatus;
-
-          let statusTitle = "Booking Status Updated";
-          let statusDesc = `Booking #${item.readable_id || bId} status changed to ${currentStatus}.`;
-
-          if (["accepted", "confirmed"].includes(currentStatus)) {
-            statusTitle = "Booking Accepted by Provider! 🛠️";
-            statusDesc = `${item.provider?.company_name || "Specialist"} has confirmed and accepted your booking #${item.readable_id || bId}.`;
-          } else if (["ongoing", "in_progress"].includes(currentStatus)) {
-            statusTitle = "Service In Progress! 🚗";
-            statusDesc = `Work has begun on your reservation #${item.readable_id || bId}.`;
-          } else if (["completed", "done"].includes(currentStatus)) {
-            statusTitle = "Service Completed! ✅";
-            statusDesc = `Your booking #${item.readable_id || bId} has been successfully completed.`;
-          } else if (["canceled", "cancelled"].includes(currentStatus)) {
-            statusTitle = "Booking Cancelled ⚠️";
-            statusDesc = `Booking #${item.readable_id || bId} has been cancelled.`;
-          }
-
-          triggerDevicePushNotification(
-            statusTitle,
-            statusDesc,
-            `/account?tab=bookings&bookingId=${bId}`
-          );
-
-          list.unshift({
-            id: `status_change_${bId}_${currentStatus}`,
-            bookingId: bId,
-            readableId: item.readable_id || bId,
-            bookingType: item.car ? "car" : "regular",
-            category: detectBookingCategory(item),
-            title: statusTitle,
-            subtitle: `${item.provider?.company_name || "Provider"} • Status: ${currentStatus.toUpperCase()}`,
-            description: statusDesc,
-            status: currentStatus as any,
-            statusLabel: currentStatus.toUpperCase(),
-            totalAmount: Number(item.total_booking_amount || item.total_amount || 0),
-            isPaid: item.is_paid === 1 || item.payment_status === "paid",
-            paymentMethod: item.payment_method || "Online",
-            scheduleTime: item.service_schedule || item.start_date || "Confirmed",
-            createdAt: new Date().toISOString(),
-            timeAgo: "Just now",
-            read: false,
-            targetUrl: `/account?tab=bookings&bookingId=${bId}`,
-          });
-        } else if (!prevStatus) {
-          knownStatuses[bId] = currentStatus;
-          statusesUpdated = true;
-        }
-      });
-
-      if (statusesUpdated) {
-        localStorage.setItem(statusStorageKey, JSON.stringify(knownStatuses));
-      }
-    } catch (e) {
-      console.warn("Status change detection error:", e);
-    }
+    });
   }
 
   // Convert custom notifications (deduplicate and keep user-scoped)
@@ -837,19 +1266,43 @@ async function doFetchBookingNotifications(): Promise<{
     } catch {}
   }
 
-  // Fire push notification for newly arrived notifications (strictly at most 1 per event)
+  // Strict Global Deduplication: Each booking/quote appears AT MOST ONCE in the list!
+  const finalNotifications: BookingNotification[] = [];
+  const globalSeenBookingKeys = new Set<string>();
+
+  for (const item of list) {
+    const candidateKeys = [
+      item.bookingId ? String(item.bookingId).toLowerCase().trim() : "",
+      item.readableId ? String(item.readableId).toLowerCase().trim() : "",
+    ].filter(Boolean);
+
+    // If any candidate key has already been added, skip duplicate notification for the same booking
+    const isDuplicate = candidateKeys.some((k) => globalSeenBookingKeys.has(k));
+    if (isDuplicate) {
+      continue;
+    }
+
+    candidateKeys.forEach((k) => globalSeenBookingKeys.add(k));
+    globalSeenBookingKeys.add(String(item.id).toLowerCase().trim());
+    finalNotifications.push(item);
+  }
+
+  // Fire push notification for newly arrived notifications (strictly at most 1 per booking)
   try {
     const seenPushIds = getSeenPushIds();
     let updatedSeen = false;
-    list.slice(0, 1).forEach((n) => {
-      if (!seenPushIds.has(n.id)) {
+    finalNotifications.slice(0, 1).forEach((n) => {
+      const canonicalBookingKey = String(n.readableId || n.bookingId || n.id).toLowerCase().trim();
+      const pushStorageKey = `booking_push_${canonicalBookingKey}`;
+      if (!seenPushIds.has(pushStorageKey) && !seenPushIds.has(n.id)) {
+        seenPushIds.add(pushStorageKey);
         seenPushIds.add(n.id);
         updatedSeen = true;
         triggerDevicePushNotification(
           n.title,
-          n.subtitle || n.description,
+          n.subtitle ? `${n.subtitle} • ${n.description}` : n.description,
           n.targetUrl,
-          `notif_${n.id}`
+          pushStorageKey
         );
       }
     });
@@ -859,16 +1312,16 @@ async function doFetchBookingNotifications(): Promise<{
   } catch {}
 
   // Sort by date newest first
-  list.sort((a, b) => {
+  finalNotifications.sort((a, b) => {
     const timeA = new Date(a.createdAt).getTime() || 0;
     const timeB = new Date(b.createdAt).getTime() || 0;
     return timeB - timeA;
   });
 
-  const unreadCount = list.filter((n) => !n.read).length;
+  const unreadCount = finalNotifications.filter((n) => !n.read).length;
 
   return {
-    notifications: list,
+    notifications: finalNotifications,
     unreadCount,
     isLive,
     isAuthenticated: true,

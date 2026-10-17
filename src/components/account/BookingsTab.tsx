@@ -29,6 +29,9 @@ import {
   Navigation,
   Eye,
   RotateCcw,
+  Building2,
+  CheckCircle2,
+  Printer,
 } from "lucide-react";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
@@ -301,6 +304,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
           const q = searchQuery.toLowerCase().trim();
           const matches =
             b.id.toLowerCase().includes(q) ||
+            (b.readableId && String(b.readableId).toLowerCase().includes(q)) ||
+            (b.rawId && String(b.rawId).toLowerCase().includes(q)) ||
+            (b.raw?.booking_id && String(b.raw.booking_id).toLowerCase().includes(q)) ||
+            (b.raw?.id && String(b.raw.id).toLowerCase().includes(q)) ||
             b.serviceTitle.toLowerCase().includes(q) ||
             (b.serviceSubtitle && b.serviceSubtitle.toLowerCase().includes(q)) ||
             (b.vehicleReg && b.vehicleReg.toLowerCase().includes(q)) ||
@@ -716,35 +723,44 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                         )}
                       </div>
 
-                      {/* Main Service Title */}
-                      <h3 className="text-base font-bold text-white tracking-tight mt-1 truncate">
-                        {item.serviceTitle}
-                      </h3>
+                      {/* Main Service Title & Prominent Booking ID */}
+                      <div className="mt-1">
+                        <h3 className="text-base font-bold text-white tracking-tight truncate">
+                          {item.serviceTitle}
+                        </h3>
 
-                      {/* Subtitle / Booking ID */}
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400 mt-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span>Ref:</span>
-                          <span className="font-mono text-zinc-300 font-bold">{item.id}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(item.id)}
-                            className="text-zinc-500 hover:text-white transition p-0.5 cursor-pointer"
-                            title="Copy ID"
-                          >
-                            {copiedId === item.id ? (
-                              <Check size={12} className="text-emerald-400" />
-                            ) : (
-                              <Copy size={12} />
-                            )}
-                          </button>
+                        <div className="flex flex-wrap items-center gap-2.5 text-xs text-zinc-400 mt-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-sm font-black text-[#FAD293] tracking-wide">
+                              {item.readableId || item.id}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(String(item.readableId || item.id))}
+                              className="text-zinc-400 hover:text-white transition p-0.5 cursor-pointer"
+                              title="Copy Booking ID"
+                            >
+                              {copiedId === String(item.readableId || item.id) ? (
+                                <Check size={13} className="text-emerald-400" />
+                              ) : (
+                                <Copy size={13} />
+                              )}
+                            </button>
+                          </div>
+
+                          {item.serviceNature && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+                              <Wrench size={11} className="text-[#FAD293]" />
+                              <span>{item.serviceNature}</span>
+                            </span>
+                          )}
+
+                          {item.serviceSubtitle && (
+                            <span className="text-zinc-500 truncate max-w-xs hidden sm:inline text-[11px]">
+                              • {cleanReadableText(item.serviceSubtitle)}
+                            </span>
+                          )}
                         </div>
-
-                        {item.serviceSubtitle && (
-                          <span className="text-zinc-500 truncate max-w-xs hidden sm:inline">
-                            • {cleanReadableText(item.serviceSubtitle)}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -968,177 +984,400 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 8. COMPREHENSIVE BOOKING DETAILS MODAL                                    */}
+      {/* 8. COMPREHENSIVE BOOKING DETAILS MODAL (PREMIUM DESKTOP WEB EXPERIENCE)  */}
       {/* ========================================================================= */}
       {selectedBookingForModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-3 sm:p-5 md:p-8 overflow-y-auto cursor-pointer"
           onClick={handleCloseDetailModal}
         >
           <div
-            className="relative w-full max-w-2xl rounded-3xl bg-[#14110e] border border-white/20 p-6 sm:p-7 space-y-5 shadow-2xl text-left my-8 animate-in fade-in zoom-in-95 duration-200 cursor-default"
+            className="relative w-full max-w-5xl xl:max-w-6xl rounded-3xl bg-[#120f0c] border border-[#FAD293]/35 p-5 sm:p-7 md:p-8 space-y-6 shadow-[0_25px_80px_rgba(0,0,0,0.95)] text-left my-auto animate-in fade-in zoom-in-95 duration-200 cursor-default max-h-[92vh] overflow-y-auto custom-scrollbar"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={handleCloseDetailModal}
-              className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white transition cursor-pointer"
+            {/* 1. TOP HEADER & STATUS BAR */}
+            <div
+              className="p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl border border-black/10"
+              style={{
+                background: "linear-gradient(135deg, #FAD293 0%, #CEA46B 60%, #B8894A 100%)",
+              }}
             >
-              <X size={18} />
-            </button>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="text-2xl sm:text-3xl font-black text-zinc-950 uppercase tracking-tight">
+                    {selectedBookingForModal.statusDisplay}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-black/20 text-zinc-950 border border-black/25">
+                    {selectedBookingForModal.serviceCategoryName}
+                  </span>
+                  {selectedBookingForModal.serviceNature && (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/20 text-zinc-950 border border-black/15">
+                      {selectedBookingForModal.serviceNature}
+                    </span>
+                  )}
+                </div>
 
-            {/* Header */}
-            <div>
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${getServiceColor(selectedBookingForModal.serviceType)}`}>
-                  {getServiceIcon(selectedBookingForModal.serviceType)}
-                  <span>{selectedBookingForModal.serviceCategoryName}</span>
-                </span>
-                <span className="text-xs font-mono text-zinc-400 font-bold">
-                  ID: {selectedBookingForModal.id}
-                </span>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span className="text-sm font-black text-zinc-900 font-mono tracking-wide">
+                    Booking ID - {selectedBookingForModal.readableId || selectedBookingForModal.id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(String(selectedBookingForModal.readableId || selectedBookingForModal.id))}
+                    className="p-1 rounded-md bg-black/10 hover:bg-black/20 text-zinc-900 transition cursor-pointer"
+                    title="Copy Booking ID"
+                  >
+                    {copiedId === String(selectedBookingForModal.readableId || selectedBookingForModal.id) ? (
+                      <Check size={14} className="text-emerald-950 font-bold" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
-                {selectedBookingForModal.serviceTitle}
-              </h3>
-              {selectedBookingForModal.serviceSubtitle && (
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {selectedBookingForModal.serviceSubtitle}
-                </p>
-              )}
-            </div>
-
-            {/* Status Timeline */}
-            <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-2">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Booking Status</span>
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-white flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#FAD293] animate-pulse" />
-                  {selectedBookingForModal.statusDisplay}
-                </span>
-                <span className="text-xs font-bold text-[#FAD293]">
-                  {selectedBookingForModal.paymentStatus} ({selectedBookingForModal.paymentMethod})
-                </span>
+              {/* Action Buttons on Banner */}
+              <div className="flex items-center gap-2 self-start md:self-auto">
+             
+                <button
+                  type="button"
+                  onClick={handleCloseDetailModal}
+                  className="p-2 rounded-xl bg-black/15 hover:bg-black/30 text-zinc-950 transition cursor-pointer border border-black/20"
+                  title="Close (Esc)"
+                >
+                  <X size={18} />
+                </button>
               </div>
             </div>
 
-            {/* Itinerary & Timing Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1">
-                  <MapPin size={12} />
-                  Addresses
-                </span>
-                <div className="space-y-1">
-                  <span className="text-zinc-400 text-[10px] block font-bold">Location:</span>
-                  <p className="text-white font-medium">
-                    {extractReadableAddress(selectedBookingForModal.pickupLocation) ||
-                      extractReadableAddress(selectedBookingForModal.serviceAddress) ||
-                      selectedBookingForModal.postcode ||
-                      (selectedBookingForModal.coordinates?.latitude && Number(selectedBookingForModal.coordinates.latitude) !== 0
-                        ? `Service Area (${Number(selectedBookingForModal.coordinates.latitude).toFixed(4)}, ${Number(selectedBookingForModal.coordinates.longitude).toFixed(4)})`
-                        : "London, UK (Customer Location)")}
-                  </p>
+            {/* 2. MAIN 2-COLUMN WEB DASHBOARD */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* LEFT COLUMN (7 Cols): Service Overview, Vehicle Specs, Schedule & Route */}
+              <div className="lg:col-span-7 space-y-5">
+                
+                {/* A. Hero Service & Vehicle Card */}
+                <div className="rounded-2xl border border-white/10 bg-[#16120e] p-5 sm:p-6 space-y-4 shadow-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-bold tracking-wider uppercase text-[#FAD293]">
+                        Service Overview
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                        {selectedBookingForModal.serviceTitle}
+                      </h3>
+                      {(selectedBookingForModal.vehicleModel || selectedBookingForModal.vehicleReg) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-zinc-300">
+                          {selectedBookingForModal.vehicleModel && (
+                            <span className="font-semibold text-white">
+                              {selectedBookingForModal.vehicleModel}
+                            </span>
+                          )}
+                          {selectedBookingForModal.vehicleReg && (
+                            <span className="px-2 py-0.5 rounded-md bg-[#251d16] border border-[#FAD293]/30 font-mono font-bold text-[#FAD293] text-xs">
+                              Plate: {selectedBookingForModal.vehicleReg}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedBookingForModal.image && (
+                      <div className="relative w-24 h-20 sm:w-28 sm:h-22 rounded-xl overflow-hidden border border-white/10 bg-black/50 shrink-0">
+                        <img
+                          src={selectedBookingForModal.image}
+                          alt={selectedBookingForModal.serviceTitle}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Provider Info Pill Box */}
+                  <div className="p-3.5 rounded-xl bg-[#0e0c0a] border border-white/10 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-[#251d16] border border-[#FAD293]/30 flex items-center justify-center text-[#FAD293] shrink-0">
+                        <Building2 size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">
+                          Assigned Service Fleet
+                        </span>
+                        <span className="font-bold text-white text-xs sm:text-sm truncate block">
+                          {selectedBookingForModal.providerName || "Motor Market Club Certified Fleet"}
+                        </span>
+                      </div>
+                    </div>
+                    {selectedBookingForModal.providerPhone && (
+                      <a
+                        href={`tel:${selectedBookingForModal.providerPhone}`}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#FAD293] border border-white/10 flex items-center gap-1.5 transition shrink-0"
+                      >
+                        <Phone size={12} />
+                        <span>Call</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* B. Schedule & Locations Itinerary Card */}
+                <div className="rounded-2xl border border-white/10 bg-[#16120e] p-5 sm:p-6 space-y-4 shadow-lg">
+                  <h4 className="text-sm sm:text-base font-bold text-[#FAD293] tracking-wide flex items-center gap-2">
+                    <Clock size={16} />
+                    <span>Schedule & Route Details</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Booking Date & Time Box */}
+                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-1.5">
+                      <div className="flex items-center gap-2 text-[#FAD293]">
+                        <Calendar size={15} />
+                        <span className="text-xs font-bold uppercase tracking-wider">Appointment Time</span>
+                      </div>
+                      <p className="text-sm font-bold text-white">
+                        {selectedBookingForModal.fullScheduleDisplay || formatDate(selectedBookingForModal.scheduleDate)}
+                      </p>
+                      <span className="text-[11px] text-zinc-400 block">
+                        Confirmed Booking Slot
+                      </span>
+                    </div>
+
+                    {/* Service Nature Box */}
+                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-1.5">
+                      <div className="flex items-center gap-2 text-[#FAD293]">
+                        <Wrench size={15} />
+                        <span className="text-xs font-bold uppercase tracking-wider">Service Delivery</span>
+                      </div>
+                      <p className="text-sm font-bold text-white capitalize">
+                        {selectedBookingForModal.serviceNature || "Mobile repair"}
+                      </p>
+                      <span className="text-[11px] text-zinc-400 block">
+                        Provided At Customer Destination
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Service Location / Route Address */}
+                  {(selectedBookingForModal.pickupLocation || selectedBookingForModal.serviceAddress || selectedBookingForModal.postcode) && (
+                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-2">
+                      <div className="flex items-center gap-2 text-[#FAD293]">
+                        <MapPin size={15} />
+                        <span className="text-xs font-bold uppercase tracking-wider">Service Location / Address</span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-semibold text-zinc-200 leading-relaxed">
+                        {extractReadableAddress(selectedBookingForModal.pickupLocation) ||
+                          extractReadableAddress(selectedBookingForModal.serviceAddress) ||
+                          selectedBookingForModal.postcode ||
+                          "Indore, Indore, Madhya Pradesh, India"}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Destination Location (for Chauffeur trips) */}
                   {selectedBookingForModal.destinationLocation && (
-                    <div className="pt-1 mt-1 border-t border-white/10">
-                      <span className="text-zinc-400 text-[10px] block font-bold">Destination:</span>
-                      <p className="text-white font-medium">
+                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-400">
+                        <Navigation size={15} />
+                        <span className="text-xs font-bold uppercase tracking-wider">Destination Drop-Off</span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-semibold text-zinc-200 leading-relaxed">
                         {extractReadableAddress(selectedBookingForModal.destinationLocation)}
                       </p>
                     </div>
                   )}
-                </div>
-              </div>
 
-              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1">
-                  <Calendar size={12} />
-                  Schedule & Dates
-                </span>
-                <div className="space-y-1">
-                  <span className="text-zinc-400 text-[10px] block font-bold">Appointment:</span>
-                  <p className="text-white font-medium">{selectedBookingForModal.fullScheduleDisplay || formatDate(selectedBookingForModal.scheduleDate)}</p>
-                  <span className="text-zinc-400 text-[10px] block mt-1 font-bold">Booked Timestamp:</span>
-                  <p className="text-zinc-300 font-mono text-[11px]">{formatDate(selectedBookingForModal.createdAt)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Vehicle & Contacts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              {selectedBookingForModal.vehicleReg && (
-                <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Vehicle</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-[#FAD293] bg-[#251b13] px-2 py-0.5 rounded border border-[#3a2d21]">
-                      {selectedBookingForModal.vehicleReg}
-                    </span>
-                    <span className="text-white font-medium">{selectedBookingForModal.vehicleModel}</span>
-                  </div>
-                </div>
-              )}
-
-              {(selectedBookingForModal.providerName || selectedBookingForModal.providerPhone) && (
-                <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Assigned Provider</span>
-                  <p className="text-white font-medium">{selectedBookingForModal.providerName || "Motor Market Club Certified Fleet"}</p>
-                  {selectedBookingForModal.providerPhone && (
-                    <a href={`tel:${selectedBookingForModal.providerPhone}`} className="text-[#FAD293] hover:underline block text-[11px] font-bold">
-                      📞 {selectedBookingForModal.providerPhone}
-                    </a>
+                  {/* Notes / Special Instructions if any */}
+                  {selectedBookingForModal.notes && (
+                    <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-300">
+                      <strong className="text-[#FAD293] block mb-1">Customer Instructions:</strong>
+                      <span>{selectedBookingForModal.notes}</span>
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Total Fare & Dismiss */}
-            <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-zinc-400 uppercase font-bold block">Gross Amount</span>
-                <span className="text-2xl font-black text-[#FAD293]">
-                  {formatPrice(selectedBookingForModal.totalAmount)}
-                </span>
-                {selectedBookingForModal.paidAmount > 0 && (
-                  <div className="flex items-center gap-3 mt-1 text-xs font-bold flex-wrap">
-                    <span className="text-emerald-400">Paid: {formatPrice(selectedBookingForModal.paidAmount)}</span>
-                    {selectedBookingForModal.dueAmount > 0 && (
-                      <span className="text-orange-400">Due: {formatPrice(selectedBookingForModal.dueAmount)}</span>
+                {/* C. Trust & Quality Assurance Banner */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-[#201811] to-[#16120e] border border-[#FAD293]/20 flex items-center gap-3.5 text-xs text-zinc-300">
+                  <div className="w-8 h-8 rounded-xl bg-[#FAD293]/10 border border-[#FAD293]/30 flex items-center justify-center text-[#FAD293] shrink-0">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white block">Motor Market Club Guaranteed Service</span>
+                    <span className="text-zinc-400 text-[11px]">Certified mechanics, genuine parts & high-end luxury vehicle standards.</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* RIGHT COLUMN (5 Cols): Cost Breakdown, Payment Status, Transactions, Actions */}
+              <div className="lg:col-span-5 space-y-5">
+                
+                {/* A. Cost & Payment Breakdown Card */}
+                <div className="rounded-2xl border border-white/10 bg-[#16120e] p-5 sm:p-6 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm sm:text-base font-bold text-[#FAD293] tracking-wide">
+                      Cost & Payment Breakdown
+                    </h4>
+                    <span className="text-[11px] text-zinc-400 font-mono">GBP (£)</span>
+                  </div>
+
+                  {/* Line Items */}
+                  <div className="space-y-2.5 text-xs sm:text-sm divide-y divide-white/5">
+                    {selectedBookingForModal.items && selectedBookingForModal.items.length > 0 ? (
+                      selectedBookingForModal.items.map((it, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-zinc-300 pt-2 first:pt-0">
+                          <span className="font-medium text-white">{it.name} {it.quantity > 1 ? `(x${it.quantity})` : ""}</span>
+                          <span className="font-semibold text-white">{formatPrice(it.price * (it.quantity || 1))}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex justify-between items-center text-zinc-300">
+                        <span className="truncate pr-4 font-medium text-white">{selectedBookingForModal.serviceTitle}</span>
+                        <span className="font-semibold text-white shrink-0">
+                          {formatPrice(selectedBookingForModal.totalAmount)}
+                        </span>
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {(() => {
-                  const modalCanPay =
-                    !selectedBookingForModal.isPaid &&
-                    selectedBookingForModal.dueAmount > 0 &&
-                    (selectedBookingForModal.status === "ongoing" || selectedBookingForModal.status === "accepted" || selectedBookingForModal.status === "pending");
+                  {/* Total Amount Divider */}
+                  <div className="pt-4 border-t border-white/10 flex justify-between items-center">
+                    <div>
+                      <span className="text-sm font-bold text-white block">Total Booking Amount</span>
+                      <span className="text-[11px] text-zinc-400">Inclusive of VAT & fees</span>
+                    </div>
+                    <span className="text-2xl sm:text-3xl font-black text-[#FAD293]">
+                      {formatPrice(selectedBookingForModal.totalAmount)}
+                    </span>
+                  </div>
 
-                  return (
-                    modalCanPay && (
-                      <button
-                        type="button"
-                        onClick={() => setBookingForPayment(selectedBookingForModal)}
-                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
+                  {/* Payment Status Summary Box */}
+                  <div className="rounded-xl bg-[#0e0c0a] border border-white/10 p-4 space-y-3 text-xs sm:text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400 font-medium">Payment Status:</span>
+                      <span
+                        className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
+                          selectedBookingForModal.isPaid
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : selectedBookingForModal.isPartiallyPaid
+                              ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                        }`}
                       >
-                        <CreditCard size={13} className="text-zinc-950" />
-                        <span>Pay Due ({formatPrice(selectedBookingForModal.dueAmount)})</span>
-                      </button>
-                    )
-                  );
-                })()}
+                        {selectedBookingForModal.paymentStatus}
+                      </span>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleCloseDetailModal}
-                  className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
-                >
-                  Close
-                </button>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400 font-medium">Payment Method:</span>
+                      <span className="font-semibold text-white">{selectedBookingForModal.paymentMethod}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                      <span className="text-zinc-400 font-medium">Paid to Date:</span>
+                      <span className="font-bold text-emerald-400">{formatPrice(selectedBookingForModal.paidAmount)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400 font-medium">Remaining Due:</span>
+                      <span className={`font-bold ${selectedBookingForModal.dueAmount > 0 ? "text-orange-400" : "text-zinc-400"}`}>
+                        {formatPrice(selectedBookingForModal.dueAmount)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* B. Payment Transactions History Card */}
+                {((selectedBookingForModal.partialPayments && selectedBookingForModal.partialPayments.length > 0) || selectedBookingForModal.paidAmount > 0) && (
+                  <div className="rounded-2xl border border-white/10 bg-[#16120e] p-5 space-y-3 shadow-lg">
+                    <h4 className="text-sm font-bold text-[#FAD293] tracking-wide flex items-center gap-2">
+                      <CheckCircle2 size={15} className="text-emerald-400" />
+                      <span>Payment Transactions</span>
+                    </h4>
+
+                    <div className="space-y-2.5">
+                      {selectedBookingForModal.partialPayments && selectedBookingForModal.partialPayments.length > 0 ? (
+                        selectedBookingForModal.partialPayments.map((tx, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 rounded-xl bg-[#0e0c0a] border border-white/10 flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                <Check size={12} />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-white block truncate">
+                                  Paid {formatPrice(tx.paid_amount)} via {tx.payment_method || selectedBookingForModal.paymentMethod}
+                                </span>
+                                <span className="text-[10px] text-zinc-500 block">
+                                  {tx.created_at ? formatDate(tx.created_at) : formatDate(selectedBookingForModal.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className="text-zinc-400 text-xs shrink-0">
+                              Due: <strong className={tx.due_amount > 0 ? "text-orange-400" : "text-zinc-300"}>{formatPrice(tx.due_amount)}</strong>
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-3.5 rounded-xl bg-[#0e0c0a] border border-white/10 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                              <Check size={12} />
+                            </div>
+                            <div>
+                              <span className="font-bold text-white block">
+                                Paid {formatPrice(selectedBookingForModal.paidAmount)} via {selectedBookingForModal.paymentMethod}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 block">
+                                {formatDate(selectedBookingForModal.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs text-zinc-400">
+                            Due: {formatPrice(selectedBookingForModal.dueAmount)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* C. Action CTAs */}
+                <div className="space-y-3 pt-1">
+                  {selectedBookingForModal.dueAmount > 0 && !selectedBookingForModal.isPaid && (
+                    <button
+                      type="button"
+                      onClick={() => setBookingForPayment(selectedBookingForModal)}
+                      className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-[#D5A054]/25 cursor-pointer active:scale-95"
+                    >
+                      <CreditCard size={16} />
+                      <span>Pay Due Remaining ({formatPrice(selectedBookingForModal.dueAmount)})</span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseDetailModal}
+                      className="w-full py-2.5 px-6 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition cursor-pointer border border-white/10 text-center"
+                    >
+                      Close Window
+                    </button>
+                  </div>
+                </div>
+
+                {/* Disclaimer note */}
+                <div className="flex items-start gap-2 text-[11px] text-zinc-500 px-1">
+                  <AlertCircle size={13} className="text-[#FAD293] shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    Final cost may vary based on condition and technician assessment. All rights reserved by MMC.
+                  </p>
+                </div>
+
               </div>
+
             </div>
           </div>
         </div>

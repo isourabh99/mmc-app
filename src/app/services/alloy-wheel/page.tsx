@@ -1148,16 +1148,16 @@ export default function AlloyWheelPage() {
                 setBookingConfirmed(true);
                 showToast(res.message || "Booking request processed!", "success");
 
-                if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                    try {
-                        new Notification("MMC Booking Confirmed! 🎉", {
-                            body: `Your appointment with ${bookingProviderModal?.company_name || "your specialist"} is confirmed!`,
-                            icon: "/mmc-logo.png",
-                            badge: "/mmc-logo.png",
-                        });
-                    } catch (e) {
-                        // ignore
-                    }
+                const alloyRef = String(res?.content?.readable_id || res?.content?.id || res?.readable_id || res?.id || "Confirmed");
+                triggerDevicePushNotification(
+                    "Alloy Wheel Refurbishment Confirmed! 🛞",
+                    `Your appointment with ${bookingProviderModal?.company_name || "Specialist"} (Ref: #${alloyRef}) is confirmed.`,
+                    `/account?tab=bookings&bookingId=${alloyRef}`,
+                    `booking_push_${alloyRef.toLowerCase().trim()}`
+                );
+
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
                 }
             }
         } catch (err: any) {

@@ -92,7 +92,7 @@ export default function ProviderCTA() {
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <a
-                  href="https://mmcclub.co.uk/backend/provider/auth/login"
+                  href="https://mmcclub.co.uk/backend/provider/auth/sign-up"
                   target="_blank"
                   rel="noopener noreferrer"
                   id="provider-signup-btn"

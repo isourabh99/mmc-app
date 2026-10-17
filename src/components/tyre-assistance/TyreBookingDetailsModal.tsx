@@ -150,14 +150,18 @@ export const TyreBookingDetailsModal: React.FC<TyreBookingDetailsModalProps> = (
 
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-2xl bg-black border border-white/10 overflow-hidden relative">
-                    <Image
-                      src={booking.technician.avatar}
-                      alt={booking.technician.name}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
+                  <div className="w-12 h-12 rounded-2xl bg-black border border-white/10 overflow-hidden relative flex items-center justify-center">
+                    {booking.technician.avatar ? (
+                      <Image
+                        src={booking.technician.avatar}
+                        alt={booking.technician.name || "Technician"}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <Sparkles className="w-5 h-5 text-[#FAD293]/60" />
+                    )}
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">

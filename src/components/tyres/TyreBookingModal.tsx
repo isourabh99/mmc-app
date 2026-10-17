@@ -31,6 +31,8 @@ import {
 } from "@/lib/data/tyres.data";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
+import { triggerDevicePushNotification } from "@/lib/firebase";
+import { saveBookingMeta } from "@/lib/service/bookings.api";
 
 interface TyreBookingModalProps {
   tyre: TyreItem | null;
@@ -174,17 +176,28 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
       setSubmitting(false);
       showToast("Tyre Fitting Booking Placed successfully!", "success");
 
-      // Trigger native notification pop-up on user device
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        try {
-          new Notification("Motor Market Club Tyre Fitting Confirmed! 🛞", {
-            body: `Booking Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}!`,
-            icon: "/mmc-logo.png",
-            badge: "/mmc-logo.png",
-          });
-        } catch (notifErr) {
-          console.warn("Tyre notification error:", notifErr);
-        }
+      saveBookingMeta(generatedRef, {
+        serviceTitle: "Mobile Tyre Fitting",
+        serviceCategoryName: "Tyre Fitting & Repair",
+        serviceType: "tyre",
+        vehicleModel: vehicleLookup?.make ? `${vehicleLookup.make} ${vehicleLookup.model || ""}`.trim() : "Vehicle",
+        vehicleReg: vehicleLookup?.registration || undefined,
+        price: totalPrice,
+        isPaid: false,
+        paymentStatus: "Pay later",
+        scheduleDate: fittingDate,
+        scheduleTime: fittingTime,
+      });
+
+      triggerDevicePushNotification(
+        `Mobile Tyre Fitting Confirmed! 🛞`,
+        `Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}. Schedule: ${fittingDate} ${fittingTime}.`,
+        `/account?tab=bookings&bookingId=${generatedRef}`,
+        `booking_push_${generatedRef.toLowerCase().trim()}`
+      );
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
       }
 
       if (onSuccess) onSuccess();

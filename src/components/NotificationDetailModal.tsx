@@ -22,8 +22,10 @@ import {
   Trash2,
   CircleDot,
   UserCheck,
+  Tag,
+  ChevronRight,
 } from "lucide-react";
-import { BookingNotification } from "@/lib/service/notifications.api";
+import { BookingNotification, resolveNotificationImageUrl } from "@/lib/service/notifications.api";
 
 interface NotificationDetailModalProps {
   notification: BookingNotification | null;
@@ -99,6 +101,14 @@ export default function NotificationDetailModal({
 
   const raw = notification.raw || {};
   const bookingRef = String(notification.readableId || notification.bookingId || raw.id || "N/A");
+
+  // Comprehensive image resolution for modal banner & avatar
+  const resolvedImage =
+    notification.image ||
+    resolveNotificationImageUrl(raw) ||
+    resolveNotificationImageUrl(notification) ||
+    (typeof raw.image === "string" ? resolveNotificationImageUrl({ image: raw.image }) : null) ||
+    null;
 
   const handleCopyId = () => {
     if (bookingRef && bookingRef !== "N/A") {
@@ -261,184 +271,225 @@ export default function NotificationDetailModal({
           boxShadow: "0 25px 70px rgba(0,0,0,0.95), 0 0 50px rgba(250,210,147,0.12)",
         }}
       >
+        {/* Drag Handle Bar (matching mobile screenshot) */}
+        <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-2" />
+
         {/* Top Close Button */}
         <button
           type="button"
           onClick={handleClose}
           className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white transition cursor-pointer"
-          title="Close details (Esc)"
+          title="Close (Esc)"
         >
           <X size={18} />
         </button>
 
-        {/* Header */}
-        <div className="flex items-start gap-4 pr-10">
-          <div className="w-12 h-12 rounded-2xl bg-[#1C1713] border border-[#FAD293]/30 flex items-center justify-center shrink-0 shadow-lg text-[#FAD293]">
-            {getCategoryIcon()}
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              {getStatusBadge()}
-              <span className="text-[11px] text-white/50">{notification.timeAgo}</span>
+        {/* Header: Circle Avatar + Title & Time */}
+        <div className="flex items-center gap-3.5 pr-8">
+          {resolvedImage ? (
+            <div className="relative w-14 h-14 rounded-full overflow-hidden shrink-0 border border-[#FAD293]/40 bg-black/50 shadow-lg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolvedImage}
+                alt={notification.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  const currentSrc = target.src;
+                  if (currentSrc.includes("/storage/app/public/notification/")) {
+                    target.src = currentSrc.replace(
+                      "/storage/app/public/notification/",
+                      "/storage/app/public/push-notification/"
+                    );
+                  } else if (currentSrc.includes("/storage/app/public/push-notification/")) {
+                    target.src = currentSrc.replace(
+                      "/storage/app/public/push-notification/",
+                      "/storage/app/public/"
+                    );
+                  } else {
+                    target.style.display = "none";
+                  }
+                }}
+              />
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+          ) : notification.actionType === "quote" || notification.category === "quote" ? (
+            <div className="w-14 h-14 rounded-full bg-[#2A231C] border border-[#FAD293]/35 flex items-center justify-center shrink-0 shadow-lg text-[#CEA46B]">
+              <Tag size={24} />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-[#1C1713] border border-[#FAD293]/30 flex items-center justify-center shrink-0 shadow-lg text-[#FAD293]">
+              {getCategoryIcon()}
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug">
               {notification.title}
             </h2>
-            {notification.subtitle && (
-              <p className="text-xs sm:text-sm text-[#FAD293] font-medium mt-0.5">
-                {notification.subtitle}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Reference Number Strip */}
-        <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-              Booking Ref:
-            </span>
-            <span className="font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
-              #{bookingRef}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleCopyId}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-[11px] font-semibold transition cursor-pointer"
-            title="Copy Reference"
-          >
-            {copied ? (
-              <>
-                <Check size={12} className="text-emerald-400" />
-                <span className="text-emerald-400">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy size={12} />
-                <span>Copy ID</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Details Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          {/* Schedule */}
-          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1.5">
-              <Calendar size={13} />
-              Schedule & Time
-            </span>
-            <p className="text-white font-medium">
-              {notification.scheduleTime || "Scheduled Service"}
-            </p>
-            <p className="text-[10px] text-zinc-400">
-              Notification created: {new Date(notification.createdAt).toLocaleString("en-GB")}
-            </p>
-          </div>
-
-          {/* Pricing & Payment */}
-          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-              <CreditCard size={13} />
-              Amount & Payment
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-lg font-black text-white">
-                £{Number(notification.totalAmount || 0).toFixed(2)}
-              </span>
-              <span
-                className={`text-[11px] font-bold ${
-                  notification.isPaid ? "text-emerald-400" : "text-amber-300"
-                }`}
-              >
-                ({notification.isPaid ? "Paid in Full" : "Payment Pending"})
-              </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-white/50">{notification.timeAgo}</span>
+              {notification.actionType === "quote" && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FAD293]/20 text-[#FAD293] border border-[#FAD293]/30">
+                  Specialist Bid
+                </span>
+              )}
             </div>
-            <p className="text-[10px] text-zinc-400">
-              Method: {notification.paymentMethod || "Standard Gateway"}
-            </p>
-          </div>
-
-          {/* Location */}
-          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1.5">
-              <MapPin size={13} />
-              Location
-            </span>
-            <p className="text-white font-medium line-clamp-2">{location}</p>
-            {destination && (
-              <p className="text-[11px] text-zinc-400 pt-1 border-t border-white/10">
-                To: {destination}
-              </p>
-            )}
-          </div>
-
-          {/* Vehicle */}
-          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1.5">
-              <Car size={13} />
-              Vehicle Information
-            </span>
-            <p className="text-white font-medium">
-              {vehicle || "Standard Fleet Vehicle"}
-            </p>
-            {provider && (
-              <p className="text-[10px] text-zinc-400 flex items-center gap-1">
-                <UserCheck size={11} className="text-[#FAD293]" />
-                Provider: {provider}
-              </p>
-            )}
           </div>
         </div>
 
-        {/* Notes / Issue Description */}
-        {notes && (
-          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1 text-xs">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-              Service Notes / Description
-            </span>
-            <p className="text-zinc-200 leading-relaxed">{notes}</p>
+        {/* Description / Content Body */}
+        {notification.description && (
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed pt-1 whitespace-pre-wrap">
+            {notification.description}
+          </p>
+        )}
+
+        {/* Attached Notification Image / Media Banner */}
+        {resolvedImage && (
+          <div className="relative w-full rounded-2xl overflow-hidden border border-[#FAD293]/30 bg-black/60 shadow-xl my-2 group">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resolvedImage}
+              alt={notification.title || "Notification Attachment"}
+              className="w-full max-h-[320px] sm:max-h-[380px] object-contain mx-auto bg-black/40 rounded-2xl transition-transform duration-300 group-hover:scale-[1.01]"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                const currentSrc = target.src;
+                if (currentSrc.includes("/storage/app/public/notification/")) {
+                  target.src = currentSrc.replace(
+                    "/storage/app/public/notification/",
+                    "/storage/app/public/push-notification/"
+                  );
+                } else if (currentSrc.includes("/storage/app/public/push-notification/")) {
+                  target.src = currentSrc.replace(
+                    "/storage/app/public/push-notification/",
+                    "/storage/app/public/"
+                  );
+                } else {
+                  (target.parentElement as HTMLElement).style.display = "none";
+                }
+              }}
+            />
           </div>
         )}
 
-        {/* Footer Actions */}
-        <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-          {onDismiss && (
+        {/* Fare Breakdown Card (as shown in mobile screenshot 2) */}
+        {((notification.fareBreakdown && notification.fareBreakdown.length > 0) || notification.totalFare) && (
+          <div className="bg-[#1C1814] border border-[#2D261E] rounded-2xl p-4 sm:p-5 space-y-3">
+            {notification.fareBreakdown?.map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-xs sm:text-sm text-white/80">
+                <span className="font-medium">{item.label}</span>
+                <span className="font-semibold text-white">{item.amount}</span>
+              </div>
+            ))}
+
+            {notification.totalFare && (
+              <div className="border-t border-[#2D261E] pt-3 flex justify-between items-center">
+                <span className="text-sm sm:text-base font-bold text-[#FAD293]">Fare Amount</span>
+                <span className="text-base sm:text-lg font-black text-[#FAD293]">
+                  {notification.totalFare}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Optional Booking Details Grid (only shown if specific booking item with ref) */}
+        {notification.actionType === "booking" && bookingRef !== "N/A" && (
+          <>
+            <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Booking Ref:
+                </span>
+                <span className="font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                  #{bookingRef}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyId}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-[11px] font-semibold transition cursor-pointer"
+                title="Copy Reference"
+              >
+                {copied ? (
+                  <>
+                    <Check size={12} className="text-emerald-400" />
+                    <span className="text-emerald-400">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} />
+                    <span>Copy ID</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1.5">
+                  <Calendar size={13} /> Schedule
+                </span>
+                <p className="text-white font-medium">{notification.scheduleTime || "Scheduled"}</p>
+              </div>
+
+              {location && (
+                <div className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] flex items-center gap-1.5">
+                    <MapPin size={13} /> Location
+                  </span>
+                  <p className="text-white font-medium truncate">{location}</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Primary Action Button (Matching mobile app golden pill button) */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (notification.actionType === "close" || (!notification.targetUrl && notification.actionType !== "quote" && notification.actionType !== "question")) {
+                handleClose();
+              } else if (notification.actionType === "quote" || notification.actionType === "question") {
+                router.push(notification.targetUrl || "/account?tab=quotes");
+                handleClose();
+              } else {
+                handleOpenBooking();
+              }
+            }}
+            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] hover:brightness-105 active:scale-98 text-[#1A1612] font-black text-sm sm:text-base tracking-wide shadow-[0_4px_25px_rgba(206,164,107,0.35)] transition cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>
+              {notification.actionButtonText ||
+                (notification.actionType === "quote"
+                  ? "View Quote Bids"
+                  : notification.actionType === "question"
+                  ? "View Question"
+                  : "Close")}
+            </span>
+            {notification.actionType !== "close" && <ChevronRight size={16} />}
+          </button>
+        </div>
+
+        {/* Optional Dismiss Link */}
+        {onDismiss && (
+          <div className="text-center pt-1">
             <button
               type="button"
               onClick={() => {
                 onDismiss(notification.id);
                 handleClose();
               }}
-              className="text-xs text-white/50 hover:text-red-400 flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto"
+              className="text-xs text-white/40 hover:text-red-400 transition cursor-pointer"
             >
-              <Trash2 size={13} />
-              <span>Dismiss notification</span>
-            </button>
-          )}
-
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
-            >
-              Close
-            </button>
-
-            <button
-              type="button"
-              onClick={handleOpenBooking}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] hover:brightness-105 active:scale-95 text-black font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-[#CEA46B]/20 flex items-center gap-2 transition cursor-pointer"
-            >
-              <span>View Full Booking</span>
-              <ExternalLink size={13} />
+              Dismiss from history
             </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

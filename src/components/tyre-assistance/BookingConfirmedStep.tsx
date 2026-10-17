@@ -71,13 +71,18 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
         <p className="text-xs sm:text-sm text-white/60 max-w-md mx-auto">
           Your request has been dispatched. Reference number:{" "}
           <span className="text-[#FAD293] font-mono font-bold text-sm sm:text-base">
-            {(typeof window !== "undefined" &&
-              booking.referenceNumber.startsWith("MMC-TYR-") &&
-              localStorage.getItem("last_tyre_booking_id"))
-              ? `#${localStorage.getItem("last_tyre_booking_id")}`
-              : booking.referenceNumber.startsWith("#")
-              ? booking.referenceNumber
-              : `#${booking.referenceNumber}`}
+            {(() => {
+              const rawRef =
+                booking?.referenceNumber ||
+                (booking as any)?.booking_id ||
+                (booking as any)?.booking_reference ||
+                (booking as any)?.id ||
+                "MMC-CONFIRMED";
+              const isLocalRef = String(rawRef).startsWith("MMC-TYR-");
+              const savedId = typeof window !== "undefined" ? localStorage.getItem("last_tyre_booking_id") : null;
+              if (savedId && isLocalRef) return `#${savedId}`;
+              return String(rawRef).startsWith("#") ? rawRef : `#${rawRef}`;
+            })()}
           </span>
         </p>
       </div>
@@ -93,7 +98,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
             <div className="flex-1">
               <span className="text-[11px] text-white/45 block">Date and time</span>
               <span className="text-xs sm:text-sm font-semibold text-white">
-                {booking.formattedDateTime || "Today, Immediate Dispatch"}
+                {booking?.formattedDateTime || (booking as any)?.service_schedule || "Today, Immediate Dispatch"}
               </span>
             </div>
           </div>
@@ -106,7 +111,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
             <div className="flex-1">
               <span className="text-[11px] text-white/45 block">Repair type</span>
               <span className="text-xs sm:text-sm font-semibold text-white">
-                {booking.assistanceLabel} ({booking.categoryLabel})
+                {booking?.assistanceLabel || "Mobile Tyre Assistance"} ({booking?.categoryLabel || "Emergency"})
               </span>
             </div>
           </div>
@@ -119,7 +124,8 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
             <div className="flex-1">
               <span className="text-[11px] text-white/45 block">Vehicle</span>
               <span className="text-xs sm:text-sm font-semibold text-white">
-                {booking.vehicleMakeModel} ({booking.vehicleRegistration})
+                {booking?.vehicleMakeModel || (booking as any)?.car_model || "Vehicle"}{" "}
+                ({booking?.vehicleRegistration || (booking as any)?.car_registration_number || "UK"})
               </span>
             </div>
           </div>
@@ -132,7 +138,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
             <div className="flex-1">
               <span className="text-[11px] text-white/45 block">Estimated quote</span>
               <span className="text-base sm:text-lg font-bold text-[#FAD293]">
-                £{booking.quote.fareAmount.toFixed(2)}
+                £{Number(booking?.quote?.fareAmount ?? (booking as any)?.total_cost ?? (booking as any)?.total_amount ?? 80).toFixed(2)}
               </span>
             </div>
           </div>
@@ -146,7 +152,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
           <div className="flex-1">
             <span className="text-[11px] text-white/45 block">Service Location</span>
             <span className="text-xs sm:text-sm font-semibold text-white">
-              {booking.locationAddress}
+              {booking?.locationAddress || (booking as any)?.service_address || "Customer Location, United Kingdom"}
             </span>
           </div>
         </div>

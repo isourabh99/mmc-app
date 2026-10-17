@@ -25,7 +25,6 @@ export const isUuid = (str: any): boolean =>
   typeof str === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
-
 export interface TyreEmergencyVariation {
   id: number;
   variant: string;
@@ -94,6 +93,7 @@ export const getOrCreateGuestId = (): string => {
       if (u?.id) return String(u.id);
     }
   } catch { }
+
   const storedUserId = localStorage.getItem("user_id") || localStorage.getItem("userId");
   if (storedUserId) return storedUserId;
 
@@ -245,14 +245,14 @@ export async function fetchTyreCategoryServices(
 export async function searchTyreProviders(
   params:
     | {
-        service_id?: string;
-        serviceIds?: string[];
-        answers?: string[];
-        car_registration_number?: string;
-        damage_description?: string;
-        latitude?: number | string;
-        longitude?: number | string;
-      }
+      service_id?: string;
+      serviceIds?: string[];
+      answers?: string[];
+      car_registration_number?: string;
+      damage_description?: string;
+      latitude?: number | string;
+      longitude?: number | string;
+    }
     | string[] = [TYRE_EMERGENCY_SERVICE_ID],
   latitude: number | string = "51.5074",
   longitude: number | string = "-0.1278"
@@ -496,7 +496,6 @@ export async function fetchProviderQuestions(
   } catch (error) {
     console.warn("fetchProviderQuestions failed:", error);
   }
-
   return [];
 }
 
@@ -616,6 +615,16 @@ export async function getCustomerAddresses(): Promise<CustomerAddress[]> {
     console.warn("Could not fetch customer addresses:", error);
     return [];
   }
+}
+
+export async function getEffectiveCustomerAddressId(): Promise<string> {
+  try {
+    const addresses = await getCustomerAddresses();
+    if (Array.isArray(addresses) && addresses.length > 0 && addresses[0]?.id) {
+      return String(addresses[0].id);
+    }
+  } catch { }
+  return "9";
 }
 
 /**
@@ -779,23 +788,23 @@ export async function addTyreToCart(payload: {
 
     const postBody: Record<string, any> = payload.tyre_id
       ? {
-          ...(hasAuthToken ? {} : { guest_id: guestId }),
-          service_id: serviceId || "9913c6e3-1f99-4929-989c-25484da50e00",
-          tyre_id: payload.tyre_id,
-          quantity: payload.quantity || 1,
-          provider_id: effectiveProviderId,
-          category_id: payload.category_id || TYRE_CATEGORY_ID,
-          is_terms_accepted: 1,
-        }
+        ...(hasAuthToken ? {} : { guest_id: guestId }),
+        service_id: serviceId || "9913c6e3-1f99-4929-989c-25484da50e00",
+        tyre_id: payload.tyre_id,
+        quantity: payload.quantity || 1,
+        provider_id: effectiveProviderId,
+        category_id: payload.category_id || TYRE_CATEGORY_ID,
+        is_terms_accepted: 1,
+      }
       : {
-          ...(hasAuthToken ? {} : { guest_id: guestId }),
-          provider_id: effectiveProviderId,
-          service_id: serviceId || DEFAULT_SERVICE_ID,
-          category_id: payload.category_id || TYRE_CATEGORY_ID,
-          quantity: payload.quantity || 1,
-          variant_key: variantKey || "standard",
-          is_terms_accepted: 1,
-        };
+        ...(hasAuthToken ? {} : { guest_id: guestId }),
+        provider_id: effectiveProviderId,
+        service_id: serviceId || DEFAULT_SERVICE_ID,
+        category_id: payload.category_id || TYRE_CATEGORY_ID,
+        quantity: payload.quantity || 1,
+        variant_key: variantKey || "standard",
+        is_terms_accepted: 1,
+      };
 
     console.log("[TyreBooking] POST /customer/cart/add body:", postBody);
 
@@ -863,21 +872,11 @@ export async function sendBookingRequestToBackend(
         localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
 
-  const hasAuthToken =
-    typeof window !== "undefined" &&
-    Boolean(
-      localStorage.getItem("token") ||
-      localStorage.getItem("mmc_token") ||
-      localStorage.getItem("user_token") ||
-      localStorage.getItem("auth_token") ||
-      document.cookie.includes("token=")
-    );
-
-  const guestId = payload.guest_id || getOrCreateGuestId();
-
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  const fallbackSchedule = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const fallbackSchedule = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+    now.getHours()
+  )}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   const callbackUrl =
     payload.callback ||
@@ -885,45 +884,281 @@ export async function sendBookingRequestToBackend(
       ? `${window.location.origin}/booking-success`
       : "https://mmcclub.co.uk/booking-success");
 
-  const effectivePaymentMethod = payload.payment_method || "stripe";
+  const isPartialNum = payload.is_partial !== undefined ? Number(payload.is_partial) : 0;
 
   const postData: Record<string, any> = {
-    payment_method: effectivePaymentMethod,
-    is_partial: payload.is_partial !== undefined ? Number(payload.is_partial) : 0,
+    payment_method: payload.payment_method || "stripe",
+    is_partial: isPartialNum,
     zone_id: zoneId,
     service_schedule: payload.service_schedule || fallbackSchedule,
     service_address_id: String(payload.service_address_id || "9"),
     service_location: payload.service_location || "customer",
-    booking_type: payload.booking_type || "normal",
+    booking_type: payload.booking_type || "emergency",
     car_registration_number: (payload.car_registration_number || "UK22-XYZ-9999").trim().toUpperCase(),
     car_model: payload.car_model || "Honda Civic",
     notes: payload.notes || "Tyre assistance requested with online payment.",
     callback: callbackUrl,
-    ...(hasAuthToken ? {} : { guest_id: guestId, provider_id: payload.provider_id || DEFAULT_PROVIDER_ID }),
   };
 
-  console.log("[TyreBooking] POST /customer/booking/request/send body:", postData);
+  if (payload.guest_id) {
+    postData.guest_id = payload.guest_id;
+  }
+
+  console.log("[TyreBooking] POST /customer/booking/request/send JSON body:", postData);
 
   try {
-    const res = await apiClient.post(
-      "/customer/booking/request/send",
-      postData,
-      {
-        headers: {
-          zoneid: zoneId,
-          "zone-id": zoneId,
-          ZoneId: zoneId,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      }
-    );
+    const res = await apiClient.post("/customer/booking/request/send", postData, {
+      headers: {
+        zoneid: zoneId,
+        "zone-id": zoneId,
+        ZoneId: zoneId,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
     console.log("[TyreBooking] POST /customer/booking/request/send response:", res.data);
     return res.data;
-  } catch (error: any) {
-    console.warn("booking/request/send error:", error?.response?.data || error?.message);
-    return error?.response?.data || null;
+  } catch (err: any) {
+    console.warn("booking/request/send JSON attempt error:", err?.response?.data || err?.message);
+    if (err?.response?.data) return err.response.data;
+    return null;
   }
+}
+
+export interface SendTyreBookingPayload {
+  category?: "emergency" | "replacement" | string;
+  service_id?: string;
+  category_id?: string;
+  provider_id?: string;
+  variant_key?: string;
+  tyre_id?: string;
+  quantity?: number;
+  payment_method?: string;
+  is_partial?: number | boolean | string;
+  amount?: number | string;
+  total_cost?: number | string;
+  zone_id?: string;
+  service_schedule?: string;
+  service_address_id?: string;
+  service_address?: string;
+  service_location?: string;
+  booking_type?: string;
+  selected_slot_id?: string;
+  car_registration_number?: string;
+  car_model?: string;
+  notes?: string;
+  postcode?: string;
+  latitude?: string | number;
+  longitude?: string | number;
+  callback?: string;
+  guest_id?: string;
+}
+
+/**
+ * Unified Tyre Booking Dispatch matching Mechanical flow
+ * 1. Add tyre to cart (POST /customer/cart/add)
+ * 2. Send booking request (POST /customer/booking/request/send)
+ * 3. Extract booking ID and Stripe payment redirect URL
+ * 4. Fallback to direct Stripe checkout URL if not returned
+ * 5. Direct window.location.href redirect to Stripe secure checkout
+ */
+export async function sendTyreBookingRequest(
+  payload: SendTyreBookingPayload
+): Promise<any> {
+  const zoneId =
+    payload.zone_id ||
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("zone_id") ||
+        localStorage.getItem("zoneid") ||
+        localStorage.getItem("zoneId") ||
+        localStorage.getItem(ZONE_KEY))) ||
+    DEFAULT_ZONE_ID;
+
+  const guestId = payload.guest_id || getOrCreateGuestId();
+  const effectiveProviderId =
+    payload.provider_id && isUuid(payload.provider_id)
+      ? payload.provider_id
+      : DEFAULT_PROVIDER_ID;
+
+  const isEmergency = payload.category === "emergency" || payload.booking_type === "emergency";
+  const serviceId =
+    payload.service_id ||
+    (isEmergency ? TYRE_EMERGENCY_SERVICE_ID : TYRE_REPLACEMENT_SERVICE_ID);
+  const categoryId = payload.category_id || TYRE_CATEGORY_ID;
+
+  // STEP 1: Add to cart first (exactly matches mechanical & valet flow)
+  try {
+    await addTyreToCart({
+      guest_id: guestId,
+      provider_id: effectiveProviderId,
+      service_id: serviceId,
+      category_id: categoryId,
+      variant_key: payload.variant_key,
+      tyre_id: payload.tyre_id,
+      quantity: payload.quantity || 1,
+      is_terms_accepted: 1,
+      zone_id: zoneId,
+    });
+  } catch (cartErr) {
+    console.warn("addTyreToCart before booking request:", cartErr);
+  }
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fallbackSchedule = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+    now.getHours()
+  )}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+  const defaultSuccessCallback =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/booking-success`
+      : "https://mmcclub.co.uk/booking-success";
+  const callbackUrl = payload.callback || defaultSuccessCallback;
+
+  const isPartialNum =
+    payload.is_partial !== undefined
+      ? Number(payload.is_partial) === 1
+        ? 1
+        : 0
+      : 1;
+
+  // STEP 2: Send booking request (POST /customer/booking/request/send)
+  const res = await sendBookingRequestToBackend({
+    guest_id: guestId,
+    provider_id: effectiveProviderId,
+    payment_method: payload.payment_method || "stripe",
+    is_partial: isPartialNum,
+    payment_platform: "app",
+    zone_id: zoneId,
+    service_schedule: payload.service_schedule || fallbackSchedule,
+    service_address_id: payload.service_address_id || "9",
+    service_address: payload.service_address || "Customer Location, United Kingdom",
+    service_location: payload.service_location || "customer",
+    booking_type: isEmergency ? "emergency" : "normal",
+    selected_slot_id: payload.selected_slot_id,
+    callback: callbackUrl,
+    car_registration_number: (payload.car_registration_number || "UK22-XYZ-9999").trim().toUpperCase(),
+    car_model: payload.car_model || "Vehicle",
+    notes: payload.notes || "Tyre assistance requested with online payment.",
+    postcode: payload.postcode || "SW1A 1AA",
+    latitude: payload.latitude || "51.5074",
+    longitude: payload.longitude || "-0.1278",
+    amount: payload.amount,
+    total_cost: payload.total_cost ?? payload.amount,
+    service_id: serviceId,
+    category_id: categoryId,
+  });
+
+  // STEP 3: Extract booking ID and redirect_link matching Mechanical logic
+  const content: any = res?.content || res?.data?.content || res?.data;
+  const rawBookingId = content?.booking_id || res?.booking_id;
+  const bId =
+    (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? rawBookingId[0] : null) ||
+    (typeof rawBookingId === "string" || typeof rawBookingId === "number" ? String(rawBookingId) : null) ||
+    content?.readable_id ||
+    content?.id ||
+    content?.payment_id ||
+    res?.readable_id ||
+    res?.id ||
+    null;
+
+  if (bId && typeof window !== "undefined") {
+    localStorage.setItem("last_tyre_booking_id", String(bId));
+  }
+
+  let redirectUrl =
+    content?.url ||
+    content?.redirect_link ||
+    content?.redirect_url ||
+    content?.payment_url ||
+    content?.link ||
+    content?.payment_link ||
+    res?.url ||
+    res?.redirect_link ||
+    res?.redirect_url ||
+    (typeof content === "string" && content.startsWith("http") ? content : null);
+
+  // STEP 4: Switch payment method or direct Stripe URL fallback if no direct URL returned
+  if (!redirectUrl && bId && !String(bId).startsWith("MMC-TYR-")) {
+    const payloadsToTry = [
+      {
+        booking_id: String(bId),
+        payment_method: "stripe",
+        is_partial: isPartialNum,
+        payment_platform: "app",
+        callback: callbackUrl,
+      },
+      {
+        booking_id: String(bId),
+        payment_method: "stripe",
+        is_partial: isPartialNum,
+        payment_platform: "web",
+        callback: callbackUrl,
+      },
+    ];
+
+    for (const p of payloadsToTry) {
+      if (redirectUrl) break;
+      try {
+        console.log("[TyrePayment] Requesting switch-payment-method:", p);
+        const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
+        const sRaw = switchRes?.data?.content || switchRes?.data || {};
+        if (typeof sRaw === "string" && sRaw.startsWith("http")) {
+          redirectUrl = sRaw;
+          break;
+        }
+        const candidate =
+          sRaw?.redirect_url ||
+          sRaw?.redirect_link ||
+          sRaw?.payment_url ||
+          sRaw?.url ||
+          sRaw?.link ||
+          sRaw?.stripe_url;
+        if (candidate && typeof candidate === "string" && candidate.startsWith("http")) {
+          redirectUrl = candidate;
+          break;
+        }
+      } catch (swErr) {
+        console.warn("[TyrePayment] switch-payment-method notice:", swErr);
+      }
+    }
+  }
+
+
+  // Clean up redirect link
+  if (redirectUrl && typeof redirectUrl === "string") {
+    redirectUrl = redirectUrl.replace(/\\\//g, "/");
+    if (!redirectUrl.startsWith("http")) {
+      redirectUrl = `${getBackendRootUrl()}${redirectUrl.startsWith("/") ? "" : "/"}${redirectUrl}`;
+    }
+    if (!redirectUrl.includes("callback=")) {
+      const sep = redirectUrl.includes("?") ? "&" : "?";
+      redirectUrl = `${redirectUrl}${sep}callback=${encodeURIComponent(callbackUrl)}`;
+    }
+    if (!redirectUrl.includes("is_partial=")) {
+      redirectUrl = `${redirectUrl}&is_partial=${isPartialNum}`;
+    }
+  }
+
+  // STEP 5: Direct Window Redirect to Stripe (Exact Mechanical behavior)
+  if (
+    typeof window !== "undefined" &&
+    redirectUrl &&
+    typeof redirectUrl === "string" &&
+    redirectUrl.startsWith("http") &&
+    !redirectUrl.includes("payment_id=MMC-")
+  ) {
+    console.log("[TyreBooking] Redirecting directly to Stripe secure checkout:", redirectUrl);
+    window.location.href = redirectUrl;
+  }
+
+  return {
+    ...res,
+    booking_id: bId,
+    redirect_link: redirectUrl,
+    redirect_url: redirectUrl,
+    url: redirectUrl,
+  };
 }
 
 // ==========================================
@@ -1361,16 +1596,16 @@ export async function confirmQuoteAndAssignTechnician(
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
       service_schedule: validSchedule,
-      service_address_id: "6",
+      service_address_id: (booking as any).serviceAddressId || (booking as any).service_address_id || "9",
       service_address: booking.locationAddress || "Customer Location, United Kingdom",
       service_location: "customer",
-      booking_type: isEmergency ? "emergency" : "normal",
+      booking_type: "emergency",
       selected_slot_id: booking.selectedSlotId || (booking as any).selected_slot_id,
       car_registration_number: (booking.vehicleRegistration || "MMC TYRE").trim().toUpperCase(),
       car_model: booking.vehicleMakeModel || "Vehicle",
       car_manufacture_year: new Date().getFullYear().toString(),
       car_color: "",
-      notes: booking.notes || "",
+      notes: booking.notes || "Tyre assistance requested with online payment.",
       postcode: booking.locationPostcode || "SW1A 1AA",
       latitude: String(booking.latitude || "51.5074"),
       longitude: String(booking.longitude || "-0.1278"),
@@ -1388,6 +1623,68 @@ export async function confirmQuoteAndAssignTechnician(
     console.warn("sendBookingRequestToBackend note:", sendErr);
   }
 
+  // Auto-recovery fallback: If payment amount is 0 or no redirect link returned, re-add verified tyre variation and retry
+  const isPaymentAmountZero =
+    response?.response_code === "default_400" &&
+    (Array.isArray(response?.errors)
+      ? response.errors.some((e: any) => String(e).toLowerCase().includes("payment amount"))
+      : String(response?.message || "").toLowerCase().includes("payment amount"));
+
+  const hasDirectRedirect = Boolean(
+    response?.content?.redirect_link ||
+    response?.content?.redirect_url ||
+    response?.content?.url ||
+    response?.content?.payment_url ||
+    response?.redirect_link ||
+    response?.redirect_url ||
+    response?.url
+  );
+
+  if (isPaymentAmountZero || !hasDirectRedirect) {
+    console.log("[TyrePayment] Fallback auto-recovery: Adding verified tyre variation and retrying booking send...");
+    try {
+      await addTyreToCart({
+        guest_id: guestId,
+        provider_id: effectiveProviderId,
+        service_id: TYRE_EMERGENCY_SERVICE_ID,
+        category_id: TYRE_CATEGORY_ID,
+        variant_key: "puncture",
+        quantity: 1,
+        is_terms_accepted: 1,
+        zone_id: DEFAULT_ZONE_ID,
+      });
+
+      const retryRes = await sendBookingRequestToBackend({
+        guest_id: guestId,
+        provider_id: effectiveProviderId,
+        payment_method: effectivePaymentMethod,
+        zone_id: DEFAULT_ZONE_ID,
+        service_schedule: validSchedule,
+        service_address_id: "9",
+        service_address: booking.locationAddress || "Customer Location, United Kingdom",
+        service_location: "customer",
+        booking_type: "emergency",
+        car_registration_number: (booking.vehicleRegistration || "MMC TYRE").trim().toUpperCase(),
+        car_model: booking.vehicleMakeModel || "Vehicle",
+        notes: booking.notes || "Tyre assistance requested with online payment.",
+        is_partial: isPartialNum,
+        callback: successCallbackUrl,
+      });
+
+      if (
+        retryRes?.content?.redirect_link ||
+        retryRes?.content?.redirect_url ||
+        retryRes?.content?.url ||
+        retryRes?.redirect_link ||
+        retryRes?.redirect_url
+      ) {
+        response = retryRes;
+      }
+    } catch (retryErr) {
+      console.warn("[TyrePayment] Auto-recovery retry notice:", retryErr);
+    }
+  }
+
   let realBookingUuid = extractBackendBookingUuid(response);
   let realReadableId = extractReadableBookingId(response);
 
@@ -1397,11 +1694,11 @@ export async function confirmQuoteAndAssignTechnician(
       localStorage.setItem("last_tyre_booking_id", String(realReadableId));
     }
   }
-  if (realBookingUuid && isUuid(realBookingUuid)) {
+  if (realBookingUuid && !realBookingUuid.startsWith("MMC-TYR-")) {
     booking.id = realBookingUuid;
   }
 
-  const responseContent: any = response?.content;
+  const responseContent: any = response?.content || response?.data?.content || response?.data;
   let redirectLink: string | null =
     (response as any)?.redirect_link ||
     (response as any)?.redirect_url ||
@@ -1419,6 +1716,80 @@ export async function confirmQuoteAndAssignTechnician(
       ? responseContent
       : null);
 
+  // 3. Step 3: Switch payment method to Stripe if booking ID is confirmed and redirect link wasn't in initial response
+  const targetBookingId =
+    realBookingUuid ||
+    realReadableId ||
+    (!booking.id.startsWith("MMC-TYR-") ? booking.id : null) ||
+    (!booking.referenceNumber.startsWith("MMC-TYR-") ? booking.referenceNumber : null);
+
+  if (!redirectLink && targetBookingId) {
+    const payloadsToTry = [
+      {
+        booking_id: String(targetBookingId),
+        payment_method: "stripe",
+        is_partial: isPartialNum,
+        payment_platform: "app",
+        callback: successCallbackUrl,
+      },
+      {
+        booking_id: String(targetBookingId),
+        payment_method: "stripe",
+        is_partial: isPartialNum,
+        payment_platform: "web",
+        callback: successCallbackUrl,
+      },
+    ];
+
+    for (const p of payloadsToTry) {
+      if (redirectLink) break;
+      try {
+        console.log("[TyrePayment] Requesting switch-payment-method:", p);
+        const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
+        const sData = switchRes.data;
+        const sContent = sData?.content;
+        const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
+
+        if (typeof sContent === "string" && sContent.startsWith("http")) {
+          redirectLink = sContent;
+          break;
+        }
+
+        const candidateUrl =
+          sRaw?.redirect_url ||
+          sRaw?.redirect_link ||
+          sRaw?.payment_url ||
+          sRaw?.url ||
+          sRaw?.link ||
+          sRaw?.stripe_url ||
+          sRaw?.data?.redirect_url ||
+          sRaw?.data?.url;
+
+        if (candidateUrl && String(candidateUrl).startsWith("http")) {
+          redirectLink = String(candidateUrl);
+          break;
+        }
+
+        const candidatePId =
+          sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
+        if (candidatePId) {
+          redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+            String(candidatePId)
+          )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(successCallbackUrl)}`;
+          break;
+        }
+      } catch (switchErr: any) {
+        const errData = switchErr?.response?.data;
+        if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
+          redirectLink = String(errData.content.redirect_url);
+          break;
+        }
+        console.warn("[TyrePayment] switch-payment-method notice:", errData?.message || switchErr.message);
+      }
+    }
+  }
+
+
   if (redirectLink && typeof redirectLink === "string") {
     redirectLink = redirectLink.replace(/\\\//g, "/");
     if (!redirectLink.startsWith("http")) {
@@ -1433,86 +1804,16 @@ export async function confirmQuoteAndAssignTechnician(
     }
   }
 
-  // 3. Step 3: Switch payment method to Stripe if booking UUID is confirmed and redirect link wasn't in initial response
-  if (!redirectLink && (realBookingUuid || isUuid(booking.id))) {
-    const targetUuid = (realBookingUuid && isUuid(realBookingUuid) ? realBookingUuid : null) || (isUuid(booking.id) ? booking.id : null);
-    if (targetUuid) {
-      const payloadsToTry = [
-        {
-          booking_id: String(targetUuid),
-          payment_method: "stripe",
-          is_partial: isPartialNum,
-          payment_platform: "app",
-          callback: successCallbackUrl,
-        },
-        {
-          booking_id: String(targetUuid),
-          payment_method: "stripe",
-          is_partial: isPartialNum,
-          payment_platform: "web",
-          callback: successCallbackUrl,
-        },
-      ];
-
-      for (const p of payloadsToTry) {
-        if (redirectLink) break;
-        try {
-          console.log("[TyrePayment] Requesting switch-payment-method:", p);
-          const switchRes = await apiClient.post("/customer/booking/switch-payment-method", p);
-          const sData = switchRes.data;
-          const sContent = sData?.content;
-          const sRaw = typeof sContent === "object" && sContent !== null ? sContent : sData || {};
-
-          if (typeof sContent === "string" && sContent.startsWith("http")) {
-            redirectLink = sContent;
-            break;
-          }
-
-          const candidateUrl =
-            sRaw?.redirect_url ||
-            sRaw?.redirect_link ||
-            sRaw?.payment_url ||
-            sRaw?.url ||
-            sRaw?.link ||
-            sRaw?.stripe_url ||
-            sRaw?.data?.redirect_url ||
-            sRaw?.data?.url;
-
-          if (candidateUrl && String(candidateUrl).startsWith("http")) {
-            redirectLink = String(candidateUrl);
-            break;
-          }
-
-          const candidatePId =
-            sRaw?.payment_id || sRaw?.paymentId || sRaw?.stripe_payment_id || sRaw?.data?.payment_id;
-          if (candidatePId && isUuid(candidatePId)) {
-            redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-              String(candidatePId)
-            )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(successCallbackUrl)}`;
-            break;
-          }
-        } catch (switchErr: any) {
-          const errData = switchErr?.response?.data;
-          if (errData?.content?.redirect_url && String(errData.content.redirect_url).startsWith("http")) {
-            redirectLink = String(errData.content.redirect_url);
-            break;
-          }
-          console.warn("[TyrePayment] switch-payment-method notice:", errData?.message || switchErr.message);
-        }
-      }
-    }
-  }
-
-  // 4. Step 4: Fallback Stripe Gateway Direct URL only if payTargetId is a valid UUID
-  if (!redirectLink) {
-    const payTargetId =
-      (realBookingUuid && isUuid(realBookingUuid) ? realBookingUuid : null) ||
-      (isUuid(booking.id) ? booking.id : null);
-    if (payTargetId) {
-      redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-        String(payTargetId)
-      )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(successCallbackUrl)}`;
-    }
+  // 5. Step 5: Direct Window Redirect to Stripe (Exact Mechanical behavior)
+  if (
+    typeof window !== "undefined" &&
+    redirectLink &&
+    typeof redirectLink === "string" &&
+    redirectLink.startsWith("http") &&
+    !redirectLink.includes("payment_id=MMC-")
+  ) {
+    console.log("[TyreBooking] Redirecting directly to Stripe secure checkout:", redirectLink);
+    window.location.href = redirectLink;
   }
 
   const backendMsg =
@@ -1549,62 +1850,61 @@ export function extractBackendBookingUuid(res: any): string | null {
         : payload;
 
   if (content && typeof content === "object") {
-    // Check nested content.booking.booking.id or content.booking.booking_id
     const bObj = content.booking;
     if (bObj && typeof bObj === "object") {
-      if (bObj.booking && typeof bObj.booking === "object" && isUuid(bObj.booking.id)) {
+      if (bObj.booking && typeof bObj.booking === "object" && bObj.booking.id) {
         return String(bObj.booking.id);
       }
-      if (isUuid(bObj.booking_id)) return String(bObj.booking_id);
-      if (isUuid(bObj.id)) return String(bObj.id);
-      if (isUuid(bObj.payment_id)) return String(bObj.payment_id);
+      if (bObj.booking_id) return String(bObj.booking_id);
+      if (bObj.id) return String(bObj.id);
+      if (bObj.payment_id) return String(bObj.payment_id);
     }
 
     if (typeof (content as any)?.redirect_link === "string") {
-      const match = (content as any).redirect_link.match(/payment_id=([0-9a-fA-F-]+)/);
-      if (match && isUuid(match[1])) return match[1];
+      const match = (content as any).redirect_link.match(/payment_id=([^&]+)/);
+      if (match) return decodeURIComponent(match[1]);
     }
     if (typeof (content as any)?.redirect_url === "string") {
-      const match = (content as any).redirect_url.match(/payment_id=([0-9a-fA-F-]+)/);
-      if (match && isUuid(match[1])) return match[1];
+      const match = (content as any).redirect_url.match(/payment_id=([^&]+)/);
+      if (match) return decodeURIComponent(match[1]);
     }
     if (typeof (content as any)?.url === "string") {
-      const match = (content as any).url.match(/payment_id=([0-9a-fA-F-]+)/);
-      if (match && isUuid(match[1])) return match[1];
+      const match = (content as any).url.match(/payment_id=([^&]+)/);
+      if (match) return decodeURIComponent(match[1]);
     }
-    if (Array.isArray(content.booking_id) && isUuid(content.booking_id[0])) {
+    if (Array.isArray(content.booking_id) && content.booking_id.length > 0) {
       return String(content.booking_id[0]);
     }
-    if (isUuid(content.booking_id)) return String(content.booking_id);
-    if (isUuid(content.payment_id)) return String(content.payment_id);
-    if (isUuid(content.id)) return String(content.id);
-    if (isUuid(content.booking?.id)) return String(content.booking.id);
-    if (isUuid(content.booking?.booking_id)) return String(content.booking.booking_id);
+    if (content.booking_id) return String(content.booking_id);
+    if (content.payment_id) return String(content.payment_id);
+    if (content.id) return String(content.id);
+    if (content.booking?.id) return String(content.booking.id);
+    if (content.booking?.booking_id) return String(content.booking.booking_id);
   }
 
   if (Array.isArray(content) && content.length > 0) {
     const item = content[0];
-    if (isUuid(item?.id)) return String(item.id);
-    if (Array.isArray(item?.booking_id) && isUuid(item.booking_id[0])) return String(item.booking_id[0]);
-    if (isUuid(item?.booking_id)) return String(item.booking_id);
-    if (isUuid(item?.payment_id)) return String(item.payment_id);
+    if (item?.id) return String(item.id);
+    if (Array.isArray(item?.booking_id) && item.booking_id.length > 0) return String(item.booking_id[0]);
+    if (item?.booking_id) return String(item.booking_id);
+    if (item?.payment_id) return String(item.payment_id);
   }
 
   if (typeof payload?.redirect_url === "string") {
-    const match = payload.redirect_url.match(/payment_id=([0-9a-fA-F-]+)/);
-    if (match && isUuid(match[1])) return match[1];
+    const match = payload.redirect_url.match(/payment_id=([^&]+)/);
+    if (match) return decodeURIComponent(match[1]);
   }
   if (typeof payload?.redirect_link === "string") {
-    const match = payload.redirect_link.match(/payment_id=([0-9a-fA-F-]+)/);
-    if (match && isUuid(match[1])) return match[1];
+    const match = payload.redirect_link.match(/payment_id=([^&]+)/);
+    if (match) return decodeURIComponent(match[1]);
   }
 
-  if (isUuid(payload.booking_id)) return String(payload.booking_id);
-  if (Array.isArray(payload.booking_id) && isUuid(payload.booking_id[0])) {
+  if (Array.isArray(payload.booking_id) && payload.booking_id.length > 0) {
     return String(payload.booking_id[0]);
   }
-  if (isUuid(payload.id)) return String(payload.id);
-  if (isUuid(payload.payment_id)) return String(payload.payment_id);
+  if (payload.booking_id) return String(payload.booking_id);
+  if (payload.id) return String(payload.id);
+  if (payload.payment_id) return String(payload.payment_id);
 
   return null;
 }
@@ -1625,7 +1925,6 @@ export function extractReadableBookingId(res: any): string | null {
         : payload;
 
   if (content && typeof content === "object") {
-    // Nested content.booking.booking.readable_id
     const bObj = content.booking;
     if (bObj && typeof bObj === "object") {
       if (bObj.booking && typeof bObj.booking === "object" && bObj.booking.readable_id) {
@@ -1683,7 +1982,7 @@ export async function assignTechnicianToBooking(
     typeof window !== "undefined"
       ? localStorage.getItem("last_tyre_booking_id")
       : null;
-  if (savedRealId && bookings[index].referenceNumber.startsWith("MMC-TYR-")) {
+  if (savedRealId && String(bookings[index].referenceNumber).startsWith("MMC-TYR-")) {
     bookings[index].referenceNumber = savedRealId;
     bookings[index].id = savedRealId;
   }

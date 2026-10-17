@@ -14,9 +14,9 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
+      <ServicesSection />
       <AppDownloadBanner />
       <HomePromoBanner />
-      <ServicesSection />
       <EmergencyCTA />
       <HowItWorksSection />
       <MatchingSection />

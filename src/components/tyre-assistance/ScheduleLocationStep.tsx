@@ -31,6 +31,7 @@ import {
   ProviderSlot,
   BackendTyreItem,
   DEFAULT_PROVIDER_ID,
+  DEFAULT_ZONE_ID,
   TYRE_REPLACEMENT_SERVICE_ID,
   TYRE_EMERGENCY_SERVICE_ID,
   getZoneIdFromCoordinates,
@@ -348,8 +349,8 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
       (tyre?.images && tyre.images[0] && tyre.images[0].startsWith("http")
         ? tyre.images[0]
         : tyre?.images && tyre.images[0]
-        ? `https://mmcclub.co.uk/backend/storage/app/public/tyre/${tyre.images[0]}`
-        : "");
+          ? `https://mmcclub.co.uk/backend/storage/app/public/tyre/${tyre.images[0]}`
+          : "");
 
     if (rawImg && !thumbError) {
       return (
@@ -460,11 +461,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                         key={day.isoDate}
                         type="button"
                         onClick={() => setScheduledDate(day.isoDate)}
-                        className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer border ${
-                          isSelected
+                        className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer border ${isSelected
                             ? "bg-[#FAD293] border-[#FAD293] text-black shadow-lg ring-2 ring-[#FAD293]/30"
                             : "bg-[#1C1A17] border-white/5 text-white/70 hover:border-white/20 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <span className={`text-[10px] font-bold ${isSelected ? "text-black" : "text-white/50"}`}>
                           {day.dayInitial}
@@ -500,11 +500,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                             setSelectedSlotId(slot.id);
                             setScheduledTimeSlot(timeStr);
                           }}
-                          className={`py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer text-center ${
-                            isSelected
+                          className={`py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer text-center ${isSelected
                               ? "bg-[#1E1D1B] border-[#FAD293] text-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-md"
                               : "bg-[#1C1A17] border-white/5 text-white/80 hover:border-white/20 hover:text-white"
-                          }`}
+                            }`}
                         >
                           {timeStr}
                         </button>
@@ -527,11 +526,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                 <button
                   type="button"
                   onClick={() => setServiceLocationType("mobile_repair")}
-                  className={`p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                    serviceLocationType === "mobile_repair"
+                  className={`p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${serviceLocationType === "mobile_repair"
                       ? "bg-[#1C1A17] border-[#FAD293] text-white shadow-md ring-1 ring-[#FAD293]/30"
                       : "bg-[#181614] border-white/5 text-white/70 hover:border-white/20"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <Smartphone size={20} className="text-[#FAD293]" />
@@ -541,9 +539,8 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                     </div>
                   </div>
                   <div
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                      serviceLocationType === "mobile_repair" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                    }`}
+                    className={`w-5 h-5 rounded-full border flex items-center justify-center ${serviceLocationType === "mobile_repair" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                      }`}
                   >
                     {serviceLocationType === "mobile_repair" && <div className="w-2 h-2 rounded-full bg-black" />}
                   </div>
@@ -552,11 +549,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                 <button
                   type="button"
                   onClick={() => setServiceLocationType("workshop")}
-                  className={`p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                    serviceLocationType === "workshop"
+                  className={`p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${serviceLocationType === "workshop"
                       ? "bg-[#1C1A17] border-[#FAD293] text-white shadow-md ring-1 ring-[#FAD293]/30"
                       : "bg-[#181614] border-white/5 text-white/70 hover:border-white/20"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <Home size={20} className="text-[#FAD293]" />
@@ -566,9 +562,8 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                     </div>
                   </div>
                   <div
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                      serviceLocationType === "workshop" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
-                    }`}
+                    className={`w-5 h-5 rounded-full border flex items-center justify-center ${serviceLocationType === "workshop" ? "border-[#FAD293] bg-[#FAD293]" : "border-white/30"
+                      }`}
                   >
                     {serviceLocationType === "workshop" && <div className="w-2 h-2 rounded-full bg-black" />}
                   </div>
@@ -712,11 +707,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                       key={qty}
                       type="button"
                       onClick={() => setTyreQuantity(qty)}
-                      className={`w-9 h-9 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${
-                        tyreQuantity === qty
+                      className={`w-9 h-9 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${tyreQuantity === qty
                           ? "bg-[#FAD293] text-black shadow-md shadow-[#FAD293]/20"
                           : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
-                      }`}
+                        }`}
                     >
                       {qty}
                     </button>
@@ -796,11 +790,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
               {/* Option 1: Deposit (25% Advance) -> is_partial: 1 */}
               <div
                 onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
-                  isPartialPayment
+                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${isPartialPayment
                     ? "bg-[#1C1A17] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
                     : "bg-[#181614] border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5">
@@ -821,11 +814,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
                         ? "bg-[#FAD293] border-[#FAD293] text-black"
                         : "border-white/30 bg-transparent"
-                    }`}
+                      }`}
                   >
                     {isPartialPayment && <Check size={14} className="stroke-[3]" />}
                   </div>
@@ -846,11 +838,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
               {/* Option 2: Online Payment (Full) -> is_partial: 0 */}
               <div
                 onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
-                  !isPartialPayment
+                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${!isPartialPayment
                     ? "bg-[#1C1A17] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
                     : "bg-[#181614] border-white/10 hover:border-white/20"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5">
@@ -868,11 +859,10 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      !isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
                         ? "bg-[#FAD293] border-[#FAD293] text-black"
                         : "border-white/30 bg-transparent"
-                    }`}
+                      }`}
                   >
                     {!isPartialPayment && <Check size={14} className="stroke-[3]" />}
                   </div>

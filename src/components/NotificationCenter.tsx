@@ -22,6 +22,7 @@ import {
   CircleDot,
   Radio,
   UserRound,
+  Tag,
 } from "lucide-react";
 import {
   BookingNotification,
@@ -50,20 +51,51 @@ export default function NotificationCenter({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(
+      localStorage.getItem("token") ||
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("mmc_token") ||
+        localStorage.getItem("user")
+    );
+  });
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  // Sync auth state directly with localStorage
+  const checkAuth = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    const hasAuth = Boolean(
+      localStorage.getItem("token") ||
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("mmc_token") ||
+        localStorage.getItem("user")
+    );
+    setIsAuthenticated(hasAuth);
+    return hasAuth;
+  }, []);
+
   // Load notifications from API / local storage
   const loadNotifications = useCallback(async (showSpinner = false) => {
+    const isAuthed = checkAuth();
+    if (!isAuthed) {
+      setIsAuthenticated(false);
+      setNotifications([]);
+      setUnreadCount(0);
+      setIsLive(false);
+      return;
+    }
+
     if (showSpinner) setLoading(true);
     try {
       const data = await fetchBookingNotifications();
-      setIsAuthenticated(data.isAuthenticated);
-      if (data.isAuthenticated) {
-        setNotifications(data.notifications);
-        setUnreadCount(data.unreadCount);
-        setIsLive(data.isLive);
+      const resolvedAuth = data.isAuthenticated || checkAuth();
+      setIsAuthenticated(resolvedAuth);
+      if (resolvedAuth) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+        setIsLive(data.isLive || false);
       } else {
         setNotifications([]);
         setUnreadCount(0);
@@ -71,25 +103,26 @@ export default function NotificationCenter({
       }
     } catch (err) {
       console.warn("Could not load notifications:", err);
-      setIsAuthenticated(false);
-      setNotifications([]);
-      setUnreadCount(0);
+      setIsAuthenticated(checkAuth());
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, []);
+  }, [checkAuth]);
 
   // Initial fetch and event listener for notifications updates
   useEffect(() => {
+    checkAuth();
     loadNotifications(false);
 
     const handleUpdate = () => {
+      checkAuth();
       loadNotifications(false);
     };
 
     window.addEventListener("mmc-notifications-updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
     window.addEventListener("auth-change", handleUpdate);
+    window.addEventListener("focus", handleUpdate);
 
     // Auto refresh every 60 seconds
     const interval = setInterval(() => {
@@ -100,9 +133,10 @@ export default function NotificationCenter({
       window.removeEventListener("mmc-notifications-updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
       window.removeEventListener("auth-change", handleUpdate);
+      window.removeEventListener("focus", handleUpdate);
       clearInterval(interval);
     };
-  }, [loadNotifications]);
+  }, [checkAuth, loadNotifications]);
 
   // Sync selected notification from URL query on load or change
   useEffect(() => {
@@ -474,59 +508,93 @@ export default function NotificationCenter({
                         `}
                       >
                         <div className="flex items-start gap-3">
-                          {/* Icon */}
-                          <div className="w-8 h-8 rounded-xl bg-[#1A1612] border border-white/10 group-hover:border-[#FAD293]/40 flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                            {getCategoryIcon(item.category)}
-                          </div>
+                          {/* Left: Circle Avatar (Image or Tag or Category Icon) */}
+                          {item.image ? (
+                            <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 border border-[#FAD293]/35 bg-black/40 shadow-sm mt-0.5">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={item.image}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  const currentSrc = target.src;
+                                  if (currentSrc.includes("/storage/app/public/notification/")) {
+                                    target.src = currentSrc.replace(
+                                      "/storage/app/public/notification/",
+                                      "/storage/app/public/push-notification/"
+                                    );
+                                  } else if (currentSrc.includes("/storage/app/public/push-notification/")) {
+                                    target.src = currentSrc.replace(
+                                      "/storage/app/public/push-notification/",
+                                      "/storage/app/public/"
+                                    );
+                                  } else {
+                                    (target.parentElement as HTMLElement).style.display = "none";
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : item.actionType === "quote" || item.category === "quote" ? (
+                            <div className="w-10 h-10 rounded-full bg-[#2A231C] border border-[#FAD293]/30 flex items-center justify-center text-[#CEA46B] shrink-0 shadow-sm mt-0.5">
+                              <Tag size={18} />
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-[#1A1612] border border-white/10 group-hover:border-[#FAD293]/40 flex items-center justify-center shrink-0 shadow-sm text-[#FAD293] mt-0.5">
+                              {getCategoryIcon(item.category)}
+                            </div>
+                          )}
 
                           {/* Content */}
                           <div className="flex-1 min-w-0">
-                            {/* Title & Status */}
+                            {/* Title & Unread indicator */}
                             <div className="flex items-center justify-between gap-1 mb-1">
                               <h3
-                                className={`text-xs truncate font-bold ${item.read ? "text-white/90" : "text-white"
-                                  }`}
+                                className={`text-xs sm:text-sm truncate font-bold ${
+                                  item.read ? "text-white/80" : "text-white"
+                                }`}
                               >
                                 {item.title}
                               </h3>
-                              {getStatusBadge(item.status)}
+                              {!item.read && (
+                                <span className="w-2 h-2 rounded-full bg-[#CEA46B] shrink-0 shadow-[0_0_8px_rgba(206,164,107,0.8)] mt-0.5" />
+                              )}
                             </div>
 
-                            {/* Subtitle / Note */}
-                            {item.subtitle && (
-                              <p className="text-[11px] text-[#FAD293]/90 font-medium truncate mb-1">
-                                {item.subtitle}
+                            {/* Subtitle / Description */}
+                            {item.description && (
+                              <p className="text-[11px] sm:text-xs text-white/60 line-clamp-2 leading-relaxed mb-1.5">
+                                {item.description}
                               </p>
                             )}
 
-                            {/* Schedule & Price details */}
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/60 mb-1.5">
-                              <span className="flex items-center gap-1 text-white/70">
-                                <Calendar size={11} className="text-[#FAD293]" />
-                                {item.scheduleTime || "Scheduled"}
-                              </span>
-                              <span>•</span>
-                              <span className="font-semibold text-white/80">
-                                £{item.totalAmount}
-                              </span>
-                              {item.isPaid ? (
-                                <span className="text-[10px] text-emerald-400 font-medium">
-                                  (Paid)
+                            {/* Schedule & Price details (if booking) */}
+                            {item.totalAmount > 0 && !item.description?.includes(String(item.totalAmount)) && (
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/60 mb-1.5">
+                                <span className="font-semibold text-white/80">
+                                  £{item.totalAmount}
                                 </span>
-                              ) : (
-                                <span className="text-[10px] text-amber-400/80 font-medium">
-                                  (Pay later)
-                                </span>
-                              )}
-                            </div>
+                                {item.isPaid && (
+                                  <span className="text-[10px] text-emerald-400 font-medium">
+                                    (Paid)
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                             {/* Time ago & actions */}
                             <div className="flex items-center justify-between text-[10px] text-white/40 pt-0.5">
                               <span>{item.timeAgo}</span>
                               <div className="flex items-center gap-2">
-                                <span className="text-[#FAD293] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px] font-semibold">
-                                  Details <ChevronRight size={12} />
-                                </span>
+                                {item.actionType === "quote" ? (
+                                  <span className="text-[#CEA46B] text-[11px] font-semibold flex items-center gap-0.5 group-hover:underline">
+                                    View Bids &gt;
+                                  </span>
+                                ) : (
+                                  <span className="text-[#FAD293] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px] font-semibold">
+                                    Details <ChevronRight size={12} />
+                                  </span>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(e) => handleDismiss(e, item.id)}

@@ -113,7 +113,7 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[#d9a85f]/40 bg-[#14100c] text-white shadow-2xl shadow-black/90">
+      <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-[#d9a85f]/40 bg-[#14100c] text-white shadow-2xl shadow-black/90">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-white/10 bg-[#18130e] px-5 py-4 sm:px-6">
@@ -181,7 +181,7 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
         </div>
 
         {/* Modal Body / Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
           
           {/* Loading State */}
           {loading && (
@@ -273,14 +273,14 @@ export const CustomerBookingsModal: React.FC<CustomerBookingsModalProps> = ({
                         
                         <div className="flex items-center gap-1.5 text-[11px] text-white/50 mt-0.5">
                           <span>Ref:</span>
-                          <span className="font-mono text-white/80">{item.booking_id}</span>
+                          <span className="font-mono text-white/80">{String((item as any).readable_id || item.id || item.booking_id)}</span>
                           <button
                             type="button"
-                            onClick={() => handleCopy(item.booking_id)}
+                            onClick={() => handleCopy(String((item as any).readable_id || item.id || item.booking_id))}
                             className="text-white/40 hover:text-white transition"
                             title="Copy Booking Reference"
                           >
-                            {copiedId === item.booking_id ? (
+                            {copiedId === String((item as any).readable_id || item.id || item.booking_id) ? (
                               <Check size={12} className="text-[#10b981]" />
                             ) : (
                               <Copy size={12} />

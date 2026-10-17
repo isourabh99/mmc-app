@@ -20,6 +20,7 @@ import {
   Banknote,
   CreditCard,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { TyreAssistanceBooking } from "@/lib/data/tyre-assistance.data";
 import { TyreAssistanceHeader } from "./TyreAssistanceHeader";
@@ -116,14 +117,18 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-4">
                 {/* Thumbnail */}
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-black border border-white/10 overflow-hidden flex-shrink-0 relative shadow-md">
-                  <Image
-                    src={booking.provider.image}
-                    alt={booking.provider.name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-black border border-white/10 overflow-hidden flex-shrink-0 relative shadow-md flex items-center justify-center">
+                  {booking.provider?.image ? (
+                    <Image
+                      src={booking.provider.image}
+                      alt={booking.provider.name || "Provider"}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <Sparkles className="w-8 h-8 text-[#FAD293]/60" />
+                  )}
                 </div>
 
                 {/* Details */}
@@ -338,11 +343,10 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
               {/* Option 1: Deposit (25% Advance) */}
               <div
                 onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                  isPartialPayment
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
                     ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
                     : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3.5">
@@ -363,11 +367,10 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
                         ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
                         : "border-zinc-700 bg-zinc-900"
-                    }`}
+                      }`}
                   >
                     {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
@@ -388,11 +391,10 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
               {/* Option 2: Online Payment (Full 100%) */}
               <div
                 onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                  !isPartialPayment
+                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
                     ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
                     : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3.5">
@@ -408,11 +410,10 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                      !isPartialPayment
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
                         ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
                         : "border-zinc-700 bg-zinc-900"
-                    }`}
+                      }`}
                   >
                     {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
@@ -473,14 +474,18 @@ export const ProviderQuoteStep: React.FC<ProviderQuoteStepProps> = ({
           <div className="w-full max-w-md bg-[#16120e] border border-white/15 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
             <div className="p-4 bg-black/40 border-b border-white/10 flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-xl bg-black border border-white/10 overflow-hidden relative">
-                  <Image
-                    src={booking.provider.image}
-                    alt={booking.provider.name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
+                <div className="w-9 h-9 rounded-xl bg-black border border-white/10 overflow-hidden relative flex items-center justify-center">
+                  {booking.provider?.image ? (
+                    <Image
+                      src={booking.provider.image}
+                      alt={booking.provider.name || "Provider"}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-[#FAD293]/60" />
+                  )}
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-white">
