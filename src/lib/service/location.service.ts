@@ -127,6 +127,132 @@ export const searchPlaces = async (
   return [];
 };
 
+export interface DetailedGeocodeResult {
+  address: string;
+  name: string;
+  street: string;
+  house: string;
+  city: string;
+  zip_code: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Reverse geocode coordinates to human readable address with breakdown
+ */
+export const reverseGeocodeDetailed = async (
+  latitude: number,
+  longitude: number
+): Promise<DetailedGeocodeResult> => {
+  // 1. Try Nominatim for granular address breakdown
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "MMC-App-LocationService" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const addr = data.address || {};
+      const roadName = addr.road || addr.pedestrian || addr.footway || addr.cycleway || addr.path || "";
+      const suburbName = addr.suburb || addr.neighbourhood || addr.residential || "";
+      const house = addr.house_number || addr.housenumber || "";
+      const city = addr.city || addr.town || addr.municipality || addr.village || addr.county || "London";
+
+      let street = roadName;
+      if (!street) {
+        street = suburbName;
+      } else if (
+        suburbName &&
+        !street.toLowerCase().includes(suburbName.toLowerCase()) &&
+        suburbName.toLowerCase() !== city.toLowerCase()
+      ) {
+        street = `${street}, ${suburbName}`;
+      }
+
+      const zip_code = addr.postcode || "";
+      const country = addr.country || "";
+      const name = roadName || suburbName || addr.city || "Current Location";
+
+      const addressParts = [
+        house ? `${house} ${street}`.trim() : street,
+        suburbName && !street.includes(suburbName) ? suburbName : null,
+        city,
+        zip_code,
+        country,
+      ].filter(Boolean);
+
+      const address = addressParts.length > 0 ? addressParts.join(", ") : (data.display_name || "London, UK");
+
+      return {
+        address,
+        name,
+        street,
+        house,
+        city,
+        zip_code,
+        country,
+        latitude,
+        longitude,
+      };
+    }
+  } catch (err) {
+    console.warn("Nominatim reverse geocode detailed fallback:", err);
+  }
+
+  // 2. Fallback to BigDataCloud
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const city = data.city || data.locality || "";
+      const localityPart = data.localityInfo?.administrative?.[3]?.name || data.locality || data.subLocality || "";
+      const street =
+        localityPart && localityPart.toLowerCase() !== city.toLowerCase()
+          ? localityPart
+          : data.localityInfo?.administrative?.[4]?.name || "";
+      const zip_code = data.postcode || "";
+      const country = data.countryName || "";
+      const name = data.locality || data.city || "Current Location";
+
+      const parts = [
+        data.locality || data.subLocality,
+        city,
+        data.principalSubdivision,
+        country,
+      ].filter(Boolean);
+
+      return {
+        address: parts.join(", ") || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        name,
+        street,
+        house: "",
+        city,
+        zip_code,
+        country,
+        latitude,
+        longitude,
+      };
+    }
+  } catch (err) {
+    console.warn("BigDataCloud geocode fallback:", err);
+  }
+
+  return {
+    address: `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+    name: "Detected Location",
+    street: "",
+    house: "",
+    city: "",
+    zip_code: "",
+    country: "",
+    latitude,
+    longitude,
+  };
+};
+
 /**
  * Reverse geocode coordinates to human readable address
  */
@@ -134,54 +260,38 @@ export const reverseGeocode = async (
   latitude: number,
   longitude: number
 ): Promise<{ address: string; name: string }> => {
-  // 1. Try BigDataCloud reverse geocode client
-  try {
-    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      const parts = [
-        data.locality || data.subLocality,
-        data.city || data.district,
-        data.principalSubdivision,
-        data.countryName,
-      ].filter(Boolean);
+  const result = await reverseGeocodeDetailed(latitude, longitude);
+  return { address: result.address, name: result.name };
+};
 
-      const name = data.locality || data.city || "Current Location";
-      const address = parts.length > 0 ? parts.join(", ") : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-      return { address, name };
-    }
-  } catch (err) {
-    console.warn("BigDataCloud geocode fallback:", err);
-  }
-
-  // 2. Fallback to Nominatim
+/**
+ * Approximate location by IP address as fallback when GPS/browser permission fails
+ */
+export const getIpLocationFallback = async (): Promise<GeolocationResult | null> => {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "MMC-Chauffeur-App" },
+    const res = await fetch("https://ipapi.co/json/", {
+      headers: { Accept: "application/json" },
     });
     if (res.ok) {
       const data = await res.json();
-      const addr = data.address || {};
-      const name = addr.road || addr.suburb || addr.city || "Current Location";
-      const parts = [
-        addr.suburb || addr.neighbourhood,
-        addr.city || addr.town || addr.county,
-        addr.state,
-        addr.country,
-      ].filter(Boolean);
-      const address = parts.join(", ") || data.display_name || "Current Location";
-      return { address, name };
+      if (data && typeof data.latitude === "number" && typeof data.longitude === "number") {
+        const lat = data.latitude;
+        const lon = data.longitude;
+        const city = data.city || "";
+        const country = data.country_name || "";
+        const postal = data.postal || "";
+        return {
+          latitude: lat,
+          longitude: lon,
+          address: [city, postal, country].filter(Boolean).join(", ") || `${city}, ${country}`,
+          name: city || "Detected Region",
+        };
+      }
     }
   } catch (err) {
-    console.warn("Nominatim reverse geocode fallback:", err);
+    console.warn("IP location fallback failed:", err);
   }
-
-  return {
-    address: `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
-    name: "Detected Location",
-  };
+  return null;
 };
 
 /**
@@ -189,44 +299,65 @@ export const reverseGeocode = async (
  */
 export const getCurrentBrowserLocation = (): Promise<GeolocationResult> => {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Geolocation is not supported by your browser."));
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      getIpLocationFallback().then((ipLoc) => {
+        if (ipLoc) resolve(ipLoc);
+        else reject(new Error("Geolocation is not supported by your browser."));
+      });
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        try {
-          const { address, name } = await reverseGeocode(lat, lon);
-          resolve({
-            latitude: lat,
-            longitude: lon,
-            address,
-            name,
-          });
-        } catch (e) {
-          resolve({
-            latitude: lat,
-            longitude: lon,
-            address: `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`,
-            name: "Current Location",
-          });
+    const tryGetPosition = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          try {
+            const { address, name } = await reverseGeocode(lat, lon);
+            resolve({
+              latitude: lat,
+              longitude: lon,
+              address,
+              name,
+            });
+          } catch (e) {
+            resolve({
+              latitude: lat,
+              longitude: lon,
+              address: `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`,
+              name: "Current Location",
+            });
+          }
+        },
+        async (err) => {
+          if (highAccuracy && (err.code === 3 || err.code === 2)) {
+            // Retry with low accuracy (WiFi/Cell positioning is often much faster and more reliable on desktop)
+            tryGetPosition(false);
+            return;
+          }
+
+          // If browser geolocation fails or is denied, attempt IP fallback
+          const ipLoc = await getIpLocationFallback();
+          if (ipLoc) {
+            resolve(ipLoc);
+            return;
+          }
+
+          let msg = "Unable to retrieve your location.";
+          if (err.code === 1) msg = "Location permission was denied. Please allow location access in your browser settings or search manually.";
+          else if (err.code === 2) msg = "Position unavailable. Please search your postcode or address manually.";
+          else if (err.code === 3) msg = "Location request timed out. Please try again or search manually.";
+          reject(new Error(msg));
+        },
+        {
+          enableHighAccuracy: highAccuracy,
+          timeout: highAccuracy ? 8000 : 12000,
+          maximumAge: 60000,
         }
-      },
-      (err) => {
-        let msg = "Unable to retrieve your location.";
-        if (err.code === 1) msg = "Location permission was denied.";
-        else if (err.code === 2) msg = "Position unavailable. Please search manually.";
-        else if (err.code === 3) msg = "Location request timed out.";
-        reject(new Error(msg));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      }
-    );
+      );
+    };
+
+    tryGetPosition(true);
   });
 };
+

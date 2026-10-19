@@ -21,6 +21,7 @@ import {
     DollarSign,
 } from "lucide-react";
 import type { CustomerQuotationPostItem, PostBidItem } from "@/lib/service/alloy.api";
+import { extractReadableAddress } from "@/lib/service/bookings.api";
 
 interface QuotesPageViewProps {
     quotationRequests: CustomerQuotationPostItem[];
@@ -166,6 +167,16 @@ export default function QuotesPageView({
                             <div className="text-xs text-zinc-300">
                                 Schedule: <strong className="text-white">{selectedPostForBids.booking_schedule || "Flexible"}</strong>
                             </div>
+                            {Boolean(selectedPostForBids.service_address || (selectedPostForBids as any).location_address || (selectedPostForBids as any).postcode) && (
+                                <div className="text-xs text-zinc-300 flex items-center gap-1.5 pt-0.5">
+                                    <MapPin className="w-3.5 h-3.5 text-[#E8AF66] shrink-0" />
+                                    <span>
+                                        {extractReadableAddress(selectedPostForBids.service_address) ||
+                                            (selectedPostForBids as any).location_address ||
+                                            (selectedPostForBids as any).postcode}
+                                    </span>
+                                </div>
+                            )}
                             {selectedPostForBids.service_description && (
                                 <p className="text-xs text-zinc-400 italic">
                                     &ldquo;{selectedPostForBids.service_description}&rdquo;
@@ -358,7 +369,7 @@ export default function QuotesPageView({
                                     </div>
 
                                     {/* Middle info */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                                         <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800/80 space-y-0.5">
                                             <div className="text-zinc-500 uppercase font-bold text-[10px]">Service Request</div>
                                             <div className="text-zinc-200 font-semibold truncate">
@@ -369,6 +380,15 @@ export default function QuotesPageView({
                                             <div className="text-zinc-500 uppercase font-bold text-[10px]">Preferred Date</div>
                                             <div className="text-zinc-200 font-semibold">
                                                 {item.booking_schedule || "Flexible"}
+                                            </div>
+                                        </div>
+                                        <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800/80 space-y-0.5">
+                                            <div className="text-zinc-500 uppercase font-bold text-[10px]">Service Location</div>
+                                            <div className="text-zinc-200 font-semibold truncate">
+                                                {extractReadableAddress(item.service_address) ||
+                                                    (item as any).location_address ||
+                                                    (item as any).postcode ||
+                                                    "Indore, 452001, India"}
                                             </div>
                                         </div>
                                         <div className="bg-[#191A1E] rounded-2xl p-3 border border-zinc-800/80 space-y-0.5">

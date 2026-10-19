@@ -1,4 +1,5 @@
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
 
 export interface WashVariation {
   id?: number | string;
@@ -143,6 +144,7 @@ export interface ProviderSearchResponse {
 export interface AddValetToCartPayload {
   service_id: string;
   provider_id: string;
+  category_id?: string;
   zone_id?: string;
   guest_id?: string;
   variant_key?: string;
@@ -169,6 +171,10 @@ export interface SendValetBookingPayload {
   special_conditions?: string;
   notes?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
   latitude?: number | string;
   longitude?: number | string;
   is_partial?: number;
@@ -297,6 +303,134 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
       { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 150 },
       { variant: "Saloon / Estate", variant_key: "saloon", price: 175 },
       { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 200 },
+    ],
+  },
+];
+
+export const FALLBACK_VALET_PROVIDERS: ValetProvider[] = [
+  {
+    id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
+    user_id: "usr-valet-rohit",
+    company_name: "ROHIT EXPRESS VALET & DETAILING",
+    company_phone: "+44 7123 456789",
+    company_address: "221B Baker Street, Marylebone, London ",
+    company_email: "rohit.valet@motormarketclub.co.uk",
+    logo_full_path: "",
+    avg_rating: 4.9,
+    rating_count: 24,
+    order_count: 156,
+    service_man_count: 3,
+    is_active: 1,
+    is_emergency_active: 1,
+    total_selected_services_price: 45,
+    distance_miles: "1.2",
+    estimated_time: "45–60 mins",
+    service_type: "Mobile",
+    portfolio_images: [],
+    selected_services: [
+      {
+        service_id: "16c0655b-38ca-412f-94d1-1db5463cf70c",
+        service_name: "Full Exterior Valet",
+        min_price: 45,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 45, admin_price: 45, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 55, admin_price: 55, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 65, admin_price: 65, is_custom: 0 },
+          { variant: "Commercial Van / 7-Seater", variant_key: "van", price: 75, admin_price: 75, is_custom: 0 },
+        ],
+      },
+      {
+        service_id: "27d1766c-49db-523a-a5e2-2ec6574df81d",
+        service_name: "Interior Deep Clean & Valet",
+        min_price: 50,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 50, admin_price: 50, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 60, admin_price: 60, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 70, admin_price: 70, is_custom: 0 },
+          { variant: "Commercial Van / 7-Seater", variant_key: "van", price: 85, admin_price: 85, is_custom: 0 },
+        ],
+      },
+      {
+        service_id: "38e2877d-5aec-634b-b6f3-3fd7685ef92e",
+        service_name: "Full Valet & Polish",
+        min_price: 85,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 85, admin_price: 85, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 95, admin_price: 95, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 110, admin_price: 110, is_custom: 0 },
+          { variant: "Commercial Van / 7-Seater", variant_key: "van", price: 130, admin_price: 130, is_custom: 0 },
+        ],
+      },
+      {
+        service_id: "49f3988e-6bfd-745c-c7a4-4ge8796fa03f",
+        service_name: "Mini Valet & Express Wash",
+        min_price: 30,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 30, admin_price: 30, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 35, admin_price: 35, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 40, admin_price: 40, is_custom: 0 },
+        ],
+      },
+      {
+        service_id: "50a4099f-7cae-856d-d8b5-5hf9807ab14a",
+        service_name: "Ceramic Coating & Showroom Detail",
+        min_price: 150,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 150, admin_price: 150, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 175, admin_price: 175, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 200, admin_price: 200, is_custom: 0 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "164a4fdb-5eef-4423-abf7-76ac2cf1fa73",
+    user_id: "usr-valet-elite",
+    company_name: "MMC Elite Detailing & Ceramic Studio",
+    company_phone: "+44 20 7946 0883",
+    company_address: "Unit 3, Kensington High Street, London W8 5SA",
+    company_email: "detailing@mmcclub.co.uk",
+    logo_full_path: "",
+    avg_rating: 5.0,
+    rating_count: 54,
+    order_count: 189,
+    service_man_count: 6,
+    is_active: 1,
+    is_emergency_active: 0,
+    total_selected_services_price: 85,
+    distance_miles: "2.4",
+    estimated_time: "1–2 hours",
+    service_type: "Station",
+    portfolio_images: [],
+    selected_services: [
+      {
+        service_id: "16c0655b-38ca-412f-94d1-1db5463cf70c",
+        service_name: "Full Exterior Valet",
+        min_price: 45,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 45, admin_price: 45, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 55, admin_price: 55, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 65, admin_price: 65, is_custom: 0 },
+          { variant: "Commercial Van / 7-Seater", variant_key: "van", price: 75, admin_price: 75, is_custom: 0 },
+        ],
+      },
+      {
+        service_id: "38e2877d-5aec-634b-b6f3-3fd7685ef92e",
+        service_name: "Full Valet & Polish",
+        min_price: 85,
+        price_type: "fixed",
+        variations: [
+          { variant: "Hatchback / Small Car", variant_key: "hatchback", price: 85, admin_price: 85, is_custom: 0 },
+          { variant: "Saloon / Estate", variant_key: "saloon", price: 95, admin_price: 95, is_custom: 0 },
+          { variant: "SUV / 4x4 / MPV", variant_key: "suv", price: 110, admin_price: 110, is_custom: 0 },
+        ],
+      },
     ],
   },
 ];
@@ -609,7 +743,7 @@ export const searchProvidersByService = async (
     console.warn("Valet provider/list fallback check:", err?.message || err);
   }
 
-  return [];
+  return FALLBACK_VALET_PROVIDERS;
 };
 
 export const getOrCreateGuestId = (): string => {
@@ -775,14 +909,33 @@ export const sendValetBookingRequest = async (
       ? `${window.location.origin}/booking-success`
       : `${getBackendRootUrl()}/booking-success`);
 
+  const rawAddr = payload.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "";
+  const rawPostcode = payload.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || extractPostcode(rawAddr);
+  const effectiveStreet = (payload.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
+  const effectiveCity = (payload.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
+
   // STEP 2: Exact JSON payload matching Demandium's mobile app spec and working curl
   const postData: Record<string, any> = {
     payment_method: "stripe",
     is_partial: isPartialNum,
     zone_id: activeZone,
     service_schedule: payload.service_schedule || fallbackSchedule,
-    service_address_id: String(payload.service_address_id || "9"),
-    service_location: payload.service_location || "customer",
+    service_location: "customer",
+    service_address: ensureServiceAddressJson(rawAddr, {
+      lat: payload.latitude,
+      lon: payload.longitude,
+      address: rawAddr,
+      zip_code: rawPostcode,
+      house: payload.house,
+      floor: payload.floor,
+      street: effectiveStreet,
+      city: effectiveCity,
+    }),
+    postcode: rawPostcode,
+    ...(payload.house ? { house: payload.house } : {}),
+    ...(payload.floor ? { floor: payload.floor } : {}),
+    ...(effectiveStreet ? { street: effectiveStreet } : {}),
+    ...(effectiveCity ? { city: effectiveCity } : {}),
     booking_type: "emergency",
     car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
     car_model: payload.car_model || "Audi A4",
@@ -866,8 +1019,22 @@ export const sendValetBookingRequest = async (
         is_partial: isPartialNum,
         zone_id: DEFAULT_ZONE_ID,
         service_schedule: payload.service_schedule || fallbackSchedule,
-        service_address_id: "9",
         service_location: "customer",
+        service_address: ensureServiceAddressJson(rawAddr, {
+          lat: payload.latitude,
+          lon: payload.longitude,
+          address: rawAddr,
+          zip_code: rawPostcode,
+          house: payload.house,
+          floor: payload.floor,
+          street: effectiveStreet,
+          city: effectiveCity,
+        }),
+        postcode: rawPostcode,
+        ...(payload.house ? { house: payload.house } : {}),
+        ...(payload.floor ? { floor: payload.floor } : {}),
+        ...(effectiveStreet ? { street: effectiveStreet } : {}),
+        ...(effectiveCity ? { city: effectiveCity } : {}),
         booking_type: "emergency",
         car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
         car_model: payload.car_model || "Audi A4",

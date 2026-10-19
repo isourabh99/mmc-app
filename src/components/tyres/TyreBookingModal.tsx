@@ -66,27 +66,27 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
   // Vehicle Details
   const [regNumber, setRegNumber] = useState(initialVehicle?.registration || "UK22 ABC");
   const [carModel, setCarModel] = useState(
-    initialVehicle ? `${initialVehicle.make} ${initialVehicle.model}` : "Toyota Corolla"
+    initialVehicle ? `${initialVehicle.make} ${initialVehicle.model}` 
   );
-  const [carYear, setCarYear] = useState(initialVehicle?.year || "2022");
-  const [carColor, setCarColor] = useState(initialVehicle?.color || "White");
+  const [carYear, setCarYear] = useState(initialVehicle?.year );
+  const [carColor, setCarColor] = useState(initialVehicle?.color);
 
   // Schedule
   const [scheduleDate, setScheduleDate] = useState(todayStr);
   const [scheduleTimeSlot, setScheduleTimeSlot] = useState("10:00 - 12:00");
 
   // Address & Contacts
-  const [address, setAddress] = useState("Flat 4B, Baker Street, London");
+  const [address, setAddress] = useState("");
   const [coords, setCoords] = useState<{ latitude: number; longitude: number }>({
     latitude: 51.5074,
     longitude: -0.1278,
   });
-  const [contactName, setContactName] = useState("John Doe");
-  const [contactPhone, setContactPhone] = useState("+44 7123 456789");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   // Payment & Notes
-  const [paymentMethod, setPaymentMethod] = useState<"cash_after_service" | "stripe" | "offline">(
-    "cash_after_service"
+  const [paymentMethod, setPaymentMethod] = useState<"" | "stripe" | "offline">(
+    ""
   );
   const [notes, setNotes] = useState("Please bring both tyres for rear axle mobile fitting.");
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -180,18 +180,18 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
         serviceTitle: "Mobile Tyre Fitting",
         serviceCategoryName: "Tyre Fitting & Repair",
         serviceType: "tyre",
-        vehicleModel: vehicleLookup?.make ? `${vehicleLookup.make} ${vehicleLookup.model || ""}`.trim() : "Vehicle",
-        vehicleReg: vehicleLookup?.registration || undefined,
-        price: totalPrice,
+        vehicleModel: carModel || "Vehicle",
+        vehicleReg: regNumber || undefined,
+        price: totalAmount,
         isPaid: false,
         paymentStatus: "Pay later",
-        scheduleDate: fittingDate,
-        scheduleTime: fittingTime,
+        scheduleDate: scheduleDate,
+        scheduleTime: scheduleTimeSlot,
       });
 
       triggerDevicePushNotification(
         `Mobile Tyre Fitting Confirmed! 🛞`,
-        `Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}. Schedule: ${fittingDate} ${fittingTime}.`,
+        `Ref #${generatedRef} confirmed for ${quantity}x ${tyre.brand} ${tyre.model}. Schedule: ${scheduleDate} ${scheduleTimeSlot}.`,
         `/account?tab=bookings&bookingId=${generatedRef}`,
         `booking_push_${generatedRef.toLowerCase().trim()}`
       );

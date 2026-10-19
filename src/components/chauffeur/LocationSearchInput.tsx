@@ -3,18 +3,33 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   MapPin,
-  Navigation,
   Loader2,
   Search,
   X,
   Check,
-  Compass,
 } from "lucide-react";
 import {
   searchPlaces,
-  getCurrentBrowserLocation,
   type LocationSuggestion,
 } from "@/lib/service/location.service";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import type { SelectedLocationData } from "@/lib/service/address.helper";
+
+const NavigationIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <polygon points="3 11 22 2 13 21 11 13 3 11" />
+  </svg>
+);
 
 interface LocationCoordinates {
   latitude: number;
@@ -26,7 +41,9 @@ interface LocationSearchInputProps {
   placeholder?: string;
   value: string;
   coordinates?: LocationCoordinates;
-  onChange: (address: string, coords?: LocationCoordinates) => void;
+  initialStreet?: string;
+  initialCity?: string;
+  onChange: (address: string, coords?: LocationCoordinates, details?: { street?: string; city?: string }) => void;
   required?: boolean;
   type?: "pickup" | "drop";
 }
@@ -36,15 +53,17 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   placeholder = "Search location or address...",
   value,
   coordinates,
+  initialStreet,
+  initialCity,
   onChange,
   required = false,
   type = "pickup",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,6 +78,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   // Click outside listener to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (isMapModalOpen) return;
       if (
         containerRef.current &&
         !containerRef.current.contains(event.target as Node)
@@ -110,34 +130,34 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
       ? `${item.name}, ${item.address}`
       : item.name;
     setQuery(fullAddress);
-    onChange(fullAddress, {
-      latitude: item.latitude,
-      longitude: item.longitude,
-    });
+    let extractedStreet = "";
+    let extractedCity = item.city || "";
+    if (item.address) {
+      const isPlusCode = (s: string) => /^[A-Z0-9]{2,8}\+[A-Z0-9]{2,}/i.test(s.trim());
+      const parts = item.address.split(",").map((p) => p.trim()).filter(Boolean);
+      const validPart = parts.find(
+        (p) => !isPlusCode(p) && p.toLowerCase() !== extractedCity.toLowerCase()
+      );
+      extractedStreet = validPart || item.name || parts[0] || "";
+      if (!extractedCity && parts.length >= 2) {
+        extractedCity = parts[parts.length - 2] || parts[1];
+      }
+    } else if (item.name) {
+      extractedStreet = item.name;
+    }
+    onChange(
+      fullAddress,
+      {
+        latitude: item.latitude,
+        longitude: item.longitude,
+      },
+      {
+        street: extractedStreet,
+        city: extractedCity,
+      }
+    );
     setIsOpen(false);
     setSuggestions([]);
-  };
-
-  // Detect current browser location (like Blinkit "Detect my location")
-  const handleDetectLocation = async () => {
-    try {
-      setLocating(true);
-      setLocationError("");
-      const location = await getCurrentBrowserLocation();
-      const detectedText = location.address || location.name;
-      setQuery(detectedText);
-      onChange(detectedText, {
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
-      setIsOpen(false);
-      setSuggestions([]);
-    } catch (err: any) {
-      console.error("Location detection error:", err);
-      setLocationError(err.message || "Failed to detect current location.");
-    } finally {
-      setLocating(false);
-    }
   };
 
   const handleClear = () => {
@@ -187,7 +207,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
         }`}
       >
         <div className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#221a13] text-[#e7bd78]">
-          {isPickup ? <Navigation size={14} className="text-[#10b981]" /> : <MapPin size={14} className="text-[#ef4444]" />}
+          {isPickup ? <NavigationIcon size={14} className="text-[#10b981]" /> : <MapPin size={14} className="text-[#ef4444]" />}
         </div>
 
         <input
@@ -217,18 +237,14 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              handleDetectLocation();
+              setIsOpen(false);
+              setIsMapModalOpen(true);
             }}
-            disabled={locating}
-            title="Detect Current Location"
-            className="flex items-center gap-1 rounded-lg border border-[#3a2d21] bg-[#221a13] px-2 py-1 text-[10px] font-medium text-[#e7bd78] transition hover:bg-[#2e2319] hover:text-white disabled:opacity-60"
+            title="Pick on Interactive Map"
+            className="flex items-center gap-1 rounded-lg border border-[#e7bd78]/40 bg-[#d09a50]/20 px-2.5 py-1 text-[11px] font-bold text-[#FAD293] transition hover:bg-[#d09a50]/30 hover:text-white cursor-pointer"
           >
-            {locating ? (
-              <Loader2 size={12} className="animate-spin text-[#10b981]" />
-            ) : (
-              <Compass size={12} className="text-[#10b981]" />
-            )}
-            <span className="hidden sm:inline">GPS</span>
+            <MapPin size={13} className="text-[#FAD293]" />
+            <span>Map</span>
           </button>
         </div>
       </div>
@@ -252,27 +268,19 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
               </button>
             </div>
 
-            {/* Quick Detect Button + OR + Search Box */}
+            {/* Map Button + Search Box */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 type="button"
-                onClick={handleDetectLocation}
-                disabled={locating}
-                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#059669] to-[#10b981] px-3.5 py-2 text-xs font-semibold text-white shadow-md transition hover:brightness-110 disabled:opacity-60 shrink-0 active:scale-[0.98]"
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsMapModalOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] px-3.5 py-2 text-xs font-bold text-black shadow-md transition hover:brightness-110 shrink-0 active:scale-[0.98] cursor-pointer"
               >
-                {locating ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Navigation size={14} className="fill-white" />
-                )}
-                <span>Detect my location</span>
+                <MapPin size={14} className="text-black" />
+                <span>Pick on Map</span>
               </button>
-
-              <div className="hidden sm:flex items-center justify-center">
-                <span className="h-6 w-6 rounded-full border border-white/10 bg-[#100d0a] text-[9px] font-bold uppercase text-white/40 flex items-center justify-center">
-                  OR
-                </span>
-              </div>
 
               {/* Search input inside modal */}
               <div className="relative flex-1">
@@ -353,6 +361,33 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
           </div>
         </div>
       )}
+
+      {/* Interactive Location Map Picker Modal */}
+      <LocationPickerModal
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        initialAddress={query}
+        initialLat={coordinates?.latitude}
+        initialLon={coordinates?.longitude}
+        initialStreet={initialStreet || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : "")}
+        initialCity={initialCity || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : "")}
+        onSelectLocation={(data: SelectedLocationData) => {
+          setQuery(data.formattedAddress);
+          onChange(
+            data.formattedAddress,
+            {
+              latitude: Number(data.lat),
+              longitude: Number(data.lon),
+            },
+            {
+              street: data.street,
+              city: data.city,
+            }
+          );
+          setIsMapModalOpen(false);
+          setIsOpen(false);
+        }}
+      />
     </div>
   );
 };

@@ -599,7 +599,7 @@ function ProvidersContent() {
 
       triggerDevicePushNotification(
         `${currentServiceName || "Valet Wash"} Confirmed! 🧼`,
-        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${effectiveSchedule}.`,
+        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${formattedSchedule}.`,
         `/account?tab=bookings&bookingId=${confirmedId}`,
         `booking_push_${String(confirmedId).toLowerCase().trim()}`
       );

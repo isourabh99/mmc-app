@@ -95,6 +95,8 @@ import {
     getServiceFormDraft,
     clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
 
 export default function ModificationPage() {
     const router = useRouter();
@@ -140,6 +142,25 @@ export default function ModificationPage() {
     // Form & Location State
     // ---------------------------------------------------------------------------
     const [postcode, setPostcode] = useState("");
+    const [locationAddress, setLocationAddress] = useState("");
+    const [street, setStreet] = useState(() => {
+        if (typeof window !== "undefined") {
+            const s = localStorage.getItem("user_street") || localStorage.getItem("street");
+            return s && s !== "Baker St" && s !== "Baker Street" ? s : "";
+        }
+        return "";
+    });
+    const [city, setCity] = useState(() => {
+        if (typeof window !== "undefined") {
+            const c = localStorage.getItem("user_city") || localStorage.getItem("city");
+            return c && c !== "Indore" ? c : "";
+        }
+        return "";
+    });
+    const [house, setHouse] = useState("");
+    const [floor, setFloor] = useState("");
+    const [serviceAddressJson, setServiceAddressJson] = useState("");
+    const [showLocationModal, setShowLocationModal] = useState(false);
     const [regNo, setRegNo] = useState("");
     const [carYear, setCarYear] = useState("");
     const [carModel, setCarModel] = useState("Custom Vehicle");
@@ -177,6 +198,53 @@ export default function ModificationPage() {
         const storedLon = localStorage.getItem("user_lon");
         if (storedLat) setUserLat(storedLat);
         if (storedLon) setUserLon(storedLon);
+        const storedAddress = localStorage.getItem("user_address");
+        const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+        const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+        const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+        const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+        const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+        const storedJson = localStorage.getItem("service_address_json");
+        if (storedAddress) setLocationAddress(storedAddress);
+        if (storedPostcode) setPostcode(storedPostcode);
+        if (storedStreet && storedStreet !== "Baker St" && storedStreet !== "Baker Street") setStreet(storedStreet);
+        if (storedCity && storedCity !== "Indore") setCity(storedCity);
+        if (storedHouse) setHouse(storedHouse);
+        if (storedFloor) setFloor(storedFloor);
+        if (storedJson) setServiceAddressJson(storedJson);
+
+        const draft = getServiceFormDraft<{
+            postcode?: string;
+            locationAddress?: string;
+            street?: string;
+            city?: string;
+            house?: string;
+            floor?: string;
+            serviceAddressJson?: string;
+            regNo?: string;
+            carModel?: string;
+            selectedServices?: string[];
+            userLat?: string;
+            userLon?: string;
+            targetView?: ActiveView;
+        }>("modification");
+
+        if (draft) {
+            if (draft.postcode) setPostcode(draft.postcode);
+            if (draft.locationAddress) setLocationAddress(draft.locationAddress);
+            if (draft.street) setStreet(draft.street);
+            if (draft.city) setCity(draft.city);
+            if (draft.house) setHouse(draft.house);
+            if (draft.floor) setFloor(draft.floor);
+            if (draft.serviceAddressJson) setServiceAddressJson(draft.serviceAddressJson);
+            if (draft.regNo) setRegNo(draft.regNo);
+            if (draft.carModel) setCarModel(draft.carModel);
+            if (draft.selectedServices) setSelectedServices(draft.selectedServices);
+            if (draft.userLat) setUserLat(draft.userLat);
+            if (draft.userLon) setUserLon(draft.userLon);
+            if (draft.targetView) navigateToView(draft.targetView);
+            clearServiceFormDraft("modification");
+        }
 
         const initAutocomplete = () => {
             if (!postcodeRef.current || !(window as any).google?.maps?.places) return;
@@ -195,12 +263,43 @@ export default function ModificationPage() {
                         const lat = String(place.geometry.location.lat());
                         const lon = String(place.geometry.location.lng());
                         const addressText = place.formatted_address || place.name || "";
-                        setPostcode(addressText);
+                        setLocationAddress(addressText);
+                        const extractedPc = extractPostcode(addressText);
+                        if (extractedPc) setPostcode(extractedPc);
                         setUserLat(lat);
                         setUserLon(lon);
                         localStorage.setItem("user_lat", lat);
                         localStorage.setItem("user_lon", lon);
                         localStorage.setItem("user_address", addressText);
+                        if (extractedPc) {
+                            localStorage.setItem("user_postcode", extractedPc);
+                            localStorage.setItem("postcode", extractedPc);
+                        }
+
+                        // Extract street & city from address components if available
+                        let compStreet = "";
+                        let compCity = "";
+                        if (Array.isArray(place.address_components)) {
+                            for (const comp of place.address_components) {
+                                const types = comp.types || [];
+                                if (types.includes("route")) {
+                                    compStreet = comp.long_name || comp.short_name;
+                                }
+                                if (types.includes("postal_town") || types.includes("locality")) {
+                                    compCity = comp.long_name || comp.short_name;
+                                }
+                            }
+                        }
+                        if (compStreet) {
+                            setStreet(compStreet);
+                            localStorage.setItem("user_street", compStreet);
+                            localStorage.setItem("street", compStreet);
+                        }
+                        if (compCity) {
+                            setCity(compCity);
+                            localStorage.setItem("user_city", compCity);
+                            localStorage.setItem("city", compCity);
+                        }
                     }
                 });
             } catch (err) {
@@ -347,11 +446,20 @@ export default function ModificationPage() {
         try {
             let effectiveAddressId = "6";
             try {
+                const fullCombinedAddress =
+                    locationAddress ||
+                    postcode ||
+                    (typeof window !== "undefined" ? localStorage.getItem("user_address") || localStorage.getItem("user_postcode") : null) ||
+                    "London, UK";
                 effectiveAddressId =
                     (await getOrCreateCustomerAddressId(
-                        postcode,
+                        fullCombinedAddress,
                         userLat || localStorage.getItem("user_lat") || undefined,
-                        userLon || localStorage.getItem("user_lon") || undefined
+                        userLon || localStorage.getItem("user_lon") || undefined,
+                        house,
+                        floor,
+                        street,
+                        city
                     )) || "6";
             } catch {
                 effectiveAddressId = "6";
@@ -371,6 +479,8 @@ export default function ModificationPage() {
                     "Vehicle modification quotation request",
                 booking_schedule: scheduleStr,
                 service_address_id: effectiveAddressId,
+                street: street.trim() || undefined,
+                city: city.trim() || undefined,
                 car_model: formData.carModel || "Custom Vehicle",
                 car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
                 damage_description: formData.damageDesc || "Vehicle modification specification",
@@ -856,7 +966,39 @@ export default function ModificationPage() {
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
                 selected_slot_id: selectedSlotId,
-                service_address_id: serviceAddressId || "6",
+                service_address_id: serviceAddressId || undefined,
+                service_address:
+                    serviceAddressJson ||
+                    (typeof window !== "undefined"
+                        ? localStorage.getItem("service_address_json") ||
+                        localStorage.getItem("service_address") ||
+                        localStorage.getItem("user_address")
+                        : null) ||
+                    locationAddress ||
+                    postcode ||
+                    "London, UK",
+                postcode:
+                    postcode ||
+                    (typeof window !== "undefined"
+                        ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode")
+                        : null) ||
+                    "",
+                street: street || undefined,
+                city: city || undefined,
+                house:
+                    house ||
+                    (typeof window !== "undefined"
+                        ? localStorage.getItem("user_house") || localStorage.getItem("house")
+                        : null) ||
+                    undefined,
+                floor:
+                    floor ||
+                    (typeof window !== "undefined"
+                        ? localStorage.getItem("user_floor") || localStorage.getItem("floor")
+                        : null) ||
+                    undefined,
+                latitude: userLat || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) || "51.5074",
+                longitude: userLon || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) || "-0.1278",
                 notes: combinedNotes,
                 car_image: bookingCarImage,
                 amount: totalBookingPrice || depositAmount,
@@ -896,8 +1038,35 @@ export default function ModificationPage() {
                 }
             }
 
-            if (confirmedRefId && bookingPaymentMethod !== "stripe") {
-                const resolvedAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+            if (confirmedRefId) {
+                const resolvedAddr =
+                    locationAddress ||
+                    (house && postcode ? `${house}, ${postcode}` : postcode) ||
+                    serviceAddressJson ||
+                    (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+
+                saveBookingMeta(confirmedRefId, {
+                    price: totalBookingPrice || depositAmount,
+                    serviceTitle: "Vehicle Modification & Performance",
+                    serviceCategoryName: "Vehicle Modification & Tuning",
+                    serviceType: "modification",
+                    providerName: bookingProviderModal?.company_name || "Specialist Garage",
+                    vehicleReg: "Vehicle",
+                    vehicleModel: "Vehicle",
+                    isPaid: false,
+                    paymentStatus: isPartialPayment ? "Partially Paid" : "Pending Payment",
+                    scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                    scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
+                    postcode: postcode || "",
+                    street: street || "",
+                    city: city || "",
+                    house: house || "",
+                    floor: floor || "",
+                });
+
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
                     rawId: confirmedRefId,
@@ -906,15 +1075,20 @@ export default function ModificationPage() {
                     serviceTitle: "Vehicle Modification & Performance",
                     providerName: bookingProviderModal?.company_name || "Specialist Garage",
                     providerPhone: bookingProviderModal?.company_phone,
-                    serviceAddress: resolvedAddr,
-                    pickupLocation: resolvedAddr,
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
                     postcode: postcode || "",
+                    street: street || "",
+                    city: city || "",
+                    house: house || "",
+                    floor: floor || "",
                     vehicleReg: "Vehicle",
                     vehicleModel: "Vehicle",
                     totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
                     isPaid: false,
-                    paymentStatus: "Pending Payment",
-                    paymentMethod: bookingPaymentMethod,
+                    paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
+                    paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : bookingPaymentMethod,
                     status: "accepted",
                     statusDisplay: "Accepted",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1057,6 +1231,10 @@ export default function ModificationPage() {
         if (!isAuthenticated()) {
             saveServiceFormDraft("modification", {
                 postcode,
+                locationAddress,
+                house,
+                floor,
+                serviceAddressJson,
                 regNo,
                 carModel,
                 selectedServices,
@@ -1288,25 +1466,43 @@ export default function ModificationPage() {
                                             <input
                                                 ref={postcodeRef}
                                                 type="text"
-                                                value={postcode}
-                                                onChange={(e) => setPostcode(e.target.value)}
-                                                placeholder="Enter Postcode or City"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-8 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                                                value={locationAddress || postcode}
+                                                onChange={(e) => {
+                                                    setLocationAddress(e.target.value);
+                                                    const extracted = extractPostcode(e.target.value);
+                                                    if (extracted) setPostcode(extracted);
+                                                }}
+                                                placeholder="Enter Full Address, Postcode or City"
+                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-24 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                                             />
-                                            {postcode && (
+                                            <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
+                                                {(locationAddress || postcode) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setLocationAddress("");
+                                                            setPostcode("");
+                                                            setHouse("");
+                                                            setFloor("");
+                                                            setUserLat("");
+                                                            setUserLon("");
+                                                        }}
+                                                        className="p-1 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        setPostcode("");
-                                                        setUserLat("");
-                                                        setUserLon("");
-                                                    }}
-                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                                                    onClick={() => setShowLocationModal(true)}
+                                                    className="px-2.5 py-1 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
                                                 >
-                                                    <X className="w-3.5 h-3.5" />
+                                                    <MapPin size={11} />
+                                                    <span>Map</span>
                                                 </button>
-                                            )}
+                                            </div>
                                         </div>
+
 
                                         {/* Row 2: Car Registration No & Year */}
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1781,6 +1977,57 @@ export default function ModificationPage() {
                     </div>
                 )
             )}
+
+            {/* Interactive Map Location Picker Modal */}
+            <LocationPickerModal
+                isOpen={showLocationModal}
+                onClose={() => setShowLocationModal(false)}
+                initialAddress={locationAddress || postcode}
+                initialPostcode={postcode}
+                initialStreet={street}
+                initialCity={city}
+                initialHouse={house}
+                initialFloor={floor}
+                initialLat={userLat}
+                initialLon={userLon}
+                onSelectLocation={(data: SelectedLocationData) => {
+                    setLocationAddress(data.formattedAddress);
+                    setPostcode(data.postcode);
+                    if (data.street) {
+                        setStreet(data.street);
+                        if (typeof window !== "undefined") {
+                            localStorage.setItem("user_street", data.street);
+                            localStorage.setItem("street", data.street);
+                        }
+                    }
+                    if (data.city) {
+                        setCity(data.city);
+                        if (typeof window !== "undefined") {
+                            localStorage.setItem("user_city", data.city);
+                            localStorage.setItem("city", data.city);
+                        }
+                    }
+                    setHouse(data.house);
+                    setFloor(data.floor);
+                    setServiceAddressJson(data.service_address_json);
+                    setUserLat(data.lat);
+                    setUserLon(data.lon);
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("user_address", data.formattedAddress);
+                        localStorage.setItem("user_postcode", data.postcode);
+                        localStorage.setItem("postcode", data.postcode);
+                        localStorage.setItem("user_house", data.house);
+                        localStorage.setItem("house", data.house);
+                        localStorage.setItem("user_floor", data.floor);
+                        localStorage.setItem("floor", data.floor);
+                        localStorage.setItem("user_lat", data.lat);
+                        localStorage.setItem("user_lon", data.lon);
+                        localStorage.setItem("service_address", data.service_address_json);
+                        localStorage.setItem("service_address_json", data.service_address_json);
+                        localStorage.setItem("service_address_id", data.address_id);
+                    }
+                }}
+            />
         </div>
     );
 }

@@ -65,6 +65,8 @@ export default function VehicleWashValetPage() {
   const [selectedServiceId, setSelectedServiceId] = useState("16c0655b-38ca-412f-94d1-1db5463cf70c");
   const [currentServiceName, setCurrentServiceName] = useState("Full Exterior Valet");
   const [locationAddress, setLocationAddress] = useState("55 Fordington House, London");
+  const [street, setStreet] = useState<string>("");
+  const [city, setCity] = useState<string>("");
   const [registrationNo, setRegistrationNo] = useState("AB24 MMC");
   const [searchRadius, setSearchRadius] = useState<number>(5);
   const [serviceTypeFilter, setServiceTypeFilter] = useState<"all" | "Mobile" | "Station">("all");
@@ -168,6 +170,8 @@ export default function VehicleWashValetPage() {
     if (!isAuthenticated()) {
       saveServiceFormDraft("valet", {
         locationAddress,
+        street,
+        city,
         registrationNo,
         selectedServiceId,
         currentServiceName,
@@ -216,10 +220,23 @@ export default function VehicleWashValetPage() {
       try {
         setLoading(true);
 
+        if (typeof window !== "undefined") {
+          const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street") || "";
+          const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city") || "";
+          if (storedStreet && !storedStreet.toLowerCase().includes("baker")) setStreet(storedStreet);
+          if (storedCity) setCity(storedCity);
+          const storedAddr = localStorage.getItem("user_location_address") || localStorage.getItem("customer_address");
+          if (storedAddr && (!locationAddress || locationAddress === "55 Fordington House, London")) {
+            setLocationAddress(storedAddr);
+          }
+        }
+
         // Check if user just logged in and has a saved draft
         const draft = isAuthenticated() ? getServiceFormDraft("valet") : null;
         if (draft) {
           if (draft.locationAddress) setLocationAddress(draft.locationAddress);
+          if (draft.street) setStreet(draft.street);
+          if (draft.city) setCity(draft.city);
           if (draft.registrationNo) setRegistrationNo(draft.registrationNo);
           if (draft.searchRadius) setSearchRadius(draft.searchRadius);
           if (draft.serviceTypeFilter) setServiceTypeFilter(draft.serviceTypeFilter);
@@ -455,9 +472,10 @@ export default function VehicleWashValetPage() {
         is_partial: isPartialPayment ? 1 : 0,
         callback: callbackUrl,
         service_schedule: formattedSchedule,
-        service_address_id: "9",
         service_location: bookingLocationType,
         service_address: locationAddress,
+        street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || undefined : undefined),
+        city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || undefined : undefined),
         selected_slot_id: "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
         car_registration_number: registrationNo || "AB24 MMC",
         car_model: bookingVehicleModel.trim() || "Audi A4",
@@ -522,6 +540,8 @@ export default function VehicleWashValetPage() {
         vehicleReg: registrationNo || "AB24 MMC",
         providerName: selectedProviderForBooking.company_name,
         price: numericPrice,
+        street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+        city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
       });
 
       saveConfirmedBooking({
@@ -545,6 +565,9 @@ export default function VehicleWashValetPage() {
         vehicleModel: bookingVehicleModel.trim() || "Audi A4",
         vehicleReg: registrationNo || "AB24 MMC",
         createdAt: new Date().toISOString(),
+        service_address: locationAddress,
+        street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+        city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
       });
 
       // ALWAYS redirect directly to Stripe URL for payment
@@ -565,7 +588,7 @@ export default function VehicleWashValetPage() {
 
       triggerDevicePushNotification(
         `${currentServiceName || "Valet Wash"} Confirmed! 🧼`,
-        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${effectiveSchedule}.`,
+        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${formattedSchedule}.`,
         `/account?tab=bookings&bookingId=${confirmedId}`,
         `booking_push_${String(confirmedId).toLowerCase().trim()}`
       );
@@ -731,9 +754,28 @@ export default function VehicleWashValetPage() {
                     label="Service Location"
                     placeholder="Enter city, postcode or address..."
                     value={locationAddress}
-                    onChange={(addr) => setLocationAddress(addr)}
+                    initialStreet={street}
+                    initialCity={city}
+                    onChange={(addr, coords, details) => {
+                      setLocationAddress(addr);
+                      if (details?.street) {
+                        setStreet(details.street);
+                        try {
+                          localStorage.setItem("user_street", details.street);
+                          localStorage.setItem("street", details.street);
+                        } catch {}
+                      }
+                      if (details?.city) {
+                        setCity(details.city);
+                        try {
+                          localStorage.setItem("user_city", details.city);
+                          localStorage.setItem("city", details.city);
+                        } catch {}
+                      }
+                    }}
                   />
                 </div>
+
 
                 {/* 2. Car Registration */}
                 <div className="space-y-1.5">
@@ -1483,6 +1525,22 @@ export default function VehicleWashValetPage() {
                       {locationAddress}
                     </span>
                   </div>
+                  {street && (
+                    <div className="flex justify-between">
+                      <span className="text-white/50">Street:</span>
+                      <span className="text-[#FAD293] font-medium truncate max-w-[200px]">
+                        {street}
+                      </span>
+                    </div>
+                  )}
+                  {city && (
+                    <div className="flex justify-between">
+                      <span className="text-white/50">City:</span>
+                      <span className="text-[#FAD293] font-medium truncate max-w-[200px]">
+                        {city}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-white/50">Car Reg:</span>
                     <span className="text-white font-mono font-bold">{registrationNo}</span>

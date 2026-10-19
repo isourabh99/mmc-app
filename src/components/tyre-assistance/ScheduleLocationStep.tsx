@@ -36,6 +36,8 @@ import {
   TYRE_EMERGENCY_SERVICE_ID,
   getZoneIdFromCoordinates,
 } from "@/lib/service/tyre-assistance.api";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import type { SelectedLocationData } from "@/lib/service/address.helper";
 
 export type ServiceLocationType = "mobile_repair" | "workshop";
 
@@ -56,6 +58,11 @@ interface ScheduleLocationStepProps {
     selectedSlotId?: string;
     locationAddress: string;
     locationPostcode: string;
+    house?: string;
+    floor?: string;
+    street?: string;
+    city?: string;
+    serviceAddress?: string;
     latitude: number;
     longitude: number;
     vehicleMakeModel: string;
@@ -90,9 +97,35 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
   const [selectedSlotId, setSelectedSlotId] = useState<string | undefined>("slot-0327");
   const [locationAddress, setLocationAddress] = useState<string>("London, United Kingdom");
   const [locationPostcode, setLocationPostcode] = useState<string>("SW1A 1AA");
+  const [house, setHouse] = useState<string>("");
+  const [floor, setFloor] = useState<string>("");
+  const [street, setStreet] = useState<string>("");
+  const [city, setCity] = useState<string>("");
+  const [serviceAddressJson, setServiceAddressJson] = useState<string>("");
   const [latitude, setLatitude] = useState<number>(51.5074);
   const [longitude, setLongitude] = useState<number>(-0.1278);
   const [isDetectingGps, setIsDetectingGps] = useState<boolean>(false);
+  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedAddr = localStorage.getItem("user_address");
+      if (storedAddr && !storedAddr.startsWith("{")) setLocationAddress(storedAddr);
+      const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+      if (storedPostcode) setLocationPostcode(storedPostcode);
+      const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+      if (storedHouse) setHouse(storedHouse);
+      const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+      if (storedFloor) setFloor(storedFloor);
+      const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+      if (storedStreet && !storedStreet.toLowerCase().includes("")) setStreet(storedStreet);
+      const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+      if (storedCity) setCity(storedCity);
+      const storedJson = localStorage.getItem("service_address_json");
+      if (storedJson) setServiceAddressJson(storedJson);
+    } catch {}
+  }, []);
 
   const [vehicleMakeModel, setVehicleMakeModel] = useState<string>("Honda Civic");
   const [vehicleRegistration, setVehicleRegistration] = useState<string>("UK22-XYZ-9999");
@@ -318,6 +351,11 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
         selectedSlotId: selectedSlotId || (slots.length > 0 ? slots[0].id : undefined),
         locationAddress: locationAddress || "London, UK",
         locationPostcode: locationPostcode || "SW1A 1AA",
+        house,
+        floor,
+        street,
+        city,
+        serviceAddress: serviceAddressJson || locationAddress,
         latitude,
         longitude,
         vehicleMakeModel: vehicleMakeModel || (chosenTyre ? `${chosenTyre.brand} ${chosenTyre.model}` : "Honda Civic"),
@@ -573,16 +611,37 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
               {/* Address & Postcode Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2">
                 <div className="sm:col-span-8 space-y-1.5">
-                  <label className="text-xs text-white/60 font-medium block">
-                    {serviceLocationType === "mobile_repair" ? "Fitting Address / Landmark" : "Workshop Center"}
-                  </label>
-                  <input
-                    type="text"
-                    value={locationAddress}
-                    onChange={(e) => setLocationAddress(e.target.value)}
-                    placeholder="e.g. 10 Downing Street, Westminster, London"
-                    className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none transition"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/60 font-medium block">
+                      {serviceLocationType === "mobile_repair" ? "Fitting Address / Landmark" : "Workshop Center"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationModal(true)}
+                      className="px-2.5 py-0.5 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <MapPin size={11} />
+                      <span>Pick on Map</span>
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={locationAddress}
+                      onClick={() => setShowLocationModal(true)}
+                      onChange={(e) => setLocationAddress(e.target.value)}
+                      placeholder="e.g. 10 Downing Street, Westminster, London"
+                      className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl pl-4 pr-16 py-3 text-xs sm:text-sm text-white focus:outline-none transition cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationModal(true)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-xl bg-[#d09a50]/15 hover:bg-[#d09a50]/30 text-[#f2cb87] text-[11px] font-bold flex items-center gap-1"
+                    >
+                      <MapPin size={12} />
+                      <span>Map</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="sm:col-span-4 space-y-1.5">
@@ -596,6 +655,44 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Optional House/Flat & Floor Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-white/60 font-medium block">Flat / House / Unit Number (Optional)</label>
+                  <input
+                    type="text"
+                    value={house}
+                    onChange={(e) => {
+                      setHouse(e.target.value);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("user_house", e.target.value);
+                        localStorage.setItem("house", e.target.value);
+                      }
+                    }}
+                    placeholder="e.g. Flat 5B or House 42"
+                    className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none transition"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-white/60 font-medium block">Floor (Optional)</label>
+                  <input
+                    type="text"
+                    value={floor}
+                    onChange={(e) => {
+                      setFloor(e.target.value);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("user_floor", e.target.value);
+                        localStorage.setItem("floor", e.target.value);
+                      }
+                    }}
+                    placeholder="e.g. 2nd Floor or Ground Floor"
+                    className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
             </div>
 
             {/* Step 3: Vehicle Information & Notes */}
@@ -919,6 +1016,52 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
           </div>
         </div>
       )}
+
+      {/* Interactive Map Location Picker Modal */}
+      <LocationPickerModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        initialAddress={locationAddress}
+        initialPostcode={locationPostcode}
+        initialHouse={house}
+        initialFloor={floor}
+        initialStreet={street}
+        initialCity={city}
+        initialLat={latitude}
+        initialLon={longitude}
+        onSelectLocation={(data: SelectedLocationData) => {
+          setLocationAddress(data.formattedAddress);
+          setLocationPostcode(data.postcode);
+          setLatitude(Number(data.lat));
+          setLongitude(Number(data.lon));
+          setHouse(data.house);
+          setFloor(data.floor);
+          if (data.street) setStreet(data.street);
+          if (data.city) setCity(data.city);
+          setServiceAddressJson(data.service_address_json);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("user_address", data.formattedAddress);
+            localStorage.setItem("user_postcode", data.postcode);
+            localStorage.setItem("user_lat", data.lat);
+            localStorage.setItem("user_lon", data.lon);
+            localStorage.setItem("user_house", data.house);
+            localStorage.setItem("house", data.house);
+            localStorage.setItem("user_floor", data.floor);
+            localStorage.setItem("floor", data.floor);
+            if (data.street) {
+              localStorage.setItem("user_street", data.street);
+              localStorage.setItem("street", data.street);
+            }
+            if (data.city) {
+              localStorage.setItem("user_city", data.city);
+              localStorage.setItem("city", data.city);
+            }
+            localStorage.setItem("service_address", data.service_address_json);
+            localStorage.setItem("service_address_json", data.service_address_json);
+            localStorage.setItem("service_address_id", data.address_id);
+          }
+        }}
+      />
     </div>
   );
 };

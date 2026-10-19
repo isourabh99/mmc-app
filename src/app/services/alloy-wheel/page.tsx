@@ -89,6 +89,8 @@ import QuotationFormPageView from "./components/QuotationFormPageView";
 import ProviderProfilePageView from "./components/ProviderProfilePageView";
 import QuotesPageView from "./components/QuotesPageView";
 import BookingPageView from "./components/BookingPageView";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import type { SelectedLocationData } from "@/lib/service/address.helper";
 import {
     saveServiceFormDraft,
     getServiceFormDraft,
@@ -98,6 +100,7 @@ import {
 export default function AlloyWheelPage() {
     const router = useRouter();
     const { showToast } = useToast();
+    const [showLocationModal, setShowLocationModal] = useState(false);
 
     // ---------------------------------------------------------------------------
     // Dedicated Full-Page View Navigation State
@@ -139,6 +142,12 @@ export default function AlloyWheelPage() {
     // Form State
     // ---------------------------------------------------------------------------
     const [postcode, setPostcode] = useState("");
+    const [locationAddress, setLocationAddress] = useState("");
+    const [house, setHouse] = useState("");
+    const [floor, setFloor] = useState("");
+    const [street, setStreet] = useState("");
+    const [city, setCity] = useState("");
+    const [serviceAddressJson, setServiceAddressJson] = useState("");
     const [regNo, setRegNo] = useState("");
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
     const [showServicesDropdown, setShowServicesDropdown] = useState(false);
@@ -180,6 +189,53 @@ export default function AlloyWheelPage() {
         const storedLon = localStorage.getItem("user_lon");
         if (storedLat) setUserLat(storedLat);
         if (storedLon) setUserLon(storedLon);
+        const storedAddress = localStorage.getItem("user_address");
+        const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+        const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+        const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+        const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+        const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+        const storedJson = localStorage.getItem("service_address_json");
+        if (storedAddress) setLocationAddress(storedAddress);
+        if (storedPostcode) setPostcode(storedPostcode);
+        if (storedHouse) setHouse(storedHouse);
+        if (storedFloor) setFloor(storedFloor);
+        if (storedStreet) setStreet(storedStreet);
+        if (storedCity) setCity(storedCity);
+        if (storedJson) setServiceAddressJson(storedJson);
+
+        const draft = getServiceFormDraft<{
+            postcode?: string;
+            locationAddress?: string;
+            house?: string;
+            floor?: string;
+            street?: string;
+            city?: string;
+            serviceAddressJson?: string;
+            regNo?: string;
+            carModel?: string;
+            selectedServices?: string[];
+            userLat?: string;
+            userLon?: string;
+            targetView?: ActiveView;
+        }>("alloy-wheel");
+
+        if (draft) {
+            if (draft.postcode) setPostcode(draft.postcode);
+            if (draft.locationAddress) setLocationAddress(draft.locationAddress);
+            if (draft.house) setHouse(draft.house);
+            if (draft.floor) setFloor(draft.floor);
+            if (draft.street) setStreet(draft.street);
+            if (draft.city) setCity(draft.city);
+            if (draft.serviceAddressJson) setServiceAddressJson(draft.serviceAddressJson);
+            if (draft.regNo) setRegNo(draft.regNo);
+            if (draft.carModel) setCarBrand(draft.carModel);
+            if (draft.selectedServices) setSelectedServices(draft.selectedServices);
+            if (draft.userLat) setUserLat(draft.userLat);
+            if (draft.userLon) setUserLon(draft.userLon);
+            if (draft.targetView) navigateToView(draft.targetView);
+            clearServiceFormDraft("alloy-wheel");
+        }
 
         const initAutocomplete = () => {
             if (!postcodeRef.current || !(window as any).google?.maps?.places) return;
@@ -198,12 +254,18 @@ export default function AlloyWheelPage() {
                         const lat = String(place.geometry.location.lat());
                         const lon = String(place.geometry.location.lng());
                         const addressText = place.formatted_address || place.name || "";
-                        setPostcode(addressText);
+                        setLocationAddress(addressText);
+                        const extractedPc = extractPostcode(addressText);
+                        if (extractedPc) setPostcode(extractedPc);
                         setUserLat(lat);
                         setUserLon(lon);
                         localStorage.setItem("user_lat", lat);
                         localStorage.setItem("user_lon", lon);
                         localStorage.setItem("user_address", addressText);
+                        if (extractedPc) {
+                            localStorage.setItem("user_postcode", extractedPc);
+                            localStorage.setItem("postcode", extractedPc);
+                        }
                     }
                 });
             } catch (err) {
@@ -330,11 +392,16 @@ export default function AlloyWheelPage() {
         try {
             let effectiveAddressId = "6";
             try {
+                const fullCombinedAddress = locationAddress || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || postcode;
                 effectiveAddressId =
                     (await getOrCreateCustomerAddressId(
-                        postcode,
+                        fullCombinedAddress,
                         userLat || localStorage.getItem("user_lat") || undefined,
-                        userLon || localStorage.getItem("user_lon") || undefined
+                        userLon || localStorage.getItem("user_lon") || undefined,
+                        house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                        floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                        street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                        city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined
                     )) || "6";
             } catch {
                 effectiveAddressId = "6";
@@ -364,6 +431,7 @@ export default function AlloyWheelPage() {
                     ? heroMediaFiles
                     : (formData.carImage ? [formData.carImage] : []));
 
+            const fullAddrText = locationAddress || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || postcode;
             const res = await sendQuotationRequest({
                 service_id: formData.selectedServiceIds[0] || "3e8b192f-c32a-4219-946f-6ce98b9a88b6",
                 service_ids: formData.selectedServiceIds,
@@ -375,6 +443,13 @@ export default function AlloyWheelPage() {
                     "Alloy wheel repair quotation request",
                 booking_schedule: scheduleStr,
                 service_address_id: effectiveAddressId,
+                service_address: serviceAddressJson || fullAddrText,
+                postcode: postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || undefined,
+                house: house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                floor: floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                latitude: userLat || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : undefined) || undefined,
+                longitude: userLon || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : undefined) || undefined,
                 car_model: formData.carModel || "Vehicle 2022",
                 car_registration_number: formData.carReg || regNo.trim() || "BD51 SMR",
                 damage_description: combinedDamageDesc || "Alloy wheel damage inspection",
@@ -712,6 +787,10 @@ export default function AlloyWheelPage() {
             const draft = getServiceFormDraft("alloy-wheel");
             if (draft) {
                 if (draft.postcode) setPostcode(draft.postcode);
+                if (draft.locationAddress) setLocationAddress(draft.locationAddress);
+                if (draft.house) setHouse(draft.house);
+                if (draft.floor) setFloor(draft.floor);
+                if (draft.serviceAddressJson) setServiceAddressJson(draft.serviceAddressJson);
                 if (draft.regNo) setRegNo(draft.regNo);
                 if (draft.carModel) setCarBrand(draft.carModel);
                 if (draft.userLat) setUserLat(draft.userLat);
@@ -994,7 +1073,14 @@ export default function AlloyWheelPage() {
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
                 selected_slot_id: selectedSlotId,
-                service_address_id: serviceAddressId || "6",
+                service_address: serviceAddressJson || (typeof window !== "undefined" ? localStorage.getItem("service_address_json") || localStorage.getItem("service_address") : null) || locationAddress || undefined,
+                postcode: postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || "",
+                house: house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                floor: floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined,
+                latitude: userLat,
+                longitude: userLon,
                 notes: combinedNotes,
                 car_image: bookingCarImage,
                 amount: totalBookingPrice || depositAmount,
@@ -1039,7 +1125,13 @@ export default function AlloyWheelPage() {
             );
 
             if (confirmedRefId) {
-                const resolvedAddr = postcode || (bookingPostItem as any)?.service_address || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const resolvedAddr =
+                    locationAddress ||
+                    ([house ? `Flat/House: ${house}` : "", floor ? `Floor ${floor}` : "", street ? `Street: ${street}` : "", city, postcode].filter(Boolean).join(", ")) ||
+                    serviceAddressJson ||
+                    (bookingPostItem as any)?.service_address ||
+                    (userLat ? `Coordinates: ${userLat}, ${userLon}` : "Service Location Selected");
+
                 saveBookingMeta(confirmedRefId, {
                     price: effectivePrice,
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
@@ -1052,6 +1144,14 @@ export default function AlloyWheelPage() {
                     paymentStatus: "Pending Payment",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
                     scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
+                    postcode: postcode || "",
+                    house: house || "",
+                    floor: floor || "",
+                    street: street || "",
+                    city: city || "",
                 });
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
@@ -1061,9 +1161,14 @@ export default function AlloyWheelPage() {
                     serviceTitle: "Alloy Wheel Refurbishment & Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
-                    serviceAddress: resolvedAddr,
-                    pickupLocation: resolvedAddr,
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
                     postcode: postcode || "",
+                    house: house || "",
+                    floor: floor || "",
+                    street: street || "",
+                    city: city || "",
                     vehicleReg: regNo || "",
                     vehicleModel: carBrand || "",
                     totalAmount: effectivePrice,
@@ -1124,6 +1229,63 @@ export default function AlloyWheelPage() {
                 setBookingConfirmed(true);
 
                 const refId = res.content?.readable_id || res.content?.booking_id || "";
+                const bookingId = res.content?.booking_id || res.content?.id || refId;
+                if (bookingId) {
+                    const resolvedAlloyAddr = serviceAddressJson || locationAddress || (house && postcode ? `${house}, ${postcode}` : postcode);
+                    const alloyMeta = {
+                        serviceTitle: "Alloy Wheel Refurbishment & Repair",
+                        serviceCategoryName: "Alloy Wheel Repair",
+                        serviceType: "alloy" as const,
+                        providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                        vehicleReg: regNo || "",
+                        vehicleModel: carBrand || "",
+                        price: effectivePrice,
+                        isPaid: false,
+                        paymentStatus: "Pending Payment",
+                        scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                        scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                        serviceAddress: resolvedAlloyAddr,
+                        pickupLocation: resolvedAlloyAddr,
+                        locationAddress: resolvedAlloyAddr,
+                        postcode: postcode || "",
+                        house: house || "",
+                        floor: floor || "",
+                    };
+                    saveBookingMeta(bookingId, alloyMeta);
+                    if (refId && refId !== bookingId) {
+                        saveBookingMeta(refId, alloyMeta);
+                    }
+
+                    saveConfirmedBooking({
+                        id: String(bookingId),
+                        rawId: bookingId,
+                        readableId: refId || bookingId,
+                        serviceType: "alloy",
+                        serviceCategoryName: "Alloy Wheel Repair",
+                        serviceTitle: "Alloy Wheel Refurbishment & Repair",
+                        providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
+                        providerPhone: bookingProviderModal?.company_phone,
+                        serviceAddress: serviceAddressJson || locationAddress || (house && postcode ? `${house}, ${postcode}` : postcode),
+                        pickupLocation: locationAddress || serviceAddressJson || (house && postcode ? `${house}, ${postcode}` : postcode),
+                        locationAddress: locationAddress || serviceAddressJson || (house && postcode ? `${house}, ${postcode}` : postcode),
+                        postcode: postcode || "",
+                        house: house || "",
+                        floor: floor || "",
+                        vehicleReg: regNo || "",
+                        vehicleModel: carBrand || "",
+                        totalAmount: effectivePrice,
+                        isPaid: false,
+                        paymentStatus: "Pending Payment",
+                        paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : "Cash After Service",
+                        status: "accepted",
+                        statusDisplay: "Accepted",
+                        scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
+                        scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                        fullScheduleDisplay: formattedSchedule || "Confirmed",
+                        createdAt: new Date().toISOString(),
+                    });
+                }
+
                 showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
 
                 triggerDevicePushNotification(
@@ -1148,7 +1310,7 @@ export default function AlloyWheelPage() {
                 setBookingConfirmed(true);
                 showToast(res.message || "Booking request processed!", "success");
 
-                const alloyRef = String(res?.content?.readable_id || res?.content?.id || res?.readable_id || res?.id || "Confirmed");
+                const alloyRef = String((res as any)?.content?.readable_id || (res as any)?.content?.id || (res as any)?.readable_id || (res as any)?.id || "Confirmed");
                 triggerDevicePushNotification(
                     "Alloy Wheel Refurbishment Confirmed! 🛞",
                     `Your appointment with ${bookingProviderModal?.company_name || "Specialist"} (Ref: #${alloyRef}) is confirmed.`,
@@ -1289,6 +1451,10 @@ export default function AlloyWheelPage() {
         if (!isAuthenticated()) {
             saveServiceFormDraft("alloy-wheel", {
                 postcode,
+                locationAddress,
+                house,
+                floor,
+                serviceAddressJson,
                 regNo,
                 carModel: carBrand,
                 userLat,
@@ -1313,6 +1479,10 @@ export default function AlloyWheelPage() {
         if (!isAuthenticated()) {
             saveServiceFormDraft("alloy-wheel", {
                 postcode,
+                locationAddress,
+                house,
+                floor,
+                serviceAddressJson,
                 regNo,
                 carModel: carBrand,
                 selectedServices,
@@ -1588,25 +1758,43 @@ export default function AlloyWheelPage() {
                                             <input
                                                 ref={postcodeRef}
                                                 type="text"
-                                                value={postcode}
-                                                onChange={(e) => setPostcode(e.target.value)}
-                                                placeholder="Enter Postcode or City"
-                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-8 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                                                value={locationAddress || postcode}
+                                                onChange={(e) => {
+                                                    setLocationAddress(e.target.value);
+                                                    const extracted = extractPostcode(e.target.value);
+                                                    if (extracted) setPostcode(extracted);
+                                                }}
+                                                placeholder="Enter Full Address, Postcode or City"
+                                                className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-24 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                                             />
-                                            {postcode && (
+                                            <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
+                                                {(locationAddress || postcode) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setLocationAddress("");
+                                                            setPostcode("");
+                                                            setHouse("");
+                                                            setFloor("");
+                                                            setUserLat("");
+                                                            setUserLon("");
+                                                        }}
+                                                        className="p-1 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        setPostcode("");
-                                                        setUserLat("");
-                                                        setUserLon("");
-                                                    }}
-                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                                                    onClick={() => setShowLocationModal(true)}
+                                                    className="px-2.5 py-1 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
                                                 >
-                                                    <X className="w-3.5 h-3.5" />
+                                                    <MapPin size={11} />
+                                                    <span>Map</span>
                                                 </button>
-                                            )}
+                                            </div>
                                         </div>
+
 
                                         {/* Row 2: Car Registration No */}
                                         <div className="relative">
@@ -2291,6 +2479,13 @@ export default function AlloyWheelPage() {
                         bookingConfirmed={bookingConfirmed}
                         bookingApiResult={bookingApiResult}
                         bookingError={bookingError}
+                        serviceAddress={serviceAddressJson || locationAddress}
+                        locationAddress={locationAddress}
+                        house={house}
+                        floor={floor}
+                        street={street}
+                        city={city}
+                        postcode={postcode}
                         onSubmitBooking={handleExecuteBooking}
                         onBackToQuotes={() => navigateToView("quotes")}
                         onBackToHome={() => {
@@ -2324,6 +2519,48 @@ export default function AlloyWheelPage() {
                     </div>
                 )
             )}
+
+            {/* Interactive Map Location Picker Modal */}
+            <LocationPickerModal
+                isOpen={showLocationModal}
+                onClose={() => setShowLocationModal(false)}
+                initialAddress={locationAddress || postcode}
+                initialPostcode={postcode}
+                initialHouse={house}
+                initialFloor={floor}
+                initialStreet={street}
+                initialCity={city}
+                initialLat={userLat}
+                initialLon={userLon}
+                onSelectLocation={(data: SelectedLocationData) => {
+                    setLocationAddress(data.formattedAddress || data.address);
+                    setPostcode(data.postcode);
+                    setHouse(data.house);
+                    setFloor(data.floor);
+                    setStreet(data.street || "");
+                    setCity(data.city || "");
+                    setUserLat(data.lat);
+                    setUserLon(data.lon);
+                    setServiceAddressJson(data.service_address_json);
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("user_address", data.formattedAddress);
+                        localStorage.setItem("user_postcode", data.postcode);
+                        localStorage.setItem("user_lat", data.lat);
+                        localStorage.setItem("user_lon", data.lon);
+                        localStorage.setItem("user_house", data.house);
+                        localStorage.setItem("house", data.house);
+                        localStorage.setItem("user_floor", data.floor);
+                        localStorage.setItem("floor", data.floor);
+                        localStorage.setItem("user_street", data.street || "");
+                        localStorage.setItem("street", data.street || "");
+                        localStorage.setItem("user_city", data.city || "");
+                        localStorage.setItem("city", data.city || "");
+                        localStorage.setItem("service_address", data.service_address_json);
+                        localStorage.setItem("service_address_json", data.service_address_json);
+                        localStorage.setItem("service_address_id", data.address_id);
+                    }
+                }}
+            />
         </div>
     );
 }

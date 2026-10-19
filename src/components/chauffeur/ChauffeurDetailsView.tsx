@@ -78,8 +78,12 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
   const [pickupType, setPickupType] = useState("hourly");
   const [pickupLocation, setPickupLocation] = useState("");
   const [pickupCoords, setPickupCoords] = useState<ChauffeurBookingCoordinates | undefined>(undefined);
+  const [pickupStreet, setPickupStreet] = useState("");
+  const [pickupCity, setPickupCity] = useState("");
   const [dropLocation, setDropLocation] = useState("");
   const [dropCoords, setDropCoords] = useState<ChauffeurBookingCoordinates | undefined>(undefined);
+  const [dropStreet, setDropStreet] = useState("");
+  const [dropCity, setDropCity] = useState("");
   const [note, setNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash_after_service");
 
@@ -181,8 +185,12 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
         pickup_type: pickupType,
         pickup_location: pickupLocation,
         pickup_coordinates: pickupCoords,
+        street: pickupStreet || undefined,
+        city: pickupCity || undefined,
         drop_location: dropLocation,
         drop_coordinates: dropCoords,
+        drop_street: dropStreet || undefined,
+        drop_city: dropCity || undefined,
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
@@ -789,9 +797,13 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                     label="Pickup Location"
                     value={pickupLocation}
                     coordinates={pickupCoords}
-                    onChange={(address, coords) => {
+                    initialStreet={pickupStreet}
+                    initialCity={pickupCity}
+                    onChange={(address, coords, details) => {
                       setPickupLocation(address);
                       setPickupCoords(coords ? { latitude: coords.latitude, longitude: coords.longitude } : undefined);
+                      if (details?.street) setPickupStreet(details.street);
+                      if (details?.city) setPickupCity(details.city);
                     }}
                     placeholder="Enter pickup address / airport"
                     type="pickup"
@@ -805,9 +817,13 @@ export const ChauffeurDetailsView: React.FC<ChauffeurDetailsViewProps> = ({
                     label="Destination Address"
                     value={dropLocation}
                     coordinates={dropCoords}
-                    onChange={(address, coords) => {
+                    initialStreet={dropStreet}
+                    initialCity={dropCity}
+                    onChange={(address, coords, details) => {
                       setDropLocation(address);
                       setDropCoords(coords ? { latitude: coords.latitude, longitude: coords.longitude } : undefined);
+                      if (details?.street) setDropStreet(details.street);
+                      if (details?.city) setDropCity(details.city);
                     }}
                     placeholder="Enter destination location"
                     type="drop"

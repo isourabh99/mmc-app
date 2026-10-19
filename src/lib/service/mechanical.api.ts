@@ -1,4 +1,5 @@
 import apiClient from "@/lib/http/apiClient";
+import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 export const FALLBACK_MECHANICAL_CATEGORY_ID = "b0a78f28-5281-4284-a50d-781d4592b1c4";
@@ -655,6 +656,12 @@ export const sendMechanicalBookingRequest = async (payload: {
   notes?: string;
   answers?: Record<string, string>;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
+  latitude?: string;
+  longitude?: string;
   car_image?: File | null;
   car_images?: File[];
   zone_id?: string;
@@ -700,9 +707,21 @@ export const sendMechanicalBookingRequest = async (payload: {
     const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
     cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
   }
-  if (!cleanPostcode) cleanPostcode = "12345";
+  if (!cleanPostcode) cleanPostcode = "";
 
-  const fullAddress = payload.service_address || payload.postcode || "Customer Location, UK";
+  const rawAddr = payload.service_address || (typeof window !== "undefined" ? localStorage.getItem("service_address") || localStorage.getItem("user_address") : null) || "";
+  const effectiveStreet = (payload.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
+  const effectiveCity = (payload.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
+  const fullAddress = ensureServiceAddressJson(rawAddr, {
+    lat: payload.latitude || "51.5074",
+    lon: payload.longitude || "-0.1278",
+    address: rawAddr,
+    zip_code: cleanPostcode,
+    house: payload.house,
+    floor: payload.floor,
+    street: effectiveStreet,
+    city: effectiveCity,
+  });
   const apiServiceLocation = "customer";
 
   let effectiveNotes = payload.notes || "";
@@ -722,7 +741,6 @@ export const sendMechanicalBookingRequest = async (payload: {
   if (payload.is_partial !== undefined) {
     formData.append("is_partial", String(payload.is_partial));
   }
-  formData.append("service_address_id", payload.service_address_id || "6");
   formData.append("service_address", fullAddress);
   formData.append("service_schedule", payload.service_schedule || "2026-01-14 10:00:00");
   formData.append("service_location", apiServiceLocation);
@@ -733,8 +751,12 @@ export const sendMechanicalBookingRequest = async (payload: {
   if (payload.car_model) formData.append("car_model", payload.car_model);
   if (effectiveNotes) formData.append("notes", effectiveNotes);
   formData.append("postcode", cleanPostcode);
-  formData.append("latitude", "51.5074");
-  formData.append("longitude", "-0.1278");
+  if (payload.house) formData.append("house", payload.house);
+  if (payload.floor) formData.append("floor", payload.floor);
+  if (effectiveStreet) formData.append("street", effectiveStreet);
+  if (effectiveCity) formData.append("city", effectiveCity);
+  formData.append("latitude", payload.latitude || "51.5074");
+  formData.append("longitude", payload.longitude || "-0.1278");
   if (payload.payment_platform) {
     formData.append("payment_platform", payload.payment_platform);
   }

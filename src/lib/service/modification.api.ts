@@ -1,4 +1,9 @@
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import {
+  ensureServiceAddressJson,
+  extractPostcode,
+  saveCustomerAddressToBackend,
+} from "@/lib/service/address.helper";
 
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 export const DEFAULT_MODIFICATION_CATEGORY_ID =
@@ -469,7 +474,11 @@ export const getModificationProviderDetails = async (
 export const getOrCreateCustomerAddressId = async (
   customAddress?: string,
   latitude?: string | number,
-  longitude?: string | number
+  longitude?: string | number,
+  house?: string,
+  floor?: string,
+  street?: string,
+  city?: string
 ): Promise<string> => {
   const lat =
     latitude ||
@@ -498,33 +507,56 @@ export const getOrCreateCustomerAddressId = async (
     // proceed to create
   }
 
-  // 2. Create customer address
+  // 2. Create customer address using standardized 13-field API
   try {
-    const response = await apiClient.post<any>("/customer/address", {
+    const cleanPostcode = extractPostcode(customAddress || "");
+    const effectiveHouse =
+      house ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("user_house") || localStorage.getItem("house")
+        : null) ||
+      "";
+    const effectiveFloor =
+      floor ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("user_floor") || localStorage.getItem("floor")
+        : null) ||
+      "";
+    const effectiveStreet =
+      street ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("user_street") || localStorage.getItem("street")
+        : null) ||
+      "";
+    const effectiveCity =
+      city ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("user_city") || localStorage.getItem("city")
+        : null) ||
+      "";
+    const addressId = await saveCustomerAddressToBackend({
       lat: String(lat),
       lon: String(lon),
-      address: customAddress || "London, UK",
+      address: customAddress || "",
+      city: effectiveCity,
+      street: effectiveStreet,
+      zip_code: cleanPostcode || "",
+      country: "",
       address_type: "service",
       contact_person_name: "Customer",
-      contact_person_number: "+447700900000",
+      contact_person_number: "",
       address_label: "Home",
-      house: null,
-      floor: null,
-      is_guest: false,
+      house: effectiveHouse,
+      floor: effectiveFloor,
     });
-
-    const addressId =
-      response.data?.content?.id ||
-      response.data?.id ||
-      response.data?.content?.data?.id;
 
     if (addressId) {
       return String(addressId);
     }
-    return "6";
+    return "9";
   } catch (err) {
     console.warn("Could not create customer address from API:", err);
-    return "6";
+    return "9";
   }
 };
 
@@ -539,6 +571,8 @@ export const sendModificationQuotationRequest = async (params: {
   service_description: string;
   booking_schedule: string;
   service_address_id: string;
+  street?: string;
+  city?: string;
   car_image?: File | null;
   car_images?: File[];
 }): Promise<any> => {
@@ -581,6 +615,26 @@ export const sendModificationQuotationRequest = async (params: {
   }
   if (params.damage_description) {
     formData.append("damage_description", params.damage_description);
+  }
+
+  const effectiveStreet =
+    params.street ||
+    (typeof window !== "undefined"
+      ? localStorage.getItem("user_street") || localStorage.getItem("street")
+      : null) ||
+    "";
+  const effectiveCity =
+    params.city ||
+    (typeof window !== "undefined"
+      ? localStorage.getItem("user_city") || localStorage.getItem("city")
+      : null) ||
+    "";
+
+  if (effectiveStreet) {
+    formData.append("street", effectiveStreet);
+  }
+  if (effectiveCity) {
+    formData.append("city", effectiveCity);
   }
 
   // Handle single or multiple image uploads
@@ -750,6 +804,10 @@ export interface SendModificationBookingRequestParams {
   latitude?: number | string;
   longitude?: number | string;
   postcode?: string;
+  street?: string;
+  city?: string;
+  house?: string;
+  floor?: string;
   is_partial?: number | 0 | 1;
   amount?: number;
 }
@@ -771,21 +829,47 @@ export const sendModificationBookingRequest = async (
         localStorage.getItem("zoneid"))) ||
     zoneId;
 
-  const addressId = params.service_address_id || "6";
-  const fullAddress = params.service_address || "Customer Location, UK";
+  let cleanPostcode = (params.postcode || "").trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "";
+
+  const effectiveLat = String(params.latitude || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) || "51.5074");
+  const effectiveLon = String(params.longitude || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) || "-0.1278");
+
+  const effectiveStreet =
+    params.street ||
+    (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) ||
+    "";
+  const effectiveCity =
+    params.city ||
+    (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) ||
+    "";
+
+  const rawAddr =
+    params.service_address ||
+    (typeof window !== "undefined" ? localStorage.getItem("service_address") || localStorage.getItem("user_address") : null) ||
+    "London, United Kingdom";
+
+  const fullAddress = ensureServiceAddressJson(rawAddr, {
+    lat: effectiveLat,
+    lon: effectiveLon,
+    address: rawAddr,
+    street: effectiveStreet,
+    city: effectiveCity,
+    zip_code: cleanPostcode,
+    house: params.house,
+    floor: params.floor,
+  });
+
   const isOnline = params.payment_method === "stripe" || params.payment_method === "online";
   const effectivePaymentMethod = isOnline ? "stripe" : params.payment_method;
   const effectiveDate = params.date || new Date().toISOString().split("T")[0];
 
   // Demandium backend /customer/booking/request/send validator requires 'service_location' => 'required|in:customer'
   const apiServiceLocation = "customer";
-
-  let cleanPostcode = (params.postcode || "").trim();
-  if (cleanPostcode.length > 15) {
-    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
-    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
-  }
-  if (!cleanPostcode) cleanPostcode = "12345";
 
   const schedule =
     params.service_schedule ||
@@ -808,7 +892,6 @@ export const sendModificationBookingRequest = async (
     const formData = new FormData();
     formData.append("provider_id", params.provider_id);
     formData.append("post_id", params.post_id);
-    formData.append("service_address_id", addressId);
     formData.append("service_address", fullAddress);
     formData.append("date", effectiveDate);
     formData.append("service_schedule", schedule);
@@ -820,8 +903,12 @@ export const sendModificationBookingRequest = async (
     formData.append("zone_id", zoneId);
     formData.append("guest_id", guestId);
     formData.append("postcode", cleanPostcode);
-    formData.append("latitude", String(params.latitude || "22.66215"));
-    formData.append("longitude", String(params.longitude || "75.9035"));
+    if (params.house) formData.append("house", params.house);
+    if (params.floor) formData.append("floor", params.floor);
+    if (effectiveStreet) formData.append("street", effectiveStreet);
+    if (effectiveCity) formData.append("city", effectiveCity);
+    formData.append("latitude", effectiveLat);
+    formData.append("longitude", effectiveLon);
 
     if (params.is_partial !== undefined) {
       formData.append("is_partial", String(params.is_partial));
@@ -879,7 +966,6 @@ export const sendModificationBookingRequest = async (
       provider_id: params.provider_id,
       post_id: params.post_id,
       date: effectiveDate,
-      service_address_id: addressId,
       service_address: fullAddress,
       service_schedule: schedule,
       booking_schedule: schedule,
@@ -890,8 +976,12 @@ export const sendModificationBookingRequest = async (
       zone_id: zoneId,
       guest_id: guestId,
       postcode: cleanPostcode,
-      latitude: String(params.latitude || "22.66215"),
-      longitude: String(params.longitude || "75.9035"),
+      street: effectiveStreet,
+      city: effectiveCity,
+      house: params.house,
+      floor: params.floor,
+      latitude: effectiveLat,
+      longitude: effectiveLon,
       notes: effectiveNotes,
       is_partial: params.is_partial ?? 0,
       is_terms_accepted: 1,

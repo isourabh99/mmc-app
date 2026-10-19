@@ -1,6 +1,6 @@
 import apiClient from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import { isFakeDummyId, getBookingMeta } from "@/lib/service/bookings.api";
+import { isFakeDummyId, getBookingMeta, formatToNumericBookingId } from "@/lib/service/bookings.api";
 
 export interface BookingNotification {
   id: string;
@@ -335,7 +335,7 @@ export function resolveBookingServiceName(item: any): string {
  * Normalizes a regular booking into a clean NotificationItem dynamically
  */
 function normalizeRegularBookingNotification(item: any, readIds: Set<string>): BookingNotification {
-  const readableId = item.readable_id || item.id;
+  const readableId = formatToNumericBookingId(item.readable_id || item.id);
   const id = `notif-reg-${readableId}`;
   const category = detectBookingCategory(item);
   const statusRaw = (item.booking_status || "pending").toLowerCase();
@@ -400,7 +400,7 @@ function normalizeRegularBookingNotification(item: any, readIds: Set<string>): B
 
   return {
     id,
-    bookingId: item.id || readableId,
+    bookingId: formatToNumericBookingId(item.id || readableId),
     readableId,
     bookingType: "regular",
     category,
@@ -426,7 +426,7 @@ function normalizeRegularBookingNotification(item: any, readIds: Set<string>): B
  * Normalizes a car booking (car hire or chauffeur) into a clean NotificationItem dynamically
  */
 function normalizeCarBookingNotification(item: any, readIds: Set<string>): BookingNotification {
-  const readableId = item.readable_id || item.id || item.booking_id;
+  const readableId = formatToNumericBookingId(item.readable_id || item.id || item.booking_id);
   const id = `notif-car-${readableId}`;
   const car = item.car || {};
   const isChauffeur = item.pickup_type === "chauffeur" || car.service_category === "chauffeur";
@@ -471,7 +471,7 @@ function normalizeCarBookingNotification(item: any, readIds: Set<string>): Booki
 
   return {
     id,
-    bookingId: item.booking_id || item.id || readableId,
+    bookingId: formatToNumericBookingId(item.booking_id || item.id || readableId),
     readableId,
     bookingType: "car",
     category,
@@ -869,8 +869,9 @@ function normalizeBackendCustomerNotification(
   const refMatch = combinedText.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
   const detectedRef = refMatch ? refMatch[1] : undefined;
 
-  const bookingId = item.booking_id || item.data?.booking_id || detectedRef || notifId;
-  const readableId = item.readable_id || detectedRef || notifId.slice(0, 8);
+  const rawCandidate = item.readable_id || item.booking_id || item.data?.booking_id || detectedRef;
+  const readableId = rawCandidate ? formatToNumericBookingId(rawCandidate) : formatToNumericBookingId(notifId);
+  const bookingId = rawCandidate ? formatToNumericBookingId(rawCandidate) : notifId;
 
   const { actionType, actionButtonText, targetUrl } = resolveNotificationActionType(item);
   const imageUrl = resolveNotificationImageUrl(item);
@@ -919,7 +920,7 @@ function normalizeBackendCustomerNotification(
     bookingType: category === "car_hire" || category === "chauffeur" ? "car" : (category === "quote" ? "quote" : "regular"),
     category,
     title: titleRaw,
-    subtitle: detectedRef ? `Ref #${detectedRef} • ${statusLabel}` : (actionType === "quote" ? "Specialist Quote Offer" : undefined),
+    subtitle: detectedRef ? `Booking ID: #${readableId} • ${statusLabel}` : (actionType === "quote" ? "Specialist Quote Offer" : undefined),
     description: descRaw,
     status,
     statusLabel,
@@ -930,7 +931,7 @@ function normalizeBackendCustomerNotification(
     createdAt,
     timeAgo: formatTimeAgo(createdAt),
     read: readIds.has(id) || readIds.has(notifId),
-    targetUrl: targetUrl || (detectedRef ? `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}` : ""),
+    targetUrl: targetUrl || (detectedRef || item.booking_id ? `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}` : ""),
     image: imageUrl,
     actionType,
     actionButtonText,
@@ -1166,7 +1167,7 @@ async function doFetchBookingNotifications(): Promise<{
       }
     });
 
-    rawQuotePosts = Array.from(postMap.values());
+    const rawQuotePosts = Array.from(postMap.values());
     if (rawQuotePosts.length > 0) {
       isLive = true;
     }
@@ -1174,7 +1175,7 @@ async function doFetchBookingNotifications(): Promise<{
     // For active quote posts belonging strictly to this user, fetch actual provider bids
     const postsToCheck = rawQuotePosts.slice(0, 6);
     const bidsResponses = await Promise.all(
-      postsToCheck.map((p) =>
+      postsToCheck.map((p: any) =>
         apiClient
           .get("/customer/post/bid", {
             params: { post_id: p.id, limit: 10, offset: 1 },
@@ -1189,7 +1190,7 @@ async function doFetchBookingNotifications(): Promise<{
       )
     );
 
-    bidsResponses.forEach(({ post, bids }) => {
+    bidsResponses.forEach(({ post, bids }: { post: any; bids: any[] }) => {
       if (bids.length > 0) {
         post.bids_count = Math.max(Number(post.bids_count || 0), bids.length);
         bids.forEach((bid: any) => {
@@ -1242,6 +1243,14 @@ async function doFetchBookingNotifications(): Promise<{
           customItems.forEach((c) => {
             const bKey = String(c.bookingId || c.id || "");
             if (isFakeDummyId(bKey)) return;
+            // Filter out synthetic local payment notifications as requested by user
+            if (
+              (c.title && c.title.toLowerCase().includes("payment success")) ||
+              (c.title && c.title.toLowerCase().includes("payment received")) ||
+              (c.description && c.description.toLowerCase().includes("payment was processed"))
+            ) {
+              return;
+            }
             if (!seenBookingIds.has(bKey)) {
               seenBookingIds.add(bKey);
               deduped.push(c);

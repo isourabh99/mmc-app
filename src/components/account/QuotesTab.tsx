@@ -27,6 +27,7 @@ import {
   CustomerQuotationPostItem,
   PostBidItem,
 } from "@/lib/service/bodywork.api";
+import { extractReadableAddress } from "@/lib/service/bookings.api";
 
 export const QuotesTab: React.FC = () => {
   const [quotes, setQuotes] = useState<CustomerQuotationPostItem[]>([]);
@@ -189,6 +190,12 @@ export const QuotesTab: React.FC = () => {
                   <Car size={13} className="text-[#f2cb87]" />
                   <span>{selectedPost.car_model || "Vehicle"} {selectedPost.car_registration_number ? `· ${selectedPost.car_registration_number}` : ""}</span>
                 </div>
+                {(selectedPost.service_address || (selectedPost as any).location_address || (selectedPost as any).postcode) && (
+                  <div className="flex items-center gap-1.5 text-xs text-white/60">
+                    <MapPin size={13} className="text-[#f2cb87]" />
+                    <span>{extractReadableAddress(selectedPost.service_address) || (selectedPost as any).location_address || (selectedPost as any).postcode}</span>
+                  </div>
+                )}
               </div>
 
               <div className="text-right space-y-1">
@@ -362,6 +369,16 @@ export const QuotesTab: React.FC = () => {
                           {q.car_registration_number ? ` · ${q.car_registration_number}` : ""}
                         </span>
                       </div>
+
+                      {/* Location */}
+                      {(q.service_address || (q as any).location_address || (q as any).postcode) && (
+                        <div className="flex items-center gap-1.5 text-xs text-white/50">
+                          <MapPin size={11} className="text-[#f2cb87]/70 shrink-0" />
+                          <span className="truncate">
+                            {extractReadableAddress(q.service_address) || (q as any).location_address || (q as any).postcode}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

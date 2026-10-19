@@ -291,7 +291,7 @@ function EstimateDetailInner() {
 
   return (
     <div className="min-h-screen bg-[#090706] text-white py-8 sm:py-12 font-sans selection:bg-[#f2cb87] selection:text-black">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 space-y-6">
+      <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px] space-y-6">
         {/* Navigation & Action Bar */}
         <div className="flex items-center justify-between gap-4">
           <Link
@@ -527,7 +527,7 @@ function EstimateDetailInner() {
                   <ImageIcon size={11} className="text-[#f2cb87]" />
                   Uploaded Vehicle Photos ({carImages.length})
                 </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
                   {carImages.map((imgUrl, i) => (
                     <button
                       key={i}
