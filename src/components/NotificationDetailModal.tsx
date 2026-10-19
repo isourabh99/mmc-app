@@ -26,6 +26,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { BookingNotification, resolveNotificationImageUrl } from "@/lib/service/notifications.api";
+import { formatToNumericBookingId } from "@/lib/service/bookings.api";
 
 interface NotificationDetailModalProps {
   notification: BookingNotification | null;
@@ -100,7 +101,10 @@ export default function NotificationDetailModal({
   if (!mounted || !notification) return null;
 
   const raw = notification.raw || {};
-  const bookingRef = String(notification.readableId || notification.bookingId || raw.id || "N/A");
+  const bookingRef =
+    notification.readableId || notification.bookingId || raw.booking_id || raw.id
+      ? formatToNumericBookingId(notification.readableId || notification.bookingId || raw.booking_id || raw.id)
+      : "N/A";
 
   // Comprehensive image resolution for modal banner & avatar
   const resolvedImage =
@@ -152,14 +156,17 @@ export default function NotificationDetailModal({
         ? "canceled"
         : "pending";
 
-    const targetBookingId = notification.bookingId || notification.readableId;
+    const targetBookingId =
+      notification.readableId || notification.bookingId
+        ? formatToNumericBookingId(notification.readableId || notification.bookingId)
+        : "";
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("mmc-open-booking-modal", {
           detail: {
             bookingId: targetBookingId,
-            readableId: notification.readableId,
+            readableId: targetBookingId,
             status: targetStatus,
           },
         })
@@ -400,7 +407,7 @@ export default function NotificationDetailModal({
             <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                  Booking Ref:
+                  Booking ID:
                 </span>
                 <span className="font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
                   #{bookingRef}
@@ -411,7 +418,7 @@ export default function NotificationDetailModal({
                 type="button"
                 onClick={handleCopyId}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-[11px] font-semibold transition cursor-pointer"
-                title="Copy Reference"
+                title="Copy Booking ID"
               >
                 {copied ? (
                   <>
@@ -447,33 +454,60 @@ export default function NotificationDetailModal({
           </>
         )}
 
-        {/* Primary Action Button (Matching mobile app golden pill button) */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (notification.actionType === "close" || (!notification.targetUrl && notification.actionType !== "quote" && notification.actionType !== "question")) {
-                handleClose();
-              } else if (notification.actionType === "quote" || notification.actionType === "question") {
-                router.push(notification.targetUrl || "/account?tab=quotes");
-                handleClose();
-              } else {
-                handleOpenBooking();
-              }
-            }}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] hover:brightness-105 active:scale-98 text-[#1A1612] font-black text-sm sm:text-base tracking-wide shadow-[0_4px_25px_rgba(206,164,107,0.35)] transition cursor-pointer flex items-center justify-center gap-2"
-          >
-            <span>
-              {notification.actionButtonText ||
-                (notification.actionType === "quote"
-                  ? "View Quote Bids"
-                  : notification.actionType === "question"
-                  ? "View Question"
-                  : "Close")}
-            </span>
-            {notification.actionType !== "close" && <ChevronRight size={16} />}
-          </button>
-        </div>
+        {/* Action Buttons: Clear separation between View Details and Close */}
+        {(() => {
+          const hasAction =
+            notification.actionType === "quote" ||
+            notification.actionType === "question" ||
+            (notification.actionType === "booking" && bookingRef !== "N/A") ||
+            Boolean(notification.targetUrl);
+
+          const actionLabel =
+            notification.actionButtonText ||
+            (notification.actionType === "quote"
+              ? "View Quote Bids"
+              : notification.actionType === "question"
+              ? "View Question"
+              : "View Booking Details");
+
+          return (
+            <div className="space-y-2 pt-2">
+              {hasAction && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      notification.actionType === "quote" ||
+                      notification.actionType === "question"
+                    ) {
+                      router.push(notification.targetUrl || "/account?tab=quotes");
+                      handleClose();
+                    } else {
+                      handleOpenBooking();
+                    }
+                  }}
+                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] hover:brightness-105 active:scale-98 text-[#1A1612] font-black text-sm sm:text-base tracking-wide shadow-[0_4px_25px_rgba(206,164,107,0.35)] transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>{actionLabel}</span>
+                  <ChevronRight size={16} />
+                </button>
+              )}
+
+              {/* Close Button: Purely closes modal, NEVER redirects to bookings */}
+              <button
+                type="button"
+                onClick={handleClose}
+                className={`w-full py-3 rounded-full font-bold text-xs sm:text-sm tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                  hasAction
+                    ? "bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10 hover:text-white"
+                    : "bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] text-[#1A1612] font-black hover:brightness-105"
+                }`}
+              >
+                <span>Close</span>
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Optional Dismiss Link */}
         {onDismiss && (

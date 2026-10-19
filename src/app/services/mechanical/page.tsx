@@ -28,7 +28,7 @@ import {
   Info,
   Lock,
   MapPin,
-  Navigation,
+  Navigation as NavigationIcon,
   Phone,
   Play,
   RefreshCw,
@@ -68,6 +68,8 @@ import {
   getServiceFormDraft,
   clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
 
 type ActiveView = "hero" | "providers" | "booking" | "payment" | "success";
 
@@ -80,6 +82,12 @@ export default function MechanicalPage() {
 
   // Hero form inputs
   const [postcode, setPostcode] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
+  const [house, setHouse] = useState("");
+  const [floor, setFloor] = useState("");
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [serviceAddressJson, setServiceAddressJson] = useState("");
   const [regNo, setRegNo] = useState("");
   const [damageDesc, setDamageDesc] = useState("");
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
@@ -99,6 +107,7 @@ export default function MechanicalPage() {
   const postcodeRef = useRef<HTMLInputElement>(null);
   const [userLat, setUserLat] = useState<string>("");
   const [userLon, setUserLon] = useState<string>("");
+  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
 
   // Providers state
   const [providers, setProviders] = useState<MechanicalProviderItem[]>([]);
@@ -176,6 +185,25 @@ export default function MechanicalPage() {
     if (typeof window === "undefined") return;
     localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
     localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
+
+    const storedLat = localStorage.getItem("user_lat");
+    const storedLon = localStorage.getItem("user_lon");
+    if (storedLat) setUserLat(storedLat);
+    if (storedLon) setUserLon(storedLon);
+    const storedAddress = localStorage.getItem("user_address");
+    const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+    const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+    const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+    const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+    const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+    const storedJson = localStorage.getItem("service_address_json");
+    if (storedAddress) setLocationAddress(storedAddress);
+    if (storedPostcode) setPostcode(storedPostcode);
+    if (storedHouse) setHouse(storedHouse);
+    if (storedFloor) setFloor(storedFloor);
+    if (storedStreet && !storedStreet.toLowerCase().includes("baker")) setStreet(storedStreet);
+    if (storedCity) setCity(storedCity);
+    if (storedJson) setServiceAddressJson(storedJson);
 
     const initData = async () => {
       try {
@@ -280,17 +308,28 @@ export default function MechanicalPage() {
       if (!postcodeRef.current || !(window as any).google?.maps?.places) return;
       try {
         const autocomplete = new (window as any).google.maps.places.Autocomplete(postcodeRef.current, {
-          types: ["geocode"],
+          types: ["geocode", "establishment"],
+          fields: ["geometry", "formatted_address", "name"],
         });
 
         autocomplete.addListener("place_changed", () => {
           const place = autocomplete.getPlace();
-          if (place.formatted_address) {
-            setPostcode(place.formatted_address);
-          }
-          if (place.geometry?.location) {
-            setUserLat(place.geometry.location.lat().toString());
-            setUserLon(place.geometry.location.lng().toString());
+          if (place && place.geometry && place.geometry.location) {
+            const lat = String(place.geometry.location.lat());
+            const lon = String(place.geometry.location.lng());
+            const addressText = place.formatted_address || place.name || "";
+            setLocationAddress(addressText);
+            const extractedPc = extractPostcode(addressText);
+            if (extractedPc) setPostcode(extractedPc);
+            setUserLat(lat);
+            setUserLon(lon);
+            localStorage.setItem("user_lat", lat);
+            localStorage.setItem("user_lon", lon);
+            localStorage.setItem("user_address", addressText);
+            if (extractedPc) {
+              localStorage.setItem("user_postcode", extractedPc);
+              localStorage.setItem("postcode", extractedPc);
+            }
           }
         });
       } catch (err) {
@@ -479,7 +518,16 @@ export default function MechanicalPage() {
         payment_method: paymentMethod || "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         service_schedule: formattedSchedule,
-        service_address_id: "6",
+        service_address:
+          serviceAddressJson ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("service_address_json") ||
+            localStorage.getItem("service_address") ||
+            localStorage.getItem("user_address")
+            : null) ||
+          locationAddress ||
+          postcode ||
+          "London, UK",
         service_location: serviceLocation,
         booking_type: bookingPriority,
         selected_slot_id: selectedSlotId || slots[0]?.id || "",
@@ -488,9 +536,38 @@ export default function MechanicalPage() {
         car_model: carModel || "Vehicle",
         notes: notes || damageDesc || "Mechanical booking via Motor Market Club app",
         answers,
-        postcode: postcode || "London, UK",
-        latitude: userLat || "51.5074",
-        longitude: userLon || "-0.1278",
+        postcode:
+          postcode ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode")
+            : null) ||
+          "",
+        house:
+          house ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("user_house") || localStorage.getItem("house")
+            : null) ||
+          undefined,
+        floor:
+          floor ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("user_floor") || localStorage.getItem("floor")
+            : null) ||
+          undefined,
+        street:
+          street ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("user_street") || localStorage.getItem("street")
+            : null) ||
+          undefined,
+        city:
+          city ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("user_city") || localStorage.getItem("city")
+            : null) ||
+          undefined,
+        latitude: userLat || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) || "51.5074",
+        longitude: userLon || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) || "-0.1278",
         zone_id: DEFAULT_ZONE_ID,
         car_image: heroCarImage,
         payment_platform: "app",
@@ -559,7 +636,12 @@ export default function MechanicalPage() {
       } catch { }
 
       const confirmedMecId = String(bId || `MMC-MEC-${Date.now().toString().slice(-6)}`);
-      const resolvedMecAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+      const resolvedMecAddr =
+        locationAddress ||
+        (house && postcode ? `${house}, ${postcode}` : postcode) ||
+        serviceAddressJson ||
+        (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+
       saveConfirmedBooking({
         id: confirmedMecId,
         rawId: bId || confirmedMecId,
@@ -569,9 +651,14 @@ export default function MechanicalPage() {
         serviceCategoryName: "Mechanical & Garage",
         providerName: selectedProvider?.company_name || "Motor Market Club Mechanical Partner",
         providerPhone: selectedProvider?.company_phone,
-        serviceAddress: resolvedMecAddr,
-        pickupLocation: resolvedMecAddr,
+        serviceAddress: serviceAddressJson || locationAddress || resolvedMecAddr,
+        pickupLocation: locationAddress || resolvedMecAddr,
+        locationAddress: locationAddress || resolvedMecAddr,
         postcode: postcode || "",
+        house: house || "",
+        floor: floor || "",
+        street: street || "",
+        city: city || "",
         totalAmount: numericPrice,
         isPaid: false,
         paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
@@ -614,6 +701,19 @@ export default function MechanicalPage() {
         paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
         scheduleDate: bookingDate,
         scheduleTime: bookingTime || "11:00",
+        serviceAddress: serviceAddressJson || locationAddress || resolvedMecAddr,
+        pickupLocation: locationAddress || resolvedMecAddr,
+        locationAddress: locationAddress || resolvedMecAddr,
+        postcode: postcode || "",
+        house: house || "",
+        floor: floor || "",
+        street: street || "",
+        city: city || "",
+        pickupLocation: locationAddress || resolvedMecAddr,
+        locationAddress: locationAddress || resolvedMecAddr,
+        postcode: postcode || "",
+        house: house || "",
+        floor: floor || "",
       });
       if (bId && String(bId) !== confirmedMecId) {
         saveBookingMeta(String(bId), {
@@ -628,6 +728,12 @@ export default function MechanicalPage() {
           paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
           scheduleDate: bookingDate,
           scheduleTime: bookingTime || "11:00",
+          serviceAddress: serviceAddressJson || locationAddress || resolvedMecAddr,
+          pickupLocation: locationAddress || resolvedMecAddr,
+          locationAddress: locationAddress || resolvedMecAddr,
+          postcode: postcode || "",
+          house: house || "",
+          floor: floor || "",
         });
       }
 
@@ -801,25 +907,43 @@ export default function MechanicalPage() {
                       <input
                         ref={postcodeRef}
                         type="text"
-                        value={postcode}
-                        onChange={(e) => setPostcode(e.target.value)}
-                        placeholder="Enter Postcode or City"
-                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-8 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                        value={locationAddress || postcode}
+                        onChange={(e) => {
+                          setLocationAddress(e.target.value);
+                          const extracted = extractPostcode(e.target.value);
+                          if (extracted) setPostcode(extracted);
+                        }}
+                        placeholder="Enter Full Address, Postcode or City"
+                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-24 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                       />
-                      {postcode && (
+                      <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
+                        {(locationAddress || postcode) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLocationAddress("");
+                              setPostcode("");
+                              setHouse("");
+                              setFloor("");
+                              setUserLat("");
+                              setUserLon("");
+                            }}
+                            className="p-1 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setPostcode("");
-                            setUserLat("");
-                            setUserLon("");
-                          }}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                          onClick={() => setShowLocationModal(true)}
+                          className="px-2.5 py-1 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <MapPin size={11} />
+                          <span>Map</span>
                         </button>
-                      )}
+                      </div>
                     </div>
+
 
                     {/* Row 2: Car Registration No */}
                     <div className="relative">
@@ -1233,7 +1357,7 @@ export default function MechanicalPage() {
                       <div className="grid grid-cols-3 gap-1.5 bg-black/40 border border-zinc-800/80 rounded-2xl p-2 mb-3.5 text-center">
                         <div className="flex flex-col items-center justify-center p-1">
                           <span className="text-[10px] text-zinc-400 font-semibold uppercase flex items-center gap-1">
-                            <Navigation className="w-3 h-3 text-[#E8AF66]" /> Radius
+                            <NavigationIcon className="w-3 h-3 text-[#E8AF66]" /> Radius
                           </span>
                           <span className="text-[11px] sm:text-xs font-bold text-white mt-0.5 text-center leading-tight">{distMiles}</span>
                         </div>
@@ -1487,6 +1611,59 @@ export default function MechanicalPage() {
                     <span>Workshop Drop-Off</span>
                   </button>
                 </div>
+
+                {serviceLocation === "customer" && (
+                  <div className="p-3.5 rounded-2xl bg-[#18181B] border border-zinc-800 space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-[#E8AF66] uppercase tracking-wider flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        Service Location &amp; Address
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowLocationModal(true)}
+                        className="text-[10px] text-[#E8AF66] hover:underline font-bold"
+                      >
+                        Change Location
+                      </button>
+                    </div>
+                    <p className="text-xs text-white font-medium break-words">
+                      {[
+                        house ? `House/Flat: ${house}` : "",
+                        floor ? `Floor: ${floor}` : "",
+                        street ? `Street: ${street}` : "",
+                        city ? `City: ${city}` : "",
+                        locationAddress || (postcode ? `Postcode: ${postcode}` : "Location Selected"),
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                    {(house || floor || street || city) && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {house && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#d09a50]/15 border border-[#d09a50]/30 text-[#f2cb87] text-[10px] font-semibold">
+                            <span>House:</span> <strong className="text-white">{house}</strong>
+                          </span>
+                        )}
+                        {floor && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#d09a50]/15 border border-[#d09a50]/30 text-[#f2cb87] text-[10px] font-semibold">
+                            <span>Floor:</span> <strong className="text-white">{floor}</strong>
+                          </span>
+                        )}
+                        {street && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold">
+                            <span>🛣️ Street:</span> <strong className="text-white">{street}</strong>
+                          </span>
+                        )}
+                        {city && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[10px] font-semibold">
+                            <span>🏙️ City:</span> <strong className="text-white">{city}</strong>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2182,6 +2359,53 @@ export default function MechanicalPage() {
           </div>
         </section>
       )}
+
+      {/* Interactive Map Location Picker Modal */}
+      <LocationPickerModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        initialAddress={locationAddress || postcode}
+        initialPostcode={postcode}
+        initialHouse={house}
+        initialFloor={floor}
+        initialStreet={street}
+        initialCity={city}
+        initialLat={userLat}
+        initialLon={userLon}
+        onSelectLocation={(data: SelectedLocationData) => {
+          setLocationAddress(data.formattedAddress);
+          setPostcode(data.postcode);
+          setHouse(data.house);
+          setFloor(data.floor);
+          if (data.street) setStreet(data.street);
+          if (data.city) setCity(data.city);
+          setServiceAddressJson(data.service_address_json);
+          setUserLat(data.lat);
+          setUserLon(data.lon);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("user_address", data.formattedAddress);
+            localStorage.setItem("user_postcode", data.postcode);
+            localStorage.setItem("postcode", data.postcode);
+            localStorage.setItem("user_house", data.house);
+            localStorage.setItem("house", data.house);
+            localStorage.setItem("user_floor", data.floor);
+            localStorage.setItem("floor", data.floor);
+            if (data.street) {
+              localStorage.setItem("user_street", data.street);
+              localStorage.setItem("street", data.street);
+            }
+            if (data.city) {
+              localStorage.setItem("user_city", data.city);
+              localStorage.setItem("city", data.city);
+            }
+            localStorage.setItem("user_lat", data.lat);
+            localStorage.setItem("user_lon", data.lon);
+            localStorage.setItem("service_address", data.service_address_json);
+            localStorage.setItem("service_address_json", data.service_address_json);
+            localStorage.setItem("service_address_id", data.address_id);
+          }
+        }}
+      />
     </div>
   );
 }

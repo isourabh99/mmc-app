@@ -253,6 +253,8 @@ export interface ChauffeurBookingPayload {
   pickup_coordinates?: ChauffeurBookingCoordinates;
   drop_location: string;
   drop_coordinates?: ChauffeurBookingCoordinates;
+  street?: string;
+  city?: string;
   payment_method: string;
   is_partial?: number | 0 | 1;
   payment_platform?: string;

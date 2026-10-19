@@ -83,6 +83,8 @@ import BodyworkProviderProfileView from "./components/BodyworkProviderProfileVie
 import BodyworkQuotesView from "./components/BodyworkQuotesView";
 import BodyworkBookingView from "./components/BodyworkBookingView";
 import { searchPlaces, type LocationSuggestion } from "@/lib/service/location.service";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import type { SelectedLocationData } from "@/lib/service/address.helper";
 import {
     saveServiceFormDraft,
     getServiceFormDraft,
@@ -92,6 +94,7 @@ import {
 export default function BodyworkPage() {
     const router = useRouter();
     const { showToast } = useToast();
+    const [showLocationModal, setShowLocationModal] = useState(false);
 
     // ---------------------------------------------------------------------------
     // Dedicated Full-Page View Navigation State
@@ -135,6 +138,12 @@ export default function BodyworkPage() {
     // Form & Provider State
     // ---------------------------------------------------------------------------
     const [postcode, setPostcode] = useState("");
+    const [locationAddress, setLocationAddress] = useState("");
+    const [house, setHouse] = useState("");
+    const [floor, setFloor] = useState("");
+    const [street, setStreet] = useState("");
+    const [city, setCity] = useState("");
+    const [serviceAddressJson, setServiceAddressJson] = useState("");
     const [regNo, setRegNo] = useState("");
     const [carModel, setCarModel] = useState("");
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -230,6 +239,25 @@ export default function BodyworkPage() {
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
         localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
+        const storedLat = localStorage.getItem("user_lat");
+        const storedLon = localStorage.getItem("user_lon");
+        if (storedLat) setUserLat(storedLat);
+        if (storedLon) setUserLon(storedLon);
+        const storedAddress = localStorage.getItem("user_address");
+        const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+        const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+        const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+        const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+        const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+        const storedJson = localStorage.getItem("service_address_json");
+        if (storedAddress) setLocationAddress(storedAddress);
+        if (storedPostcode) setPostcode(storedPostcode);
+        if (storedHouse) setHouse(storedHouse);
+        if (storedFloor) setFloor(storedFloor);
+        if (storedStreet && !storedStreet.toLowerCase().includes("baker")) setStreet(storedStreet);
+        if (storedCity) setCity(storedCity);
+        if (storedJson) setServiceAddressJson(storedJson);
+
         const handleClickOutsideLocation = (e: globalThis.MouseEvent) => {
             if (locationContainerRef.current && !locationContainerRef.current.contains(e.target as Node)) {
                 setShowLocationDropdown(false);
@@ -240,7 +268,9 @@ export default function BodyworkPage() {
     }, []);
 
     const handleLocationChange = (text: string) => {
-        setPostcode(text);
+        setLocationAddress(text);
+        const extracted = extractPostcode(text);
+        if (extracted) setPostcode(extracted);
         if (locationDebounceTimer.current) {
             clearTimeout(locationDebounceTimer.current);
         }
@@ -267,7 +297,9 @@ export default function BodyworkPage() {
 
     const handleSelectLocation = (s: LocationSuggestion) => {
         const fullAddress = s.address && s.address !== s.name ? `${s.name}, ${s.address}` : (s.address || s.name);
-        setPostcode(fullAddress);
+        setLocationAddress(fullAddress);
+        const extracted = extractPostcode(fullAddress);
+        if (extracted) setPostcode(extracted);
         setUserLat(String(s.latitude));
         setUserLon(String(s.longitude));
         setShowLocationDropdown(false);
@@ -276,6 +308,10 @@ export default function BodyworkPage() {
             localStorage.setItem("user_lat", String(s.latitude));
             localStorage.setItem("user_lon", String(s.longitude));
             localStorage.setItem("user_address", fullAddress);
+            if (extracted) {
+                localStorage.setItem("user_postcode", extracted);
+                localStorage.setItem("postcode", extracted);
+            }
         }
     };
 
@@ -791,7 +827,14 @@ export default function BodyworkPage() {
                 service_schedule: formattedSchedule,
                 booking_type: bookingType,
                 selected_slot_id: selectedSlotId,
-                service_address_id: serviceAddressId || "6",
+                service_address: serviceAddressJson || (typeof window !== "undefined" ? localStorage.getItem("service_address_json") || localStorage.getItem("service_address") : null) || locationAddress || undefined,
+                postcode: postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || "",
+                house: house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                floor: floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined,
+                latitude: userLat,
+                longitude: userLon,
                 notes: combinedNotes,
                 car_image: bookingCarImage,
                 amount: totalBookingPrice || depositAmount,
@@ -843,7 +886,11 @@ export default function BodyworkPage() {
             );
 
             if (confirmedRefId) {
-                const resolvedAddr = postcode || (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
+                const resolvedAddr =
+                    locationAddress ||
+                    (house && postcode ? `${house}, ${postcode}` : postcode) ||
+                    serviceAddressJson ||
+                    (userLat ? `Coordinates: ${userLat}, ${userLon}` : "London, UK");
                 const vReg = selectedPostForBids?.car_registration_number || "Vehicle";
                 const vModel = selectedPostForBids?.car_model || "Vehicle";
                 saveBookingMeta(confirmedRefId, {
@@ -858,6 +905,14 @@ export default function BodyworkPage() {
                     paymentStatus: "Pending Payment",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
                     scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
+                    postcode: postcode || "",
+                    house: house || "",
+                    floor: floor || "",
+                    street: street || "",
+                    city: city || "",
                 });
                 saveConfirmedBooking({
                     id: String(confirmedRefId),
@@ -867,9 +922,14 @@ export default function BodyworkPage() {
                     serviceTitle: "Bodywork & Paint Repair",
                     providerName: bookingProviderModal?.company_name || "Specialist Bodyshop",
                     providerPhone: bookingProviderModal?.company_phone,
-                    serviceAddress: resolvedAddr,
-                    pickupLocation: resolvedAddr,
+                    serviceAddress: serviceAddressJson || locationAddress || resolvedAddr,
+                    pickupLocation: locationAddress || resolvedAddr,
+                    locationAddress: locationAddress || resolvedAddr,
                     postcode: postcode || "",
+                    house: house || "",
+                    floor: floor || "",
+                    street: street || "",
+                    city: city || "",
                     vehicleReg: vReg,
                     vehicleModel: vModel,
                     totalAmount: effectivePrice,
@@ -1028,10 +1088,15 @@ export default function BodyworkPage() {
             let addrId = serviceAddressId;
             if (!addrId) {
                 try {
+                    const fullCombinedAddress = locationAddress || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || postcode;
                     addrId = await getOrCreateCustomerAddressId(
-                        postcode || "London, UK",
+                        fullCombinedAddress || "London, UK",
                         userLat || "51.5074",
-                        userLon || "-0.1278"
+                        userLon || "-0.1278",
+                        house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                        floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                        street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                        city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined
                     );
                 } catch {
                     addrId = "295";
@@ -1058,6 +1123,7 @@ export default function BodyworkPage() {
             }
 
             const selectedNames = selectedServices.length > 0 ? selectedServices.join(", ") : "Bodywork & Paint Repair";
+            const fullAddrText = locationAddress || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || postcode;
 
             await sendQuotationRequest({
                 service_ids: serviceIds,
@@ -1069,6 +1135,14 @@ export default function BodyworkPage() {
                 damage_description: step2DamageDesc.trim() || damageDesc.trim() || `Requesting quotes for: ${selectedNames}`,
                 booking_schedule: scheduleDate,
                 service_address_id: addrId || "295",
+                service_address: serviceAddressJson || fullAddrText,
+                postcode: postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || undefined,
+                house: house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+                floor: floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+                street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+                city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined,
+                latitude: userLat || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : undefined) || undefined,
+                longitude: userLon || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : undefined) || undefined,
                 car_images: heroCarImages,
                 car_image: heroCarImages[0] || null,
                 answers: assessmentAnswers,
@@ -1432,24 +1506,27 @@ export default function BodyworkPage() {
                                                     <input
                                                         ref={postcodeRef}
                                                         type="text"
-                                                        value={postcode}
+                                                        value={locationAddress || postcode}
                                                         onChange={(e) => handleLocationChange(e.target.value)}
                                                         onFocus={() => {
                                                             if (locationSuggestions.length > 0) setShowLocationDropdown(true);
                                                         }}
-                                                        placeholder="Enter Postcode or City"
-                                                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
+                                                        placeholder="Enter Full Address, Postcode or City"
+                                                        className="w-full bg-[#1B1C20] border border-zinc-800/90 rounded-xl pl-10 pr-24 py-3 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#E8AF66] transition-colors"
                                                         autoComplete="off"
                                                     />
-                                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-1.5">
+                                                    <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
                                                         {searchingLocation && (
                                                             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#CEA46B]" />
                                                         )}
-                                                        {postcode && (
+                                                        {(locationAddress || postcode) && (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
+                                                                    setLocationAddress("");
                                                                     setPostcode("");
+                                                                    setHouse("");
+                                                                    setFloor("");
                                                                     setUserLat("");
                                                                     setUserLon("");
                                                                     setLocationSuggestions([]);
@@ -1460,6 +1537,14 @@ export default function BodyworkPage() {
                                                                 <X className="w-3.5 h-3.5" />
                                                             </button>
                                                         )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowLocationModal(true)}
+                                                            className="px-2.5 py-1 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                                                        >
+                                                            <MapPin size={11} />
+                                                            <span>Map</span>
+                                                        </button>
                                                     </div>
 
                                                     {/* Location Suggestions Dropdown */}
@@ -1487,6 +1572,7 @@ export default function BodyworkPage() {
                                                         </div>
                                                     )}
                                                 </div>
+
 
                                                 {/* Row 2: Car Registration No */}
                                                 <div className="relative">
@@ -2400,6 +2486,52 @@ export default function BodyworkPage() {
                     </div>
                 )
             )}
+
+            {/* Interactive Map Location Picker Modal */}
+            <LocationPickerModal
+                isOpen={showLocationModal}
+                onClose={() => setShowLocationModal(false)}
+                initialAddress={locationAddress || postcode}
+                initialPostcode={postcode}
+                initialHouse={house}
+                initialFloor={floor}
+                initialStreet={street}
+                initialCity={city}
+                initialLat={userLat}
+                initialLon={userLon}
+                onSelectLocation={(data: SelectedLocationData) => {
+                    setLocationAddress(data.formattedAddress || data.address);
+                    setPostcode(data.postcode);
+                    setHouse(data.house);
+                    setFloor(data.floor);
+                    if (data.street) setStreet(data.street);
+                    if (data.city) setCity(data.city);
+                    setUserLat(data.lat);
+                    setUserLon(data.lon);
+                    setServiceAddressJson(data.service_address_json);
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem("user_address", data.formattedAddress);
+                        localStorage.setItem("user_postcode", data.postcode);
+                        localStorage.setItem("user_lat", data.lat);
+                        localStorage.setItem("user_lon", data.lon);
+                        localStorage.setItem("user_house", data.house);
+                        localStorage.setItem("house", data.house);
+                        localStorage.setItem("user_floor", data.floor);
+                        localStorage.setItem("floor", data.floor);
+                        if (data.street) {
+                            localStorage.setItem("user_street", data.street);
+                            localStorage.setItem("street", data.street);
+                        }
+                        if (data.city) {
+                            localStorage.setItem("user_city", data.city);
+                            localStorage.setItem("city", data.city);
+                        }
+                        localStorage.setItem("service_address", data.service_address_json);
+                        localStorage.setItem("service_address_json", data.service_address_json);
+                        localStorage.setItem("service_address_id", data.address_id);
+                    }
+                }}
+            />
         </div>
     );
 }

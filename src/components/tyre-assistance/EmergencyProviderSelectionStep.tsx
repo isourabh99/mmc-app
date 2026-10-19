@@ -11,7 +11,7 @@ import {
   Clock,
   ShieldCheck,
   CheckCircle2,
-  Navigation,
+  Navigation as NavigationIcon,
   Loader2,
   SlidersHorizontal,
   ChevronLeft,
@@ -42,8 +42,10 @@ import {
   isUuid,
 } from "@/lib/service/tyre-assistance.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
-import { saveBookingMeta } from "@/lib/service/bookings.api";
+import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
 import { useToast } from "@/components/ToastProvider";
+import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+import { type SelectedLocationData, extractPostcode } from "@/lib/service/address.helper";
 
 interface EmergencyProviderSelectionStepProps {
   onBack: () => void;
@@ -162,14 +164,21 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
   // Situation Selection
   const [situationType, setSituationType] = useState<"puncture" | "burst-tyre">("puncture");
   const [customSituation, setCustomSituation] = useState<string>("");
-  const [tyreSize, setTyreSize] = useState<string>("195/65 R15");
-  const [vehicleReg, setVehicleReg] = useState<string>("UK22-XYZ-9999");
-  const [vehicleModel, setVehicleModel] = useState<string>("Honda Civic");
+  const [tyreSize, setTyreSize] = useState<string>("");
+  const [vehicleReg, setVehicleReg] = useState<string>("");
+  const [vehicleModel, setVehicleModel] = useState<string>("");
 
-  // Location
-  const [locationAddress, setLocationAddress] = useState<string>("London, UK");
+  // Location & Map Picker State
+  const [locationAddress, setLocationAddress] = useState<string>("");
+  const [locationPostcode, setLocationPostcode] = useState<string>("");
+  const [house, setHouse] = useState<string>("");
+  const [floor, setFloor] = useState<string>("");
+  const [street, setStreet] = useState<string>("");
+  const [city, setCity] = useState<string>("");
+  const [serviceAddressJson, setServiceAddressJson] = useState<string>("");
   const [latitude, setLatitude] = useState<number>(51.5074);
   const [longitude, setLongitude] = useState<number>(-0.1278);
+  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
   const [isDetectingGps, setIsDetectingGps] = useState<boolean>(false);
 
   // Assistance Type
@@ -185,8 +194,41 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
   const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true); // true => 1 (Deposit 25%), false => 0 (Online Payment Full)
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
-  // Auto detect GPS on mount
+  // Load cached location & auto detect GPS on mount
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedAddr = localStorage.getItem("user_address") || localStorage.getItem("service_address");
+      if (storedAddr && !storedAddr.startsWith("{")) {
+        setLocationAddress(storedAddr);
+      }
+      const storedPostcode = localStorage.getItem("user_postcode") || localStorage.getItem("postcode");
+      if (storedPostcode) setLocationPostcode(storedPostcode);
+
+      const storedHouse = localStorage.getItem("user_house") || localStorage.getItem("house");
+      if (storedHouse) setHouse(storedHouse);
+
+      const storedFloor = localStorage.getItem("user_floor") || localStorage.getItem("floor");
+      if (storedFloor) setFloor(storedFloor);
+
+      const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street");
+      if (storedStreet) setStreet(storedStreet);
+
+      const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city");
+      if (storedCity) setCity(storedCity);
+
+      const storedJson = localStorage.getItem("service_address_json");
+      if (storedJson) setServiceAddressJson(storedJson);
+
+      const storedLat = localStorage.getItem("user_lat");
+      const storedLon = localStorage.getItem("user_lon");
+      if (storedLat && storedLon) {
+        setLatitude(Number(storedLat));
+        setLongitude(Number(storedLon));
+        return;
+      }
+    } catch {}
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
         setLatitude(pos.coords.latitude);
@@ -312,8 +354,6 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           quantity: 1,
           is_terms_accepted: 1,
           zone_id: effectiveZoneId,
-          callback: callbackUrl,
-          is_partial: isPartialNum,
         });
       } catch (cartErr: any) {
         console.error("Cart add failed:", cartErr);
@@ -338,7 +378,14 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         is_partial: isPartialNum,
         zone_id: effectiveZoneId,
         service_schedule: serviceSchedule,
-        service_address_id: "9",
+        service_address: serviceAddressJson || locationAddress,
+        postcode: locationPostcode,
+        house: house,
+        floor: floor,
+        street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+        city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
+        latitude: latitude,
+        longitude: longitude,
         service_location: "customer",
         booking_type: "emergency",
         car_registration_number: (vehicleReg || "UK22-XYZ-9999").toUpperCase(),
@@ -375,7 +422,12 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           is_partial: 0,
           zone_id: DEFAULT_ZONE_ID,
           service_schedule: serviceSchedule,
-          service_address_id: "9",
+          service_address: serviceAddressJson || locationAddress,
+          postcode: locationPostcode,
+          house: house,
+          floor: floor,
+          latitude: latitude,
+          longitude: longitude,
           service_location: "customer",
           booking_type: "emergency",
           car_registration_number: (vehicleReg || "UK22-XYZ-9999").toUpperCase(),
@@ -429,7 +481,46 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         localStorage.setItem("last_tyre_booking_id", String(confirmedRefId));
       } catch { }
 
+      const resolvedEmergencyAddr =
+        locationAddress ||
+        (house && locationPostcode ? `${house}, ${locationPostcode}` : locationPostcode) ||
+        serviceAddressJson ;
+
       try {
+        saveConfirmedBooking({
+          id: String(confirmedRefId),
+          rawId: confirmedRefId,
+          readableId: confirmedRefId,
+          serviceType: "emergency",
+          serviceCategoryName: "Tyre Assistance",
+          serviceTitle: `Tyre Assistance: Emergency (${situationType})`,
+          serviceSubtitle: customSituation || `Emergency tyre repair (${situationType})`,
+          providerName: selectedProvider?.company_name || "Emergency Mobile Tyre Provider",
+          providerPhone: selectedProvider?.company_phone,
+          serviceAddress: serviceAddressJson || locationAddress || resolvedEmergencyAddr,
+          pickupLocation: locationAddress || resolvedEmergencyAddr,
+          locationAddress: locationAddress || resolvedEmergencyAddr,
+          postcode: locationPostcode || "",
+          house: house || "",
+          floor: floor || "",
+          street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+          city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
+          vehicleModel: vehicleModel || "Vehicle",
+          vehicleReg: (vehicleReg || "UK22-XYZ-9999").toUpperCase(),
+          totalAmount: totalAmount,
+          paidAmount: depositAmt,
+          dueAmount: dueAmt,
+          isPaid: isPartialNum === 0,
+          isPartiallyPaid: isPartialNum === 1,
+          paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Pending Payment",
+          paymentMethod: "Stripe (Online)",
+          status: "accepted",
+          statusDisplay: "Accepted",
+          scheduleDate: serviceSchedule.split(" ")[0],
+          scheduleTime: serviceSchedule.split(" ")[1] || "Immediate",
+          createdAt: new Date().toISOString(),
+        });
+
         saveBookingMeta(confirmedRefId, {
           serviceTitle: `Tyre Assistance: Emergency (${situationType})`,
           serviceCategoryName: "Tyre Assistance",
@@ -442,6 +533,14 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           isPartiallyPaid: isPartialNum === 1,
           paidAmount: depositAmt,
           dueAmount: dueAmt,
+          serviceAddress: serviceAddressJson || locationAddress || resolvedEmergencyAddr,
+          pickupLocation: locationAddress || resolvedEmergencyAddr,
+          locationAddress: locationAddress || resolvedEmergencyAddr,
+          postcode: locationPostcode || "",
+          house: house || "",
+          floor: floor || "",
+          street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+          city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
         });
       } catch { }
 
@@ -620,41 +719,70 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
               </div>
             </div>
 
-            {/* Location Section */}
+            {/* Location Section with Map Picker */}
             <div className="space-y-3 pt-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                <MapPin size={14} className="text-[#FAD293]" />
-                Location
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
+                  <MapPin size={14} className="text-[#FAD293]" />
+                  Location
+                </label>
                 <button
                   type="button"
-                  onClick={handleDetectLocation}
-                  disabled={isDetectingGps}
-                  className="py-3.5 px-4 rounded-2xl bg-[#FAD293] hover:bg-[#FFF0D4] text-black font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg"
+                  onClick={() => setShowLocationModal(true)}
+                  className="px-3 py-1 rounded-xl bg-[#FAD293]/15 hover:bg-[#FAD293]/25 border border-[#FAD293]/40 text-[#FAD293] text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
                 >
-                  {isDetectingGps ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin text-black" />
-                      <span>Detecting Location...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Navigation size={16} />
-                      <span>Auto-Detect My Location</span>
-                    </>
-                  )}
+                  <MapPin size={13} />
+                  <span>Pick on Map</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLocationModal(true)}
+                  className="sm:col-span-5 py-3.5 px-4 rounded-2xl bg-[#FAD293] hover:bg-[#FFF0D4] text-black font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg active:scale-[0.98]"
+                >
+                  <MapPin size={16} />
+                  <span>Choose on Map</span>
                 </button>
 
-                <input
-                  type="text"
-                  value={locationAddress}
-                  onChange={(e) => setLocationAddress(e.target.value)}
-                  placeholder="Or enter street address manually..."
-                  className="w-full bg-black/60 border border-white/10 rounded-2xl px-4 py-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
-                />
+                <div className="sm:col-span-7 relative">
+                  <input
+                    type="text"
+                    value={locationAddress}
+                    onChange={(e) => setLocationAddress(e.target.value)}
+                    placeholder="Enter address, or pick on map..."
+                    className="w-full bg-black/60 border border-white/10 rounded-2xl pl-4 pr-24 py-3.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDetectLocation();
+                      }}
+                      disabled={isDetectingGps}
+                      title="Detect live GPS location"
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FAD293] transition cursor-pointer"
+                    >
+                      {isDetectingGps ? (
+                        <Loader2 size={14} className="animate-spin text-[#FAD293]" />
+                      ) : (
+                        <NavigationIcon size={14} />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationModal(true)}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#FAD293]/20 hover:bg-[#FAD293]/30 text-[#FAD293] text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <MapPin size={12} />
+                      <span>Map</span>
+                    </button>
+                  </div>
+                </div>
               </div>
+
             </div>
 
             {/* Action Buttons */}
@@ -943,7 +1071,7 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold text-white">{selectedProvider.company_name}</h3>
                     <span className="text-[10px] bg-white/10 text-white/80 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Navigation size={10} /> 1.2 Miles away
+                      <NavigationIcon size={10} /> 1.2 Miles away
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-white/60">
@@ -1190,6 +1318,52 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           </div>
         </div>
       )}
+
+      {/* Interactive Map Location Picker Modal */}
+      <LocationPickerModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        initialAddress={locationAddress}
+        initialPostcode={locationPostcode}
+        initialHouse={house}
+        initialFloor={floor}
+        initialStreet={street}
+        initialCity={city}
+        initialLat={latitude}
+        initialLon={longitude}
+        onSelectLocation={(data: SelectedLocationData) => {
+          setLocationAddress(data.formattedAddress || data.address);
+          setLocationPostcode(data.postcode);
+          setLatitude(Number(data.lat));
+          setLongitude(Number(data.lon));
+          setHouse(data.house);
+          setFloor(data.floor);
+          if (data.street) setStreet(data.street);
+          if (data.city) setCity(data.city);
+          setServiceAddressJson(data.service_address_json);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("user_address", data.formattedAddress);
+            localStorage.setItem("user_postcode", data.postcode);
+            localStorage.setItem("user_lat", data.lat);
+            localStorage.setItem("user_lon", data.lon);
+            localStorage.setItem("user_house", data.house);
+            localStorage.setItem("house", data.house);
+            localStorage.setItem("user_floor", data.floor);
+            localStorage.setItem("floor", data.floor);
+            if (data.street) {
+              localStorage.setItem("user_street", data.street);
+              localStorage.setItem("street", data.street);
+            }
+            if (data.city) {
+              localStorage.setItem("user_city", data.city);
+              localStorage.setItem("city", data.city);
+            }
+            localStorage.setItem("service_address", data.service_address_json);
+            localStorage.setItem("service_address_json", data.service_address_json);
+          }
+          setShowLocationModal(false);
+        }}
+      />
     </div>
   );
 };

@@ -233,22 +233,6 @@ function BookingSuccessContent() {
 
       const targetDeepLink = `/account?tab=bookings&status=ongoing&bookingId=${encodeURIComponent(String(effectiveBookingId))}`;
 
-      // Record in-app notification for the notification bell & notifications page (only once)
-      addCustomBookingNotification({
-        bookingId: effectiveBookingId,
-        readableId: cached?.readable_id || effectiveBookingId,
-        title: "Payment Successful! 🎉",
-        subtitle: `Ref #${effectiveBookingId} • Confirmed`,
-        description: `Your payment was processed successfully. Booking #${effectiveBookingId} is now confirmed.`,
-        category: detectedType as any,
-        status: "ongoing",
-        statusLabel: "Payment Confirmed",
-        totalAmount: rawPrice,
-        paymentMethod: "Stripe (Online)",
-        scheduleTime: cached?.schedule || "Confirmed",
-        targetUrl: targetDeepLink,
-      });
-
       // Notify notification bell & navbar
       window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 
@@ -354,7 +338,7 @@ function BookingSuccessContent() {
           <div className="rounded-2xl border border-zinc-800 bg-[#1A1A1F] p-4 sm:p-5 text-left space-y-3.5 text-xs">
             {/* Booking Ref */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <span className="text-zinc-400 font-medium">Booking Reference</span>
+              <span className="text-zinc-400 font-medium">Booking ID</span>
               <div className="flex items-center gap-2">
                 <span className="font-mono font-bold text-white text-sm">
                   #{effectiveBookingRef}
@@ -363,7 +347,7 @@ function BookingSuccessContent() {
                   type="button"
                   onClick={handleCopy}
                   className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer"
-                  title="Copy Reference"
+                  title="Copy Booking ID"
                 >
                   {copied ? (
                     <Check className="w-3.5 h-3.5 text-emerald-400" />

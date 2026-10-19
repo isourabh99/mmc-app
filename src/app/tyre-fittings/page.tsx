@@ -16,7 +16,6 @@ import {
   Disc,
   Receipt,
   CheckCircle2,
-  Navigation,
 } from "lucide-react";
 import {
   TyreCategory,
@@ -274,6 +273,11 @@ export default function TyreAssistancePage() {
     acceptedPrivacy: boolean;
     providerId?: string;
     isPartial?: number;
+    house?: string;
+    floor?: string;
+    street?: string;
+    city?: string;
+    serviceAddress?: string;
   }) => {
     if (!isAuthenticated()) {
       showToast("Please login to submit tyre assistance request.", "info");
@@ -290,6 +294,11 @@ export default function TyreAssistancePage() {
       selectedSlotId: details.selectedSlotId,
       locationAddress: details.locationAddress,
       locationPostcode: details.locationPostcode,
+      house: details.house,
+      floor: details.floor,
+      street: details.street,
+      city: details.city,
+      serviceAddress: details.serviceAddress,
       latitude: details.latitude,
       longitude: details.longitude,
       vehicleMakeModel: details.vehicleMakeModel,
@@ -354,6 +363,13 @@ export default function TyreAssistancePage() {
         );
       } catch { }
 
+      const resolvedTyreAddr =
+        details.serviceAddress ||
+        details.locationAddress ||
+        (details.house && details.locationPostcode ? `${details.house}, ${details.locationPostcode}` : details.locationPostcode) ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
+        "London, UK";
+
       saveBookingMeta(confirmedRefId, {
         serviceTitle: `Tyre Fitting: ${booking.vehicleMakeModel || "Vehicle"}`,
         serviceCategoryName: "Tyre Assistance",
@@ -366,6 +382,48 @@ export default function TyreAssistancePage() {
         isPartiallyPaid: isPartialNum === 1,
         paidAmount: Number(depositVal),
         dueAmount: Number(dueVal),
+        serviceAddress: resolvedTyreAddr,
+        locationAddress: details.locationAddress || resolvedTyreAddr,
+        pickupLocation: details.locationAddress || resolvedTyreAddr,
+        house: details.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+        floor: details.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+        street: details.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : undefined) || undefined,
+        city: details.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : undefined) || undefined,
+        postcode: details.locationPostcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : undefined) || undefined,
+      });
+
+      saveConfirmedBooking({
+        id: confirmedRefId,
+        rawId: confirmedRefId,
+        readableId: confirmedRefId,
+        serviceType: "tyre",
+        serviceTitle: `Tyre Fitting: ${booking.vehicleMakeModel || "Vehicle"} (${booking.category === "emergency" ? "Emergency" : "Replacement"})`,
+        serviceCategoryName: "Tyre Assistance",
+        providerName: booking.provider?.name || "Motor Market Club Tyre Specialist",
+        providerPhone: booking.provider?.phone,
+        serviceAddress: resolvedTyreAddr,
+        pickupLocation: details.locationAddress || resolvedTyreAddr,
+        locationAddress: details.locationAddress || resolvedTyreAddr,
+        postcode: details.locationPostcode || "",
+        house: details.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : "") || "",
+        floor: details.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : "") || "",
+        street: details.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : "") || "",
+        city: details.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : "") || "",
+        totalAmount: numericFare,
+        isPaid: isPartialNum === 0,
+        isPartiallyPaid: isPartialNum === 1,
+        paidAmount: Number(depositVal),
+        dueAmount: Number(dueVal),
+        paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Full Online Payment",
+        paymentMethod: "Stripe (Online)",
+        status: "accepted",
+        statusDisplay: "Accepted",
+        scheduleDate: booking.scheduledDate || new Date().toISOString().split("T")[0],
+        scheduleTime: booking.scheduledTimeSlot || "ASAP",
+        fullScheduleDisplay: `${booking.scheduledDate || "Today"} ${booking.scheduledTimeSlot || "ASAP"}`,
+        vehicleModel: booking.vehicleMakeModel,
+        vehicleReg: booking.vehicleRegistration,
+        createdAt: new Date().toISOString(),
       });
 
       let targetPaymentUrl =
@@ -421,6 +479,7 @@ export default function TyreAssistancePage() {
 
       const numericFare = Number(currentBooking.quote?.fareAmount || 0);
       const depositVal = isPartialNum === 1 ? (numericFare * 0.25).toFixed(2) : numericFare.toFixed(2);
+      const dueVal = isPartialNum === 1 ? (numericFare * 0.75).toFixed(2) : "0.00";
 
       const updated = await confirmQuoteAndAssignTechnician(currentBooking.id, {
         is_partial: isPartialNum,
@@ -455,6 +514,13 @@ export default function TyreAssistancePage() {
         );
       } catch { }
 
+      const resolvedTyreAddr =
+        (currentBooking as any).serviceAddress ||
+        currentBooking.locationAddress ||
+        (currentBooking.house && currentBooking.locationPostcode ? `${currentBooking.house}, ${currentBooking.locationPostcode}` : currentBooking.locationPostcode) ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
+        "London, UK";
+
       saveBookingMeta(confirmedRefId, {
         serviceTitle: `Tyre Fitting: ${currentBooking.vehicleMakeModel || "Vehicle"}`,
         serviceCategoryName: "Tyre Assistance",
@@ -463,6 +529,17 @@ export default function TyreAssistancePage() {
         vehicleReg: currentBooking.vehicleRegistration,
         providerName: currentBooking.provider?.name,
         price: numericFare,
+        paidAmount: Number(depositVal),
+        dueAmount: Number(dueVal),
+        isPaid: isPartialNum === 0,
+        isPartiallyPaid: isPartialNum === 1,
+        paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Pending Payment",
+        serviceAddress: resolvedTyreAddr,
+        locationAddress: currentBooking.locationAddress || resolvedTyreAddr,
+        pickupLocation: currentBooking.locationAddress || resolvedTyreAddr,
+        house: currentBooking.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : undefined) || undefined,
+        floor: currentBooking.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : undefined) || undefined,
+        postcode: currentBooking.locationPostcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : undefined) || undefined,
       });
 
       saveConfirmedBooking({
@@ -474,8 +551,17 @@ export default function TyreAssistancePage() {
         serviceCategoryName: "Tyre Assistance",
         providerName: currentBooking.provider?.name || "Motor Market Club Tyre Specialist",
         providerPhone: currentBooking.provider?.phone,
+        serviceAddress: resolvedTyreAddr,
+        pickupLocation: currentBooking.locationAddress || resolvedTyreAddr,
+        locationAddress: currentBooking.locationAddress || resolvedTyreAddr,
+        postcode: currentBooking.locationPostcode || "",
+        house: currentBooking.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : "") || "",
+        floor: currentBooking.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : "") || "",
         totalAmount: numericFare,
-        isPaid: false,
+        paidAmount: Number(depositVal),
+        dueAmount: Number(dueVal),
+        isPaid: isPartialNum === 0,
+        isPartiallyPaid: isPartialNum === 1,
         paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Full Online Payment",
         paymentMethod: "Stripe (Online)",
         status: "accepted",
@@ -648,10 +734,10 @@ export default function TyreAssistancePage() {
           {/* Main Active Step Column */}
           <div
             className={`w-full mx-auto ${currentStep === "emergency_flow" ||
-                currentStep === "replacement_tyres" ||
-                currentStep === "schedule_location"
-                ? "lg:col-span-12"
-                : "lg:col-span-8 max-w-2xl lg:max-w-none"
+              currentStep === "replacement_tyres" ||
+              currentStep === "schedule_location"
+              ? "lg:col-span-12"
+              : "lg:col-span-8 max-w-2xl lg:max-w-none"
               }`}
           >
             {currentStep === "category" && (
@@ -706,6 +792,10 @@ export default function TyreAssistancePage() {
                         vatAmount: 12,
                         fareAmount: 60,
                       },
+                      locationPostcode: booking.locationPostcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || "",
+                      latitude: booking.latitude || 51.5074,
+                      longitude: booking.longitude || -0.1278,
+                      acceptedPrivacy: true,
                       status: "confirmed",
                       createdAt: new Date().toISOString(),
                       updatedAt: new Date().toISOString(),

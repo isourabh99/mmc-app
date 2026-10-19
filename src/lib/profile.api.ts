@@ -46,20 +46,44 @@ export const updateCustomerProfile = async (
   return response.data;
 };
 
+export interface CustomerAddressPayload {
+  lat: string | number;
+  lon: string | number;
+  address: string;
+  city?: string;
+  street?: string;
+  zip_code?: string;
+  country?: string;
+  address_type?: string;
+  contact_person_name?: string;
+  contact_person_number?: string;
+  address_label?: string;
+  house?: string;
+  floor?: string;
+}
+
 export const saveCustomerAddress = async (
-  data: {
-    lat: string;
-    lon: string;
-    address: string;
-    address_type: string;
-    contact_person_name: string;
-    contact_person_number: string;
-    address_label: string;
-  }
+  data: CustomerAddressPayload
 ) => {
+  const payload = {
+    lat: String(data.lat || "51.5074"),
+    lon: String(data.lon || "-0.1278"),
+    address: data.address || "",
+    city: data.city || "",
+    street: data.street || "",
+    zip_code: data.zip_code || "",
+    country: data.country || "",
+    address_type: data.address_type || "service",
+    contact_person_name: data.contact_person_name || "Customer",
+    contact_person_number: data.contact_person_number,
+    address_label: data.address_label || "Home",
+    house: data.house || "",
+    floor: data.floor || "",
+  };
+
   const response = await apiClient.post(
     "/customer/address",
-    data
+    payload
   );
 
   return response.data;

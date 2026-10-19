@@ -85,6 +85,11 @@ export interface TyreAssistanceBooking {
   // Location
   locationAddress: string;
   locationPostcode: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
+  serviceAddress?: string;
   latitude: number;
   longitude: number;
   

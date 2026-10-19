@@ -152,7 +152,7 @@ export const BookingConfirmedStep: React.FC<BookingConfirmedStepProps> = ({
           <div className="flex-1">
             <span className="text-[11px] text-white/45 block">Service Location</span>
             <span className="text-xs sm:text-sm font-semibold text-white">
-              {booking?.locationAddress || (booking as any)?.service_address || "Customer Location, United Kingdom"}
+              {booking?.locationAddress || (booking as any)?.service_address}
             </span>
           </div>
         </div>

@@ -29,7 +29,6 @@
     ShieldAlert,
     PhoneCall,
     Zap,
-    Navigation,
     ArrowRight,
     ChevronRight,
     Star,
@@ -44,6 +43,7 @@
     Layers,
     Banknote,
     RefreshCw,
+    Navigation as NavigationIcon,
   } from "lucide-react";
   import {
     getEmergencyServices,
@@ -66,6 +66,8 @@
     getServiceFormDraft,
     clearServiceFormDraft,
   } from "@/lib/serviceFormDraft";
+  import { LocationPickerModal } from "@/components/common/LocationPickerModal";
+  import type { SelectedLocationData } from "@/lib/service/address.helper";
 
   export default function EmergencyAssistancePage() {
     const router = useRouter();
@@ -81,6 +83,7 @@
     const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
     const [isSearchingLocation, setIsSearchingLocation] = useState(false);
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+    const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
     const locationInputRef = useRef<HTMLDivElement>(null);
 
     const [carReg, setCarReg] = useState("");
@@ -137,8 +140,8 @@
     // Location / GPS Detection
     const [detectingGps, setDetectingGps] = useState(false);
     const [detectedCoords, setDetectedCoords] = useState<{ lat?: number; lon?: number }>({
-      lat: 22.66215,
-      lon: 75.9035,
+      lat: 51.5074,
+      lon: -0.1278,
     });
 
     // User Profile data for Existing Vehicle
@@ -700,25 +703,6 @@
               <Siren className={`${isSidebarMode ? "w-4 h-4" : "w-5 h-5"} text-red-500 animate-pulse`} />
             </div>
           </div>
-
-          {/* Quick action buttons: Add Vehicle + Use Location */}
-          <div className="flex items-center justify-between gap-2 pt-0.5">
-
-
-            <button
-              type="button"
-              onClick={handleDetectLiveLocation}
-              disabled={detectingGps}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-[#FAD293] transition cursor-pointer"
-            >
-              {detectingGps ? (
-                <Loader2 className="w-3 h-3 animate-spin text-[#FAD293]" />
-              ) : (
-                <Compass className="w-3 h-3 text-[#FAD293]" />
-              )}
-              <span>{detectingGps ? "Detecting..." : "Live GPS"}</span>
-            </button>
-          </div>
         </div>
 
         {/* Form Fields */}
@@ -744,7 +728,7 @@
                 className="w-full bg-transparent text-xs text-white placeholder:text-zinc-500 font-semibold focus:outline-none tracking-wide"
               />
 
-              <div className="flex items-center gap-1 ml-1.5">
+              <div className="flex items-center gap-1.5 ml-1.5 shrink-0">
                 {isSearchingLocation && (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
                 )}
@@ -760,15 +744,38 @@
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowLocationModal(true)}
+                  className="px-2.5 py-1 rounded-lg bg-[#d09a50]/20 hover:bg-[#d09a50]/30 border border-[#d09a50]/40 text-[#f2cb87] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                >
+                  <MapPin size={11} />
+                  <span>Map</span>
+                </button>
               </div>
             </div>
 
             {/* Autocomplete Suggestions Dropdown */}
-            {showLocationDropdown && locationSuggestions.length > 0 && (
+            {showLocationDropdown && (
               <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#14100c] border border-[#FAD293]/40 rounded-2xl p-2 shadow-2xl z-50 max-h-56 overflow-y-auto space-y-1 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-0.5 block">
-                  Matching Locations
-                </span>
+                <div className="pb-1 border-b border-zinc-800/80 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLocationDropdown(false);
+                      setShowLocationModal(true);
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-xl bg-[#d09a50]/15 hover:bg-[#d09a50]/25 border border-[#d09a50]/30 transition flex items-center gap-2 text-xs text-[#f2cb87] font-bold"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-[#FAD293] shrink-0" />
+                    <span>Pick pinpoint location on Map</span>
+                  </button>
+                </div>
+                {locationSuggestions.length > 0 && (
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-0.5 block">
+                    Matching Locations
+                  </span>
+                )}
                 {locationSuggestions.map((suggestion) => (
                   <button
                     key={suggestion.id}
@@ -1392,7 +1399,7 @@
                             <div className="grid grid-cols-3 gap-1.5 bg-black/50 border border-[#FAD293]/15 rounded-xl p-1.5 text-center">
                               <div className="flex flex-col items-center justify-center">
                                 <span className="text-[9px] text-zinc-400 font-semibold uppercase flex items-center gap-1">
-                                  <Navigation className="w-2.5 h-2.5 text-[#FAD293]" /> Distance
+                                  <NavigationIcon className="w-2.5 h-2.5 text-[#FAD293]" /> Distance
                                 </span>
                                 <span className="text-[11px] font-bold text-white">{distDisplay}</span>
                               </div>
@@ -1608,7 +1615,7 @@
 
                   <div className="p-4 rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-md flex items-start gap-3.5">
                     <div className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0 mt-0.5">
-                      <Navigation className="w-4 h-4" />
+                      <NavigationIcon className="w-4 h-4" />
                     </div>
                     <div>
                       <h4 className="text-xs sm:text-sm font-bold text-white">Nationwide UK Coverage</h4>
@@ -2032,6 +2039,31 @@
             </div>
           </div>
         )}
+
+        {/* Interactive Map Location Picker Modal */}
+        <LocationPickerModal
+          isOpen={showLocationModal}
+          onClose={() => setShowLocationModal(false)}
+          initialAddress={locationQuery}
+          initialPostcode={locationQuery}
+          initialLat={detectedCoords.lat ? String(detectedCoords.lat) : "51.5074"}
+          initialLon={detectedCoords.lon ? String(detectedCoords.lon) : "-0.1278"}
+          onSelectLocation={(data: SelectedLocationData) => {
+            setLocationQuery(data.formattedAddress || data.postcode);
+            setDetectedCoords({
+              lat: parseFloat(data.lat) || 51.5074,
+              lon: parseFloat(data.lon) || -0.1278,
+            });
+            if (typeof window !== "undefined") {
+              localStorage.setItem("user_address", data.formattedAddress);
+              localStorage.setItem("user_postcode", data.postcode);
+              localStorage.setItem("user_lat", data.lat);
+              localStorage.setItem("user_lon", data.lon);
+              localStorage.setItem("service_address", data.service_address_json);
+              localStorage.setItem("service_address_id", data.address_id);
+            }
+          }}
+        />
       </div>
     );
   }

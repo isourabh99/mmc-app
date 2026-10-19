@@ -79,6 +79,8 @@ export default function CarHireBookingClient() {
     latitude: 51.5074,
     longitude: -0.1278,
   });
+  const [street, setStreet] = useState<string>("");
+  const [city, setCity] = useState<string>("");
 
   const [paymentMethod, setPaymentMethod] = useState("cash_after_service");
   const [description, setDescription] = useState("");
@@ -165,12 +167,30 @@ export default function CarHireBookingClient() {
           }
 
           // Default initial address
-          const initialAddress =
-            details.address ||
-            (details.postcode
-              ? `${details.postcode}, London`
-              : "Silbury House, Sydenham Hill, London, SE26 6TU");
-          setDeliveryAddress(initialAddress);
+          if (typeof window !== "undefined") {
+            const storedStreet = localStorage.getItem("user_street") || localStorage.getItem("street") || "";
+            const storedCity = localStorage.getItem("user_city") || localStorage.getItem("city") || "";
+            if (storedStreet && !storedStreet.toLowerCase().includes("baker")) setStreet(storedStreet);
+            if (storedCity) setCity(storedCity);
+            const storedAddr = localStorage.getItem("user_location_address") || localStorage.getItem("customer_address");
+            if (storedAddr) {
+              setDeliveryAddress(storedAddr);
+            } else {
+              const initialAddress =
+                details.address ||
+                (details.postcode
+                  ? `${details.postcode}, London`
+                  : "");
+              setDeliveryAddress(initialAddress);
+            }
+          } else {
+            const initialAddress =
+              details.address ||
+              (details.postcode
+                ? `${details.postcode}, London`
+                : "");
+            setDeliveryAddress(initialAddress);
+          }
 
           // Default initial coordinates from provider if available
           if (details.provider?.coordinates) {
@@ -226,11 +246,26 @@ export default function CarHireBookingClient() {
   // Handle Location Autocomplete / GPS Select
   const handleLocationChange = (
     address: string,
-    coords?: { latitude: number; longitude: number }
+    coords?: { latitude: number; longitude: number },
+    details?: { street?: string; city?: string }
   ) => {
     setDeliveryAddress(address);
     if (coords) {
       setDeliveryCoords(coords);
+    }
+    if (details?.street) {
+      setStreet(details.street);
+      try {
+        localStorage.setItem("user_street", details.street);
+        localStorage.setItem("street", details.street);
+      } catch {}
+    }
+    if (details?.city) {
+      setCity(details.city);
+      try {
+        localStorage.setItem("user_city", details.city);
+        localStorage.setItem("city", details.city);
+      } catch {}
     }
   };
 
@@ -293,6 +328,8 @@ export default function CarHireBookingClient() {
             delivery_longitude: deliveryCoords.longitude,
             pickup_location: deliveryAddress.trim(),
             drop_location: deliveryAddress.trim(),
+            street: street.trim() || undefined,
+            city: city.trim() || undefined,
           }
           : {}),
         payment_method: "stripe",
@@ -413,6 +450,8 @@ export default function CarHireBookingClient() {
           paymentStatus: isPartialPayment ? "Partially Paid" : "Pay later",
           scheduleDate: startDate,
           scheduleTime: pickupTime,
+          street: street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") || "" : ""),
+          city: city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") || "" : ""),
         });
 
         triggerDevicePushNotification(
@@ -618,16 +657,19 @@ export default function CarHireBookingClient() {
                 </div>
 
                 {pickupType === "delivery" ? (
-                  <div className="space-y-1.5 animate-in fade-in duration-200">
+                  <div className="space-y-2.5 animate-in fade-in duration-200">
                     <LocationSearchInput
                       label="Delivery Destination Address"
                       placeholder="Type location, postcode or tap GPS detect..."
                       value={deliveryAddress}
                       coordinates={deliveryCoords}
+                      initialStreet={street}
+                      initialCity={city}
                       onChange={handleLocationChange}
                       required
                       type="pickup"
                     />
+
                     <div className="flex items-center justify-between text-[11px] text-white/40 px-1 pt-1">
                       <span>Coordinates: Lat {deliveryCoords.latitude.toFixed(4)}, Lng {deliveryCoords.longitude.toFixed(4)}</span>
                       <span className="text-[#FAD293]/80">Doorstep delivery to this address</span>

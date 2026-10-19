@@ -23,6 +23,7 @@ import {
   CreditCard,
   MapPin,
   X,
+  Tag,
 } from "lucide-react";
 import {
   BookingNotification,
@@ -31,6 +32,7 @@ import {
   markAllNotificationsAsRead,
   dismissNotification,
 } from "@/lib/service/notifications.api";
+import { formatToNumericBookingId } from "@/lib/service/bookings.api";
 import NotificationDetailModal from "@/components/NotificationDetailModal";
 
 export default function NotificationsPage() {
@@ -308,68 +310,82 @@ export default function NotificationsPage() {
               key={item.id}
               onClick={() => handleItemClick(item)}
               className={`
-                p-4 sm:p-5 rounded-3xl border transition-all duration-200 cursor-pointer
+                p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer
                 ${
                   item.read
-                    ? "border-white/5 bg-white/[0.02] hover:bg-white/[0.04] opacity-85 hover:opacity-100"
-                    : "border-[#FAD293]/30 bg-gradient-to-r from-[#FAD293]/[0.08] to-transparent hover:border-[#FAD293]/60 shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+                    ? "bg-[#14110e]/80 border-[#2a221a] hover:border-[#d9a85f]/30 hover:bg-[#191410]"
+                    : "bg-[#18130e] border-[#3d2e1d] hover:border-[#d9a85f]/60 hover:bg-[#1f1812] shadow-md"
                 }
               `}
             >
-              <div className="flex items-start gap-4">
-                {/* Icon */}
-                <div className="w-11 h-11 rounded-2xl bg-[#171410] border border-white/10 flex items-center justify-center shrink-0 shadow-md">
-                  {getCategoryIcon(item.category)}
-                </div>
+              <div className="flex items-start gap-3.5">
+                {/* Left: Circle / Rounded Avatar (Matching mobile app: Tag for quotes, Calendar for bookings, or Image) */}
+                {item.image ? (
+                  <div className="relative w-11 h-11 rounded-2xl overflow-hidden shrink-0 border border-[#d9a85f]/35 bg-black/40 shadow-sm mt-0.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.style.display = "none";
+                      }}
+                    />
+                  </div>
+                ) : item.actionType === "quote" || item.category === "quote" ? (
+                  <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
+                    <Tag size={19} />
+                  </div>
+                ) : (
+                  <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
+                    <Calendar size={19} />
+                  </div>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-white tracking-wide">
-                        {item.title}
-                      </h2>
-                      {!item.read && (
-                        <span className="w-2 h-2 rounded-full bg-[#FAD293] animate-pulse" />
-                      )}
-                    </div>
+                  {/* Title & Unread indicator */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-white leading-tight line-clamp-1">
+                      {item.title}
+                    </h3>
+                    {!item.read && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#d9a85f] shrink-0 mt-0.5 shadow-[0_0_8px_rgba(217,168,95,0.8)]" />
+                    )}
+                  </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-white/50">{item.timeAgo}</span>
+                  {/* Description (Exact text e.g. "Your booking #100159 status has been updated to Completed." or quotation text) */}
+                  <p className="text-xs sm:text-sm text-white/70 mt-1 leading-relaxed line-clamp-2">
+                    {item.description || (item.bookingId ? `Your booking #${formatToNumericBookingId(item.readableId || item.bookingId)} status has been updated.` : "")}
+                  </p>
+
+                  {/* Footer: Time ago on left, View Bids / View Details on right */}
+                  <div className="flex items-center justify-between text-xs text-white/40 mt-2.5 pt-0.5">
+                    <span className="font-medium text-[11px] text-white/40">
+                      {item.timeAgo}
+                    </span>
+
+                    <div className="flex items-center gap-2.5">
+                      {item.actionType === "quote" ? (
+                        <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
+                          View Bids &gt;
+                        </span>
+                      ) : item.actionType === "booking" || (item.bookingId && item.bookingId !== "N/A") || item.targetUrl ? (
+                        <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
+                          View Details &gt;
+                        </span>
+                      ) : null}
+
                       <button
                         type="button"
                         onClick={(e) => handleDismiss(e, item.id)}
-                        className="text-white/30 hover:text-red-400 p-1 rounded transition"
-                        title="Dismiss notification"
+                        title="Dismiss"
+                        className="text-white/25 hover:text-red-400 p-0.5 rounded transition"
                       >
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
-                  </div>
-
-                  {item.subtitle && (
-                    <p className="text-xs text-[#FAD293] font-medium mb-2">
-                      {item.subtitle}
-                    </p>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
-                    <div className="flex items-center gap-1.5 text-white/70">
-                      <Calendar size={13} className="text-[#FAD293]" />
-                      <span>{item.scheduleTime}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <CreditCard size={13} className="text-emerald-400" />
-                      <span className="font-semibold text-white/80">
-                        £{item.totalAmount}
-                      </span>
-                      <span>({item.isPaid ? "Paid" : item.paymentMethod})</span>
-                    </div>
-
-                    <span className="ml-auto text-xs font-semibold text-[#FAD293] flex items-center gap-1 hover:underline">
-                      View details <ChevronRight size={13} />
-                    </span>
                   </div>
                 </div>
               </div>

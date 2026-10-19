@@ -1,5 +1,6 @@
 import axios from "axios";
 import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
+import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
 
 export interface EmergencyServiceItem {
   id: string;
@@ -26,6 +27,39 @@ export interface EmergencyCategoryResponse {
 
 export const EMERGENCY_CATEGORY_ID = "860791e7-ed6d-46ca-992c-1348dd4c42ad";
 export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+
+export const DEFAULT_FALLBACK_EMERGENCY_SERVICES: EmergencyServiceItem[] = [
+  {
+    id: "1e5455a9-62f8-4489-bfa8-4eb52d033a7d",
+    name: "Tyre Emergency & Roadside Puncture",
+    short_description: "Mobile tyre fitting, puncture repairs & emergency replacements",
+    price: 60,
+  },
+  {
+    id: "2b6566ba-73a9-5590-cfa9-5fc63e144b8e",
+    name: "Battery Jump Start & Booster Service",
+    short_description: "Dead battery mobile jump start, diagnostic checks & alternator testing",
+    price: 45,
+  },
+  {
+    id: "3c7677cb-84ba-66a1-dfba-6ad74f255c9f",
+    name: "Breakdown Recovery & Flatbed Towing",
+    short_description: "Rapid flatbed recovery to home or destination garage",
+    price: 95,
+  },
+  {
+    id: "4d8788dc-95cb-77b2-e0cb-7be850366da0",
+    name: "Emergency Fuel Delivery / Wrong Fuel Drain",
+    short_description: "Roadside petrol/diesel delivery or wrong fuel drainage system flush",
+    price: 50,
+  },
+  {
+    id: "5e9899ed-06dc-88c3-f1dc-8cf961477eb1",
+    name: "Vehicle Lockout & Key Recovery",
+    short_description: "Damage-free vehicle entry, auto locksmith & key lock retrieval",
+    price: 70,
+  },
+];
 
 /**
  * Dynamically resolves the Emergency Category ID from live /customer/category API
@@ -104,10 +138,10 @@ export const getEmergencyServices = async (
     if (Array.isArray(items) && items.length > 0) {
       return items;
     }
-    return [];
+    return DEFAULT_FALLBACK_EMERGENCY_SERVICES;
   } catch (error: any) {
-    console.warn("Emergency services fetch error:", error?.message);
-    return [];
+    console.warn("Emergency services fetch error, using safe fallback:", error?.message);
+    return DEFAULT_FALLBACK_EMERGENCY_SERVICES;
   }
 };
 
@@ -447,6 +481,8 @@ export interface SendEmergencyBookingRequestParams {
   car_registration_number: string;
   car_model?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
   latitude?: number | string;
   longitude?: number | string;
   zone_id?: string;
@@ -468,18 +504,26 @@ export const sendEmergencyBookingRequest = async (
   params: SendEmergencyBookingRequestParams
 ): Promise<any> => {
   const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const staticZoneId = DEFAULT_ZONE_ID; // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
-
   const nowFormatted = new Date().toISOString().replace("T", " ").substring(0, 19);
+  const effectiveAddress = params.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "221B Baker Street, London";
+  const effectivePostcode = params.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || extractPostcode(effectiveAddress);
 
   const jsonPayload: Record<string, any> = {
     payment_method: params.payment_method || "stripe",
     is_partial: params.is_partial !== undefined ? Number(params.is_partial) : 0,
     zone_id: staticZoneId,
     service_schedule: params.service_schedule || nowFormatted,
-    service_address_id: params.service_address_id || "9",
     service_location: "customer",
+    service_address: ensureServiceAddressJson(effectiveAddress, {
+      lat: params.latitude,
+      lon: params.longitude,
+      address: effectiveAddress,
+      zip_code: effectivePostcode,
+      house: params.house,
+      floor: params.floor,
+    }),
+    postcode: effectivePostcode,
     booking_type: "emergency",
     car_registration_number: (params.car_registration_number || "STANDARD").trim().toUpperCase(),
     car_model: (params.car_model || "Vehicle").trim(),
@@ -493,6 +537,7 @@ export const sendEmergencyBookingRequest = async (
         : "https://mmcclub.co.uk/booking-success"),
   };
 
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -591,7 +636,7 @@ export const bookEmergencyProvider = async (
   // Cart List check
   try {
     await getEmergencyCartList();
-  } catch (err) {}
+  } catch (err) { }
 
   // --------------------------------------------------------------------------
   // STEP 2: Send Booking Request SECOND (POST /customer/booking/request/send)
@@ -601,7 +646,11 @@ export const bookEmergencyProvider = async (
     is_partial: params.is_partial !== undefined ? params.is_partial : 0,
     zone_id: DEFAULT_ZONE_ID,
     service_schedule: nowSchedule,
-    service_address_id: "9",
+    service_address_id: (typeof window !== "undefined" && localStorage.getItem("service_address_id")) || "9",
+    service_address: params.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "221B Baker Street, London",
+    postcode: params.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || "",
+    latitude: params.latitude || (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) || "51.5074",
+    longitude: params.longitude || (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) || "-0.1278",
     service_location: "customer",
     booking_type: "emergency",
     car_registration_number: params.car_registration_number,

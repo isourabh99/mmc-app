@@ -1,4 +1,6 @@
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import {
   TyreAssistanceBooking,
   TyreCategory,
@@ -847,6 +849,11 @@ export interface SendBookingRequestPayload {
   car_color?: string;
   notes?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
+  guest_id?: string;
   latitude?: number | string;
   longitude?: number | string;
   is_partial?: number | boolean | string;
@@ -886,13 +893,34 @@ export async function sendBookingRequestToBackend(
 
   const isPartialNum = payload.is_partial !== undefined ? Number(payload.is_partial) : 0;
 
+  const rawAddr = payload.service_address || (typeof window !== "undefined" ? localStorage.getItem("service_address_json") || localStorage.getItem("service_address") || localStorage.getItem("user_address") : null) || "";
+  const cleanPostcode = (payload.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || extractPostcode(rawAddr)).trim();
+  const effectiveHouse = payload.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : null) || "";
+  const effectiveFloor = payload.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : null) || "";
+  const effectiveStreet = (payload.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
+  const effectiveCity = (payload.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
+
   const postData: Record<string, any> = {
     payment_method: payload.payment_method || "stripe",
     is_partial: isPartialNum,
     zone_id: zoneId,
     service_schedule: payload.service_schedule || fallbackSchedule,
-    service_address_id: String(payload.service_address_id || "9"),
     service_location: payload.service_location || "customer",
+    service_address: ensureServiceAddressJson(rawAddr, {
+      lat: payload.latitude,
+      lon: payload.longitude,
+      address: rawAddr,
+      zip_code: cleanPostcode,
+      house: effectiveHouse,
+      floor: effectiveFloor,
+      street: effectiveStreet,
+      city: effectiveCity,
+    }),
+    postcode: cleanPostcode,
+    ...(effectiveHouse ? { house: effectiveHouse } : {}),
+    ...(effectiveFloor ? { floor: effectiveFloor } : {}),
+    ...(effectiveStreet ? { street: effectiveStreet } : {}),
+    ...(effectiveCity ? { city: effectiveCity } : {}),
     booking_type: payload.booking_type || "emergency",
     car_registration_number: (payload.car_registration_number || "UK22-XYZ-9999").trim().toUpperCase(),
     car_model: payload.car_model || "Honda Civic",
@@ -946,8 +974,11 @@ export interface SendTyreBookingPayload {
   selected_slot_id?: string;
   car_registration_number?: string;
   car_model?: string;
-  notes?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
   latitude?: string | number;
   longitude?: string | number;
   callback?: string;
@@ -1022,6 +1053,9 @@ export async function sendTyreBookingRequest(
         : 0
       : 1;
 
+  const effectiveStreet = (payload.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
+  const effectiveCity = (payload.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
+
   // STEP 2: Send booking request (POST /customer/booking/request/send)
   const res = await sendBookingRequestToBackend({
     guest_id: guestId,
@@ -1031,8 +1065,19 @@ export async function sendTyreBookingRequest(
     payment_platform: "app",
     zone_id: zoneId,
     service_schedule: payload.service_schedule || fallbackSchedule,
-    service_address_id: payload.service_address_id || "9",
-    service_address: payload.service_address || "Customer Location, United Kingdom",
+    service_address: ensureServiceAddressJson(
+      payload.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "",
+      {
+        lat: payload.latitude,
+        lon: payload.longitude,
+        address: payload.service_address,
+        zip_code: payload.postcode,
+        house: payload.house,
+        floor: payload.floor,
+        street: effectiveStreet,
+        city: effectiveCity,
+      }
+    ),
     service_location: payload.service_location || "customer",
     booking_type: isEmergency ? "emergency" : "normal",
     selected_slot_id: payload.selected_slot_id,
@@ -1040,7 +1085,11 @@ export async function sendTyreBookingRequest(
     car_registration_number: (payload.car_registration_number || "UK22-XYZ-9999").trim().toUpperCase(),
     car_model: payload.car_model || "Vehicle",
     notes: payload.notes || "Tyre assistance requested with online payment.",
-    postcode: payload.postcode || "SW1A 1AA",
+    postcode: payload.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || extractPostcode(payload.service_address || ""),
+    house: payload.house,
+    floor: payload.floor,
+    street: effectiveStreet,
+    city: effectiveCity,
     latitude: payload.latitude || "51.5074",
     longitude: payload.longitude || "-0.1278",
     amount: payload.amount,
@@ -1215,6 +1264,11 @@ export interface CreateAssistanceRequestParams {
   selectedSlotId?: string;
   locationAddress: string;
   locationPostcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
+  serviceAddress?: string;
   latitude?: number;
   longitude?: number;
   vehicleMakeModel: string;
@@ -1480,6 +1534,11 @@ export async function createAssistanceRequest(
     formattedDateTime,
     locationAddress: params.locationAddress || "",
     locationPostcode: params.locationPostcode || "",
+    house: params.house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : null) || undefined,
+    floor: params.floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : null) || undefined,
+    street: params.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || undefined,
+    city: params.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || undefined,
+    serviceAddress: params.serviceAddress || (typeof window !== "undefined" ? localStorage.getItem("service_address_json") || localStorage.getItem("service_address") : null) || undefined,
     latitude: lat,
     longitude: lng,
     vehicleMakeModel: params.vehicleMakeModel || "",
@@ -1596,8 +1655,16 @@ export async function confirmQuoteAndAssignTechnician(
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
       service_schedule: validSchedule,
-      service_address_id: (booking as any).serviceAddressId || (booking as any).service_address_id || "9",
-      service_address: booking.locationAddress || "Customer Location, United Kingdom",
+      service_address:
+        (booking as any).serviceAddress ||
+        (booking as any).service_address ||
+        (typeof window !== "undefined"
+          ? localStorage.getItem("service_address_json") ||
+            localStorage.getItem("service_address") ||
+            localStorage.getItem("user_address")
+          : null) ||
+        booking.locationAddress ||
+        ", ",
       service_location: "customer",
       booking_type: "emergency",
       selected_slot_id: booking.selectedSlotId || (booking as any).selected_slot_id,
@@ -1606,7 +1673,26 @@ export async function confirmQuoteAndAssignTechnician(
       car_manufacture_year: new Date().getFullYear().toString(),
       car_color: "",
       notes: booking.notes || "Tyre assistance requested with online payment.",
-      postcode: booking.locationPostcode || "SW1A 1AA",
+      postcode:
+        booking.locationPostcode ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) ||
+        "SW1A 1AA",
+      house:
+        (booking as any).house ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : null) ||
+        undefined,
+      floor:
+        (booking as any).floor ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : null) ||
+        undefined,
+      street:
+        (booking as any).street ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) ||
+        undefined,
+      city:
+        (booking as any).city ||
+        (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) ||
+        undefined,
       latitude: String(booking.latitude || "51.5074"),
       longitude: String(booking.longitude || "-0.1278"),
       is_partial: isPartialNum,
@@ -1660,13 +1746,43 @@ export async function confirmQuoteAndAssignTechnician(
         payment_method: effectivePaymentMethod,
         zone_id: DEFAULT_ZONE_ID,
         service_schedule: validSchedule,
-        service_address_id: "9",
-        service_address: booking.locationAddress || "Customer Location, United Kingdom",
+        service_address:
+          (booking as any).serviceAddress ||
+          (booking as any).service_address ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("service_address_json") ||
+              localStorage.getItem("service_address") ||
+              localStorage.getItem("user_address")
+            : null) ||
+          booking.locationAddress ||
+          "",
         service_location: "customer",
         booking_type: "emergency",
         car_registration_number: (booking.vehicleRegistration || "MMC TYRE").trim().toUpperCase(),
         car_model: booking.vehicleMakeModel || "Vehicle",
         notes: booking.notes || "Tyre assistance requested with online payment.",
+        postcode:
+          booking.locationPostcode ||
+          (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) ||
+          "SW1A 1AA",
+        house:
+          (booking as any).house ||
+          (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : null) ||
+          undefined,
+        floor:
+          (booking as any).floor ||
+          (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : null) ||
+          undefined,
+        street:
+          (booking as any).street ||
+          (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) ||
+          undefined,
+        city:
+          (booking as any).city ||
+          (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) ||
+          undefined,
+        latitude: String(booking.latitude || "51.5074"),
+        longitude: String(booking.longitude || "-0.1278"),
         is_partial: isPartialNum,
         callback: successCallbackUrl,
       });
@@ -1826,6 +1942,77 @@ export async function confirmQuoteAndAssignTechnician(
   booking.updatedAt = new Date().toISOString();
   saveBookings(bookings);
   setActiveBookingId(booking.id);
+
+  const resolvedTyreAddr =
+    booking.locationAddress ||
+    (booking as any).serviceAddress ||
+    (booking.house && booking.locationPostcode ? `${booking.house}, ${booking.locationPostcode}` : booking.locationPostcode) ||
+    "";
+
+  const effectiveId = String(realReadableId || realBookingUuid || booking.referenceNumber || booking.id);
+
+  try {
+    saveConfirmedBooking({
+      id: effectiveId,
+      rawId: realBookingUuid || booking.id,
+      readableId: realReadableId || booking.referenceNumber,
+      serviceType: "tyre",
+      serviceCategoryName: "Tyre Assistance",
+      serviceTitle: booking.categoryLabel || "Tyre Assistance",
+      serviceSubtitle: booking.assistanceLabel || booking.quote?.tyreDescription,
+      providerName: booking.provider?.name || booking.provider?.companyName || "Certified Roadside Provider",
+      providerPhone: booking.provider?.phone,
+      serviceAddress: (booking as any).serviceAddress || booking.locationAddress || resolvedTyreAddr,
+      pickupLocation: booking.locationAddress || resolvedTyreAddr,
+      locationAddress: booking.locationAddress || resolvedTyreAddr,
+      postcode: booking.locationPostcode || "",
+      house: booking.house || "",
+      floor: booking.floor || "",
+      street: (booking as any).street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : "") || "",
+      city: (booking as any).city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : "") || "",
+      vehicleModel: booking.vehicleMakeModel || "",
+      vehicleReg: booking.vehicleRegistration || "",
+      totalAmount: fareAmount,
+      paidAmount: depositAmt,
+      dueAmount: dueAmt,
+      isPaid: false,
+      isPartiallyPaid: isPartialNum === 1,
+      paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Pending Payment",
+      paymentMethod: "Stripe (Online)",
+      status: "accepted",
+      statusDisplay: "Accepted",
+      scheduleDate: booking.scheduledDate,
+      scheduleTime: booking.scheduledTimeSlot,
+      createdAt: booking.createdAt || new Date().toISOString(),
+    });
+
+    saveBookingMeta(effectiveId, {
+      serviceTitle: booking.categoryLabel || "Tyre Assistance",
+      serviceCategoryName: "Tyre Assistance",
+      serviceType: "tyre",
+      vehicleModel: booking.vehicleMakeModel,
+      vehicleReg: booking.vehicleRegistration,
+      providerName: booking.provider?.name || booking.provider?.companyName,
+      price: fareAmount,
+      paidAmount: depositAmt,
+      dueAmount: dueAmt,
+      isPaid: false,
+      isPartiallyPaid: isPartialNum === 1,
+      paymentStatus: isPartialNum === 1 ? "Partially Paid" : "Pending Payment",
+      scheduleDate: booking.scheduledDate,
+      scheduleTime: booking.scheduledTimeSlot,
+      serviceAddress: (booking as any).serviceAddress || booking.locationAddress || resolvedTyreAddr,
+      pickupLocation: booking.locationAddress || resolvedTyreAddr,
+      locationAddress: booking.locationAddress || resolvedTyreAddr,
+      postcode: booking.locationPostcode || "",
+      house: booking.house || "",
+      floor: booking.floor || "",
+      street: (booking as any).street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : "") || "",
+      city: (booking as any).city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : "") || "",
+    });
+  } catch (syncErr) {
+    console.warn("Could not save confirmed tyre booking to global store:", syncErr);
+  }
 
   return Object.assign(booking, {
     redirect_link: redirectLink,

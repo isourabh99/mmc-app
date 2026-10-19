@@ -1,4 +1,5 @@
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
+import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
 export interface AlloyServiceItem {
   id: string;
@@ -358,6 +359,13 @@ export interface CreateQuotationRequestParams {
   damage_description?: string;
   car_image?: File | null;
   car_images?: File[];
+  service_address?: string;
+  postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  latitude?: string | number;
+  longitude?: string | number;
 }
 
 export interface CreateQuotationResponse {
@@ -405,6 +413,38 @@ export const sendQuotationRequest = async (
   if (params.service_address_id) {
     formData.append("service_address_id", params.service_address_id);
   }
+  if (params.service_address) {
+    formData.append(
+      "service_address",
+      ensureServiceAddressJson(params.service_address, {
+        lat: params.latitude,
+        lon: params.longitude,
+        address: params.service_address,
+        street: params.street,
+        zip_code: params.postcode,
+        house: params.house,
+        floor: params.floor,
+      })
+    );
+  }
+  if (params.street) {
+    formData.append("street", params.street);
+  }
+  if (params.postcode) {
+    formData.append("postcode", params.postcode);
+  }
+  if (params.house) {
+    formData.append("house", params.house);
+  }
+  if (params.floor) {
+    formData.append("floor", params.floor);
+  }
+  if (params.latitude) {
+    formData.append("latitude", String(params.latitude));
+  }
+  if (params.longitude) {
+    formData.append("longitude", String(params.longitude));
+  }
   if (params.car_model) {
     formData.append("car_model", params.car_model);
   }
@@ -449,43 +489,52 @@ export const sendQuotationRequest = async (
 export const getOrCreateCustomerAddressId = async (
   customAddress?: string,
   latitude?: string | number,
-  longitude?: string | number
+  longitude?: string | number,
+  house?: string,
+  floor?: string,
+  street?: string,
+  city?: string
 ): Promise<string> => {
   try {
     const lat =
       latitude ||
       (typeof window !== "undefined" ? localStorage.getItem("user_lat") : null) ||
-      "22.7196";
+      "51.5074";
     const lon =
       longitude ||
       (typeof window !== "undefined" ? localStorage.getItem("user_lon") : null) ||
-      "75.8577";
+      "-0.1278";
 
-    const response = await apiClient.post<any>("/customer/address", {
+    const effectiveAddress = customAddress || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "";
+    const effectivePostcode = (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || extractPostcode(effectiveAddress);
+    const effectiveHouse = house || (typeof window !== "undefined" ? localStorage.getItem("user_house") || localStorage.getItem("house") : null) || "";
+    const effectiveFloor = floor || (typeof window !== "undefined" ? localStorage.getItem("user_floor") || localStorage.getItem("floor") : null) || "";
+    const effectiveStreet = street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "";
+    const effectiveCity = city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "";
+
+    const res = await saveCustomerAddressToBackend({
       lat: String(lat),
       lon: String(lon),
-      address: customAddress || "123, Vijay Nagar, Indore",
+      address: effectiveAddress,
+      city: effectiveCity,
+      street: effectiveStreet,
+      zip_code: effectivePostcode,
+      country: "",
       address_type: "service",
-      contact_person_name: "Rohit Gannote",
-      contact_person_number: "9009775909",
+      contact_person_name: (typeof window !== "undefined" ? localStorage.getItem("user_name") : null) || "Customer",
+      contact_person_number: (typeof window !== "undefined" ? localStorage.getItem("user_phone") : null) || "+447123456789",
       address_label: "Home",
-      house: null,
-      floor: null,
-      is_guest: false,
+      house: effectiveHouse,
+      floor: effectiveFloor,
     });
 
-    const addressId =
-      response.data?.content?.id ||
-      response.data?.id ||
-      response.data?.content?.data?.id;
-
-    if (addressId) {
-      return String(addressId);
+    if (res.address_id) {
+      return String(res.address_id);
     }
-    return "";
+    return "9";
   } catch (err) {
     console.warn("Could not create customer address from API:", err);
-    return "";
+    return (typeof window !== "undefined" && localStorage.getItem("service_address_id")) || "9";
   }
 };
 
@@ -752,6 +801,10 @@ export interface SendBookingRequestParams {
   service_address_id?: string;
   service_address?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
   latitude?: number | string;
   longitude?: number | string;
   service_location: "customer" | "workshop" | string;
@@ -1005,14 +1058,28 @@ export const sendBookingRequest = async (
         localStorage.getItem("zoneid"))) ||
     zoneId;
 
-  const addressId =
-    params.service_address_id ||
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("service_address_id") ||
-        localStorage.getItem("address_id"))) ||
-    "6";
+  const rawAddr = params.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "";
+  let cleanPostcode = (params.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || extractPostcode(rawAddr)).trim();
+  if (cleanPostcode.length > 15) {
+    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
+    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
+  }
+  if (!cleanPostcode) cleanPostcode = "";
 
-  const fullAddress = params.service_address || "Customer Location, UK";
+  const effectiveStreet = (params.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
+  const effectiveCity = (params.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
+
+  const fullAddress = ensureServiceAddressJson(rawAddr, {
+    lat: params.latitude,
+    lon: params.longitude,
+    address: rawAddr,
+    zip_code: cleanPostcode,
+    house: params.house,
+    floor: params.floor,
+    street: effectiveStreet,
+    city: effectiveCity,
+  });
+
   const isOnline = params.payment_method === "stripe" || params.payment_method === "online";
   const effectivePaymentMethod = isOnline ? "stripe" : params.payment_method;
 
@@ -1038,13 +1105,6 @@ export const sendBookingRequest = async (
   // Backend /customer/booking/request/send validator requires 'service_location' => 'required|in:customer'
   const apiServiceLocation = "customer";
 
-  let cleanPostcode = (params.postcode || "").trim();
-  if (cleanPostcode.length > 15) {
-    const match = cleanPostcode.match(/[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}|\b\d{5,6}\b/i);
-    cleanPostcode = match ? match[0] : cleanPostcode.slice(0, 15);
-  }
-  if (!cleanPostcode) cleanPostcode = "12345";
-
   let effectiveNotes = params.notes || "";
   if (params.service_location === "workshop" && !effectiveNotes.includes("Workshop")) {
     effectiveNotes = effectiveNotes
@@ -1061,12 +1121,15 @@ export const sendBookingRequest = async (
     formData.append("payment_method", effectivePaymentMethod);
     formData.append("zone_id", zoneId);
     formData.append("guest_id", guestId);
-    formData.append("service_address_id", addressId);
     formData.append("service_address", fullAddress);
     formData.append("service_location", apiServiceLocation);
     formData.append("service_schedule", params.service_schedule);
     formData.append("booking_type", params.booking_type);
     formData.append("postcode", cleanPostcode);
+    if (params.house) formData.append("house", params.house);
+    if (params.floor) formData.append("floor", params.floor);
+    if (effectiveStreet) formData.append("street", effectiveStreet);
+    if (effectiveCity) formData.append("city", effectiveCity);
     formData.append("latitude", String(params.latitude || "22.66215"));
     formData.append("longitude", String(params.longitude || "75.9035"));
 
@@ -1146,12 +1209,15 @@ export const sendBookingRequest = async (
       payment_method: effectivePaymentMethod,
       zone_id: zoneId,
       guest_id: guestId,
-      service_address_id: addressId,
       service_address: fullAddress,
       service_location: apiServiceLocation,
       service_schedule: params.service_schedule,
       booking_type: params.booking_type,
       postcode: cleanPostcode,
+      house: params.house,
+      floor: params.floor,
+      ...(effectiveStreet ? { street: effectiveStreet } : {}),
+      ...(effectiveCity ? { city: effectiveCity } : {}),
       latitude: String(params.latitude || "22.66215"),
       longitude: String(params.longitude || "75.9035"),
       notes: effectiveNotes,

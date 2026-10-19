@@ -57,6 +57,11 @@ export interface UnifiedBookingItem {
   destinationLocation?: string;
   serviceAddress?: string;
   postcode?: string;
+  house?: string;
+  floor?: string;
+  street?: string;
+  city?: string;
+  locationAddress?: string;
   coordinates?: {
     latitude?: number | string;
     longitude?: number | string;
@@ -128,6 +133,14 @@ export function saveBookingMeta(
     scheduleDate?: string;
     scheduleTime?: string;
     readableId?: string | number;
+    serviceAddress?: string;
+    pickupLocation?: string;
+    locationAddress?: string;
+    postcode?: string;
+    house?: string;
+    floor?: string;
+    street?: string;
+    city?: string;
   }
 ) {
   if (typeof window === "undefined" || !bookingId) return;
@@ -148,6 +161,14 @@ export function saveBookingMeta(
       ...meta,
       price: priceVal,
       readableId: meta.readableId || prev.readableId,
+      serviceAddress: meta.serviceAddress || prev.serviceAddress,
+      pickupLocation: meta.pickupLocation || prev.pickupLocation,
+      locationAddress: meta.locationAddress || prev.locationAddress,
+      postcode: meta.postcode || prev.postcode,
+      house: meta.house || prev.house,
+      floor: meta.floor || prev.floor,
+      street: meta.street || prev.street,
+      city: meta.city || prev.city,
     };
     localStorage.setItem("mmc_bookings_metadata", JSON.stringify(existing));
   } catch (e) {
@@ -177,12 +198,14 @@ export function getBookingMeta(bookingId: string | number) {
 }
 
 /**
- * Check if an ID is a fake client-generated dummy timestamp ID (e.g. AW-1790680687259, BW-..., MOD-...)
+ * Check if an ID is a fake client-generated dummy timestamp ID (e.g. AW-1790680687259, BW-..., MMC-VAL-886687)
  */
 export function isFakeDummyId(id: any): boolean {
   if (!id) return true;
   const str = String(id).trim();
-  if (/^(AW|BW|MOD|MMC|EMG|VAL|TYR|tmp|temp)[-_]\d+/i.test(str)) return true;
+  if (/^(AW|BW|MOD|MMC|EMG|VAL|TYR|MEC|tmp|temp)([-_][A-Z0-9]+)*[-_]\d+/i.test(str)) return true;
+  if (/^MMC[-_]/i.test(str)) return true;
+  if (/^(AW|BW|MOD|EMG|VAL|TYR|MEC)[-_]/i.test(str)) return true;
   return false;
 }
 
@@ -209,12 +232,58 @@ export function isPureNumericId(val: any): boolean {
 }
 
 /**
+ * Format any booking ID into standard Demandium 6-digit numeric format (e.g. 100177, 100176)
+ */
+export function formatToNumericBookingId(val: any): string {
+  if (val === undefined || val === null || val === "") return "100101";
+  const str = String(val).trim();
+  if (!str || str === "null" || str === "undefined") return "100101";
+
+  // 1. If already a clean 5-7 digit numeric string in Demandium format (e.g. 100177, 100138)
+  if (/^100\d{3,4}$/.test(str)) {
+    return str;
+  }
+  if (/^\d{5,7}$/.test(str)) {
+    if (str.startsWith("100") && str.length === 6) return str;
+    return `100${str.slice(-3)}`;
+  }
+
+  // 2. Check for embedded 100xxx pattern (e.g. inside text, composite IDs, or titles)
+  const embedded100 = str.match(/\b(100\d{3,4})\b/);
+  if (embedded100 && embedded100[1]) {
+    return embedded100[1];
+  }
+
+  // 3. Check for any embedded 6 digits (e.g. in MMC-VAL-886687)
+  const embedded6 = str.match(/(\d{6})/);
+  if (embedded6 && embedded6[1]) {
+    const d = embedded6[1];
+    if (d.startsWith("100")) return d;
+    return `100${d.slice(-3)}`;
+  }
+
+  // 4. Check for any embedded 3-5 digits
+  const embeddedDigits = str.match(/(\d{3,5})/);
+  if (embeddedDigits && embeddedDigits[1]) {
+    return `100${embeddedDigits[1].slice(-3).padStart(3, "0")}`;
+  }
+
+  // 5. Deterministic positive hash for UUIDs / strings to produce a stable 100xxx ID (100100..100999)
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  const suffix = String((hash % 900) + 100);
+  return `100${suffix}`;
+}
+
+/**
  * Persist a confirmed service booking into local storage so that page refreshes never lose it
  */
 export function saveConfirmedBooking(booking: any) {
   if (typeof window === "undefined" || !booking) return;
   const bId = String(booking.id || booking.rawId || booking.booking_id || "").toLowerCase().trim();
-  if (!bId || isFakeDummyId(bId)) {
+  if (!bId || isFakeDummyId(bId) || isFakeDummyId(booking.readableId)) {
     return; // Never persist fake client-generated dummy IDs
   }
   try {
@@ -223,12 +292,17 @@ export function saveConfirmedBooking(booking: any) {
     const index = list.findIndex(
       (b) => String(b.id || b.rawId || b.booking_id || "").toLowerCase().trim() === bId
     );
+    const numericReadableId = formatToNumericBookingId(booking.readableId || booking.id);
+    const bookingToSave = {
+      ...booking,
+      readableId: numericReadableId,
+    };
     if (index >= 0) {
-      list[index] = { ...list[index], ...booking };
+      list[index] = { ...list[index], ...bookingToSave };
     } else {
-      list.unshift(booking);
+      list.unshift(bookingToSave);
     }
-    const cleaned = list.filter((b) => b && !isFakeDummyId(b.id || b.rawId || b.booking_id));
+    const cleaned = list.filter((b) => b && !isFakeDummyId(b.id || b.rawId || b.booking_id) && !isFakeDummyId(b.readableId));
     localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(cleaned.slice(0, 50)));
 
     // Also auto-sync to mmc_bookings_metadata
@@ -244,7 +318,15 @@ export function saveConfirmedBooking(booking: any) {
       paymentStatus: booking.paymentStatus,
       scheduleDate: booking.scheduleDate,
       scheduleTime: booking.scheduleTime,
-      readableId: booking.readableId,
+      readableId: numericReadableId,
+      serviceAddress: booking.serviceAddress,
+      pickupLocation: booking.pickupLocation,
+      locationAddress: booking.locationAddress,
+      postcode: booking.postcode,
+      house: booking.house,
+      floor: booking.floor,
+      street: booking.street,
+      city: booking.city,
     });
 
     window.dispatchEvent(new CustomEvent("mmc-bookings-updated"));
@@ -384,15 +466,45 @@ function parseJsonIfString(val: any): any {
   return val;
 }
 
+export function isGenericPlaceholderAddress(addr: any): boolean {
+  if (!addr) return true;
+  if (typeof addr === "number") return true;
+  const str = String(
+    typeof addr === "string"
+      ? addr
+      : (addr.address ||
+        addr.service_address ||
+        addr.location_address ||
+        addr.locationAddress ||
+        addr.street ||
+        addr.city ||
+        addr.formatted_address ||
+        addr.house ||
+        "")
+  ).trim().toLowerCase();
+  if (!str || str === "null" || str === "undefined") return true;
+  if (/^\d+$/.test(str)) return true; // Just a database ID
+  if (str === "customer" || str === "provider" || str === "workshop") return true;
+  if (
+    str === "customer location" ||
+    str === "customer location, united kingdom" ||
+    str === "customer location, uk" ||
+    str === "london, uk (customer location)"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function extractReadableAddress(addr: any): string {
   if (!addr) return "";
   if (typeof addr === "number") return ""; // Ignore numeric database IDs like 6
+  if (isGenericPlaceholderAddress(addr)) return "";
   const parsed = parseJsonIfString(addr);
 
   if (typeof parsed === "string") {
     const trimmed = parsed.trim();
-    // Ignore empty or purely numeric IDs
-    if (!trimmed || trimmed === "null" || trimmed === "undefined" || /^\d+$/.test(trimmed)) {
+    if (isGenericPlaceholderAddress(trimmed)) {
       return "";
     }
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -407,8 +519,26 @@ export function extractReadableAddress(addr: any): string {
   }
 
   if (typeof parsed === "object" && parsed !== null) {
+    // If it contains a nested location_address string
+    if (typeof parsed.location_address === "string" && !isGenericPlaceholderAddress(parsed.location_address)) {
+      const nested = parseJsonIfString(parsed.location_address);
+      if (typeof nested === "object" && nested !== null) {
+        return extractReadableAddress(nested);
+      }
+      return parsed.location_address.trim();
+    }
+    if (typeof parsed.locationAddress === "string" && !isGenericPlaceholderAddress(parsed.locationAddress)) {
+      return parsed.locationAddress.trim();
+    }
+
+    const rawHouse = (parsed.house || parsed.flat || "").toString().trim();
+    const rawFloor = (parsed.floor || "").toString().trim();
+    const rawStreet = (parsed.street || "").toString().trim();
+
     const addrStr =
       parsed.address ||
+      parsed.location_address ||
+      parsed.locationAddress ||
       parsed.service_address ||
       parsed.street ||
       parsed.formatted_address ||
@@ -419,23 +549,219 @@ export function extractReadableAddress(addr: any): string {
     const zipStr = parsed.zip_code || parsed.postcode || parsed.zip || parsed.postal_code || "";
     const countryStr = parsed.country || "";
 
-    const parts = [addrStr, cityStr, zipStr, countryStr].filter(
+    const cleanAddrStr = typeof addrStr === "string" && addrStr.trim() !== "null" && !isGenericPlaceholderAddress(addrStr) ? addrStr.trim() : "";
+    const cleanCityStr = typeof cityStr === "string" && cityStr.trim() !== "null" ? cityStr.trim() : "";
+    const cleanZipStr = typeof zipStr === "string" && zipStr.trim() !== "null" ? zipStr.trim() : "";
+    const cleanCountryStr = typeof countryStr === "string" && countryStr.trim() !== "null" ? countryStr.trim() : "";
+
+    // Format house
+    let houseStr = "";
+    if (rawHouse && rawHouse !== "null") {
+      const lowerAddr = cleanAddrStr.toLowerCase();
+      if (!lowerAddr.includes(rawHouse.toLowerCase())) {
+        houseStr = /flat|house|apt|suite|unit/i.test(rawHouse) ? rawHouse : `Flat/House: ${rawHouse}`;
+      }
+    }
+
+    // Format floor
+    let floorStr = "";
+    if (rawFloor && rawFloor !== "null") {
+      const lowerAddr = cleanAddrStr.toLowerCase();
+      if (!lowerAddr.includes(rawFloor.toLowerCase())) {
+        floorStr = /floor/i.test(rawFloor) ? rawFloor : `Floor ${rawFloor}`;
+      }
+    }
+
+    // Format street
+    let streetStr = "";
+    if (rawStreet && rawStreet !== "null") {
+      const lowerAddr = cleanAddrStr.toLowerCase();
+      if (!lowerAddr.includes(rawStreet.toLowerCase())) {
+        streetStr = rawStreet;
+      }
+    }
+
+    const parts: string[] = [];
+    if (houseStr) parts.push(houseStr);
+    if (floorStr) parts.push(floorStr);
+    if (streetStr) parts.push(streetStr);
+    if (cleanAddrStr) parts.push(cleanAddrStr);
+    if (cleanCityStr && !cleanAddrStr.toLowerCase().includes(cleanCityStr.toLowerCase())) {
+      parts.push(cleanCityStr);
+    }
+    if (cleanZipStr && !cleanAddrStr.toLowerCase().includes(cleanZipStr.toLowerCase())) {
+      parts.push(cleanZipStr);
+    }
+    if (cleanCountryStr && !cleanAddrStr.toLowerCase().includes(cleanCountryStr.toLowerCase())) {
+      parts.push(cleanCountryStr);
+    }
+
+    const cleanParts = parts.filter(
       (p) => Boolean(p && typeof p === "string" && p.trim().length > 0 && p.trim() !== "null" && !/^\d+$/.test(p.trim()))
     );
 
+    if (cleanParts.length > 0) {
+      return cleanParts.join(", ");
+    }
+
+    if (parsed.address_label && typeof parsed.address_label === "string" && !isGenericPlaceholderAddress(parsed.address_label)) {
+      return parsed.address_label;
+    }
+    if (parsed.location && typeof parsed.location === "string" && !isGenericPlaceholderAddress(parsed.location)) {
+      return parsed.location;
+    }
+    if (parsed.name && typeof parsed.name === "string" && !isGenericPlaceholderAddress(parsed.name)) {
+      return parsed.name;
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Universal helper to get the best complete formatted display address for any booking
+ */
+export function getBookingDisplayAddress(item: any): string {
+  if (!item) return "";
+
+  const raw = item.raw || {};
+  const candidates = [
+    item.locationAddress,
+    raw.location_address,
+    raw.locationAddress,
+    raw.service_address_location,
+    item.serviceAddress,
+    raw.service_address,
+    raw.post?.location_address,
+    raw.post?.service_address,
+    raw.booking_post?.location_address,
+    raw.booking_post?.service_address,
+    raw.booking?.service_address,
+    raw.booking?.location_address,
+    item.pickupLocation,
+    raw.pickup_location,
+    raw.delivery_address,
+    raw.customer_address,
+    raw.address,
+  ];
+
+  let bestAddr = "";
+  for (const c of candidates) {
+    if (!c || isGenericPlaceholderAddress(c)) continue;
+    const extracted = extractReadableAddress(c);
+    if (extracted && !isGenericPlaceholderAddress(extracted)) {
+      bestAddr = extracted;
+      break;
+    }
+  }
+
+  // Also check dynamic keys on raw
+  if (!bestAddr && typeof raw === "object" && raw !== null) {
+    for (const [k, v] of Object.entries(raw)) {
+      if (/location|address/i.test(k) && v && !isGenericPlaceholderAddress(v)) {
+        const ext = extractReadableAddress(v);
+        if (ext && !isGenericPlaceholderAddress(ext)) {
+          bestAddr = ext;
+          break;
+        }
+      }
+    }
+  }
+
+  // Extract house & floor
+  const house = (
+    item.house ||
+    raw.house ||
+    raw.flat ||
+    (typeof raw.service_address === "object" ? raw.service_address?.house || raw.service_address?.flat : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.house || raw.location_address?.flat : "") ||
+    ""
+  ).toString().trim();
+
+  const floor = (
+    item.floor ||
+    raw.floor ||
+    (typeof raw.service_address === "object" ? raw.service_address?.floor : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.floor : "") ||
+    ""
+  ).toString().trim();
+
+  const street = (
+    item.street ||
+    raw.street ||
+    (typeof raw.service_address === "object" ? raw.service_address?.street : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.street : "") ||
+    ""
+  ).toString().trim();
+
+  const city = (
+    item.city ||
+    raw.city ||
+    (typeof raw.service_address === "object" ? raw.service_address?.city : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.city : "") ||
+    ""
+  ).toString().trim();
+
+  const postcode = (
+    item.postcode ||
+    raw.postcode ||
+    raw.locationPostcode ||
+    (typeof raw.service_address === "object" ? raw.service_address?.zip_code || raw.service_address?.postcode : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.zip_code || raw.location_address?.postcode : "") ||
+    ""
+  ).toString().trim();
+
+  if (bestAddr) {
+    const lower = bestAddr.toLowerCase();
+    const prefixes: string[] = [];
+    if (house && !lower.includes(house.toLowerCase())) {
+      prefixes.push(house);
+    }
+    if (floor && !lower.includes(floor.toLowerCase())) {
+      prefixes.push(/floor/i.test(floor) ? floor : `Floor ${floor}`);
+    }
+    if (street && !lower.includes(street.toLowerCase())) {
+      prefixes.push(street);
+    }
+    if (prefixes.length > 0) {
+      bestAddr = `${prefixes.join(", ")}, ${bestAddr}`;
+    }
+    if (city && !bestAddr.toLowerCase().includes(city.toLowerCase())) {
+      bestAddr = `${bestAddr}, ${city}`;
+    }
+    if (postcode && !bestAddr.toLowerCase().includes(postcode.toLowerCase())) {
+      bestAddr = `${bestAddr}, ${postcode}`;
+    }
+    return bestAddr;
+  }
+
+  // Fallback with house, floor, street, city, postcode
+  if (house || floor || street || city || postcode) {
+    const parts = [
+      house ? house : "",
+      floor ? (/floor/i.test(floor) ? floor : `Floor ${floor}`) : "",
+      street ? street : "",
+      city ? city : "",
+      postcode ? postcode : "",
+    ].filter(Boolean);
     if (parts.length > 0) {
       return parts.join(", ");
     }
+  }
 
-    if (parsed.address_label && typeof parsed.address_label === "string" && !/^\d+$/.test(parsed.address_label)) {
-      return parsed.address_label;
+  // Fallback to locally stored user address if available
+  if (typeof window !== "undefined") {
+    const localAddr = localStorage.getItem("user_address") || localStorage.getItem("service_address");
+    if (localAddr && !isGenericPlaceholderAddress(localAddr)) {
+      const ext = extractReadableAddress(localAddr);
+      if (ext && !isGenericPlaceholderAddress(ext)) {
+        return ext;
+      }
     }
-    if (parsed.location && typeof parsed.location === "string" && !/^\d+$/.test(parsed.location)) {
-      return parsed.location;
-    }
-    if (parsed.name && typeof parsed.name === "string" && !/^\d+$/.test(parsed.name)) {
-      return parsed.name;
-    }
+  }
+
+  if (item.coordinates?.latitude && Number(item.coordinates.latitude) !== 0) {
+    return `Service Area (${Number(item.coordinates.latitude).toFixed(4)}, ${Number(item.coordinates.longitude).toFixed(4)})`;
   }
 
   return "";
@@ -699,55 +1025,156 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   // Parse Raw Address Object for contact & coordinates
   const rawAddressObj = parseJsonIfString(
     raw.service_address ||
+    raw.location_address ||
+    raw.locationAddress ||
     raw.service_address_location ||
     raw.delivery_address ||
+    raw.post?.location_address ||
     raw.post?.service_address ||
+    raw.booking_post?.location_address ||
     raw.booking_post?.service_address ||
+    raw.booking?.location_address ||
+    raw.booking?.service_address ||
     localConfirmed?.serviceAddress
   );
 
   // Address candidate pool across all known Demandium / MMC fields
   const addressCandidates = [
+    raw.location_address,
+    raw.locationAddress,
     raw.service_address,
     raw.service_address_location,
+    raw.post?.location_address,
+    raw.post?.service_address,
+    raw.booking_post?.location_address,
+    raw.booking_post?.service_address,
+    raw.booking?.location_address,
+    raw.booking?.service_address,
+    raw.customer_address,
+    raw.customer?.address,
+    raw.customer?.addresses?.[0],
     raw.delivery_address,
-    raw.locationAddress,
     raw.pickup_location,
     raw.serviceAddress,
-    raw.post?.service_address,
     raw.post?.address,
     raw.post?.location,
-    raw.booking_post?.service_address,
     raw.booking_post?.address,
     raw.service_address?.address,
     raw.service_address?.street,
     raw.service_address?.address_label,
-    raw.customer_address,
-    raw.customer?.address,
-    raw.customer?.addresses?.[0],
     raw.user_address,
     raw.address,
     raw.location,
+    localConfirmed?.serviceAddress,
+    localConfirmed?.locationAddress,
+    localConfirmed?.pickupLocation,
+    meta?.serviceAddress,
+    meta?.locationAddress,
+    meta?.pickupLocation,
+    pendingSession?.service_address,
+    pendingSession?.locationAddress,
+    pendingSession?.address,
     raw.postcode,
     raw.locationPostcode,
-    localConfirmed?.serviceAddress,
-    localConfirmed?.pickupLocation,
     localConfirmed?.postcode,
-    meta?.serviceAddress,
-    meta?.pickupLocation,
     meta?.postcode,
-    pendingSession?.service_address,
     pendingSession?.postcode,
-    pendingSession?.address,
   ];
 
   let resolvedServiceAddress = "";
   for (const candidate of addressCandidates) {
+    if (!candidate || isGenericPlaceholderAddress(candidate)) continue;
     const extracted = extractReadableAddress(candidate);
-    if (extracted && extracted.length > 0) {
+    if (extracted && extracted.length > 0 && !isGenericPlaceholderAddress(extracted)) {
       resolvedServiceAddress = extracted;
       break;
     }
+  }
+
+  // Dynamic fallback scan on raw keys if still empty
+  if (!resolvedServiceAddress && typeof raw === "object" && raw !== null) {
+    for (const [key, val] of Object.entries(raw)) {
+      if (/location|address/i.test(key) && val && !isGenericPlaceholderAddress(val)) {
+        const extracted = extractReadableAddress(val);
+        if (extracted && extracted.length > 0 && !isGenericPlaceholderAddress(extracted)) {
+          resolvedServiceAddress = extracted;
+          break;
+        }
+      }
+    }
+  }
+
+  // Extract house & floor from all potential sources
+  const house = (
+    raw.house ||
+    raw.flat ||
+    (typeof rawAddressObj === "object" ? rawAddressObj?.house || rawAddressObj?.flat : "") ||
+    (typeof raw.service_address === "object" ? raw.service_address?.house || raw.service_address?.flat : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.house || raw.location_address?.flat : "") ||
+    localConfirmed?.house ||
+    meta?.house ||
+    pendingSession?.house ||
+    ""
+  ).toString().trim();
+
+  const floor = (
+    raw.floor ||
+    (typeof rawAddressObj === "object" ? rawAddressObj?.floor : "") ||
+    (typeof raw.service_address === "object" ? raw.service_address?.floor : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.floor : "") ||
+    localConfirmed?.floor ||
+    meta?.floor ||
+    pendingSession?.floor ||
+    ""
+  ).toString().trim();
+
+  const street = (
+    raw.street ||
+    (typeof rawAddressObj === "object" ? rawAddressObj?.street : "") ||
+    (typeof raw.service_address === "object" ? raw.service_address?.street : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.street : "") ||
+    localConfirmed?.street ||
+    meta?.street ||
+    pendingSession?.street ||
+    ""
+  ).toString().trim();
+
+  const city = (
+    raw.city ||
+    (typeof rawAddressObj === "object" ? rawAddressObj?.city : "") ||
+    (typeof raw.service_address === "object" ? raw.service_address?.city : "") ||
+    (typeof raw.location_address === "object" ? raw.location_address?.city : "") ||
+    localConfirmed?.city ||
+    meta?.city ||
+    pendingSession?.city ||
+    ""
+  ).toString().trim();
+
+  // If house/floor/street exist, ensure they are prepended to resolvedServiceAddress if not already included
+  if (resolvedServiceAddress && (house || floor || street)) {
+    const extraParts: string[] = [];
+    if (house && !resolvedServiceAddress.toLowerCase().includes(house.toLowerCase())) {
+      extraParts.push(/flat|house|apt|suite|unit/i.test(house) ? house : `Flat/House: ${house}`);
+    }
+    if (floor && !resolvedServiceAddress.toLowerCase().includes(floor.toLowerCase())) {
+      extraParts.push(/floor/i.test(floor) ? floor : `Floor ${floor}`);
+    }
+    if (street && !resolvedServiceAddress.toLowerCase().includes(street.toLowerCase())) {
+      extraParts.push(street);
+    }
+    if (extraParts.length > 0) {
+      resolvedServiceAddress = `${extraParts.join(", ")}, ${resolvedServiceAddress}`;
+    }
+  } else if (!resolvedServiceAddress && (house || floor || street || city)) {
+    const extraParts: string[] = [];
+    if (house) extraParts.push(/flat|house|apt|suite|unit/i.test(house) ? house : `Flat/House: ${house}`);
+    if (floor) extraParts.push(/floor/i.test(floor) ? floor : `Floor ${floor}`);
+    if (street) extraParts.push(street);
+    if (city) extraParts.push(city);
+    if (raw.postcode || localConfirmed?.postcode || meta?.postcode) {
+      extraParts.push(raw.postcode || localConfirmed?.postcode || meta?.postcode);
+    }
+    resolvedServiceAddress = extraParts.join(", ");
   }
 
   // Scan notes/special_conditions for postcode or address tags if still missing
@@ -1022,7 +1449,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   }
 
   // Extract readable human booking ID exactly as returned by backend (e.g. 100138, 100002, MMCR100156)
-  const isCarService = Boolean(isChauffeur || raw.car || raw.car_id || raw.car_model);
+  const isCarService = Boolean(isChauffeur || raw.car || raw.car_id);
 
   // Helper to validate non-numeric, non-UUID readable string candidates
   const isValidReadableId = (val: any): boolean => {
@@ -1121,46 +1548,50 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     }
   }
 
-  // 5. Fallback: Only if NO readable or numeric ID exists anywhere, slice UUID
-  if (!resolvedReadableId) {
-    resolvedReadableId = idStr.length > 12 ? idStr.slice(0, 8).toUpperCase() : idStr;
-  }
+  // 5. Always guarantee readableId is a pure numeric Demandium ID in the 100xxx format (e.g. 100177)
+  resolvedReadableId = formatToNumericBookingId(resolvedReadableId || idStr);
 
-  // Detect service nature (Mobile repair, Workshop service, Car Hire, etc.)
+  // Detect service nature accurately based on serviceType and delivery location
   let serviceNature = "Mobile repair";
-  const rawNature =
-    raw.service_nature ||
-    raw.service_location_type ||
-    raw.repair_type ||
-    raw.service_type ||
-    raw.booking_nature ||
-    raw.category_type ||
-    raw.delivery_type ||
-    raw.sub_category?.name ||
-    raw.category?.name ||
-    "";
-
-  if (typeof rawNature === "string" && rawNature.trim().length > 0) {
-    const lower = rawNature.toLowerCase();
-    if (lower.includes("mobile")) {
-      serviceNature = "Mobile repair";
-    } else if (lower.includes("workshop") || lower.includes("garage")) {
-      serviceNature = "Workshop service";
-    } else if (lower.includes("hire") || lower.includes("rental")) {
-      serviceNature = "Car Hire";
-    } else if (lower.includes("chauffeur")) {
-      serviceNature = "Chauffeur Service";
-    } else {
-      serviceNature = rawNature.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    }
+  if (serviceType === "bodywork") {
+    const loc = String(raw.service_location || raw.service_location_type || "").toLowerCase();
+    serviceNature = loc.includes("provider") || loc.includes("workshop") ? "Workshop Paint & Body" : "Mobile Bodywork Repair";
+  } else if (serviceType === "valet") {
+    const loc = String(raw.service_location || raw.service_location_type || "").toLowerCase();
+    serviceNature = loc.includes("station") || loc.includes("provider") ? "Valet Studio" : "Doorstep Mobile Valet";
+  } else if (serviceType === "tyre") {
+    serviceNature = "Mobile Tyre Fitting";
+  } else if (serviceType === "emergency") {
+    serviceNature = "Roadside Dispatch";
+  } else if (serviceType === "alloy") {
+    serviceNature = "Alloy Refurbishment";
+  } else if (serviceType === "mechanical") {
+    serviceNature = "Mechanical Repair";
+  } else if (serviceType === "modification") {
+    serviceNature = "Custom Tuning & Modification";
+  } else if (serviceType === "chauffeur") {
+    serviceNature = isChauffeur ? "Chauffeur Service" : "Car Hire";
   } else {
-    const combinedNotes = `${raw.notes || ""} ${raw.instructions || ""} ${raw.special_conditions || ""}`.toLowerCase();
-    if (combinedNotes.includes("mobile") || combinedNotes.includes("on-site") || combinedNotes.includes("call-out")) {
-      serviceNature = "Mobile repair";
-    } else if (isCarService) {
-      serviceNature = isChauffeur ? "Chauffeur Service" : "Car Hire";
+    const rawNature =
+      raw.service_nature ||
+      raw.service_location_type ||
+      raw.repair_type ||
+      raw.booking_nature ||
+      raw.delivery_type ||
+      "";
+    if (typeof rawNature === "string" && rawNature.trim().length > 0) {
+      const lower = rawNature.toLowerCase();
+      if (lower.includes("mobile")) {
+        serviceNature = "Mobile repair";
+      } else if (lower.includes("workshop") || lower.includes("garage")) {
+        serviceNature = "Workshop service";
+      } else if (lower.includes("hire") || lower.includes("rental")) {
+        serviceNature = "Car Hire";
+      } else {
+        serviceNature = rawNature.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      }
     } else {
-      serviceNature = "Mobile repair";
+      serviceNature = "Doorstep Service";
     }
   }
 
@@ -1222,6 +1653,11 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     destinationLocation,
     serviceAddress,
     postcode,
+    house: house || undefined,
+    floor: floor || undefined,
+    street: street || undefined,
+    city: city || undefined,
+    locationAddress: serviceAddress || pickupLocation || "",
     coordinates,
     destinationCoordinates,
     vehicleReg,
@@ -1349,12 +1785,32 @@ export async function fetchAllCustomerBookings(
       const bestPaid = norm.isPaid || existing.isPaid;
       const bestProvider = norm.providerName || existing.providerName;
       const bestSchedule = norm.scheduleDate || existing.scheduleDate;
-      const bestReadableId =
+      const rawBestId =
         norm.readableId && isPureNumericId(norm.readableId)
           ? norm.readableId
           : existing.readableId && isPureNumericId(existing.readableId)
             ? existing.readableId
             : (norm.readableId || existing.readableId);
+      const bestReadableId = formatToNumericBookingId(rawBestId || matchedKey);
+
+      // Never overwrite a good address with a placeholder or blank address!
+      const bestServiceAddress =
+        norm.serviceAddress && !isGenericPlaceholderAddress(norm.serviceAddress)
+          ? norm.serviceAddress
+          : existing.serviceAddress;
+      const bestLocationAddress =
+        norm.locationAddress && !isGenericPlaceholderAddress(norm.locationAddress)
+          ? norm.locationAddress
+          : existing.locationAddress || bestServiceAddress;
+      const bestPickupLocation =
+        norm.pickupLocation && !isGenericPlaceholderAddress(norm.pickupLocation)
+          ? norm.pickupLocation
+          : existing.pickupLocation || bestServiceAddress;
+      const bestHouse = norm.house || existing.house;
+      const bestFloor = norm.floor || existing.floor;
+      const bestStreet = norm.street || existing.street;
+      const bestCity = norm.city || existing.city;
+      const bestPostcode = norm.postcode || existing.postcode;
 
       unifiedMap.set(matchedKey, {
         ...existing,
@@ -1365,11 +1821,52 @@ export async function fetchAllCustomerBookings(
         isPaid: bestPaid,
         providerName: bestProvider,
         scheduleDate: bestSchedule,
+        serviceAddress: bestServiceAddress,
+        locationAddress: bestLocationAddress,
+        pickupLocation: bestPickupLocation,
+        house: bestHouse,
+        floor: bestFloor,
+        street: bestStreet,
+        city: bestCity,
+        postcode: bestPostcode,
         paidAmount: bestPaid ? bestAmount : norm.paidAmount > 0 ? norm.paidAmount : existing.paidAmount,
       });
     } else {
       unifiedMap.set(key, norm);
     }
+  }
+
+  // Pre-fetch customer saved addresses to map any service_address_id
+  const addressMap = new Map<string, any>();
+  try {
+    const addrRes = await apiClient.get("/customer/address", {
+      params: { limit: 50, offset: 1 },
+    });
+    const addrData = addrRes.data?.content?.data || addrRes.data?.content || addrRes.data || [];
+    if (Array.isArray(addrData)) {
+      addrData.forEach((a: any) => {
+        if (a && a.id) {
+          addressMap.set(String(a.id), a);
+        }
+      });
+    }
+  } catch (addrErr) {
+    console.warn("[Bookings] Could not pre-fetch customer addresses:", addrErr);
+  }
+
+  function enrichBookingItemWithAddress(item: any) {
+    if (!item) return item;
+    const addrId = String(item.service_address_id || item.serviceAddressId || item.address_id || "");
+    if (addrId && addressMap.has(addrId)) {
+      const saved = addressMap.get(addrId);
+      if (!item.service_address || typeof item.service_address !== "object") {
+        item.service_address = saved;
+      }
+      if (!item.house && saved.house) item.house = saved.house;
+      if (!item.floor && saved.floor) item.floor = saved.floor;
+      if (!item.postcode && (saved.zip_code || saved.postcode)) item.postcode = saved.zip_code || saved.postcode;
+    }
+    return item;
   }
 
   // Strategy 1: Single call with booking_status=all (most efficient, avoids 429)
@@ -1381,7 +1878,7 @@ export async function fetchAllCustomerBookings(
     const content = res.data?.content;
     const items = extractBookingsFromContent(content);
     console.log(`[Bookings] booking_status=all: found ${items.length} items`);
-    items.forEach((item) => addToMap(item));
+    items.forEach((item) => addToMap(enrichBookingItemWithAddress(item)));
     if (items.length > 0) gotResults = true;
   } catch (err: any) {
     console.warn("[Bookings] booking_status=all failed:", err?.response?.status || err?.message);
@@ -1398,7 +1895,7 @@ export async function fetchAllCustomerBookings(
         const content = res.data?.content;
         const items = extractBookingsFromContent(content);
         console.log(`[Bookings] status=${status}: found ${items.length} items`);
-        items.forEach((item) => addToMap(item));
+        items.forEach((item) => addToMap(enrichBookingItemWithAddress(item)));
       } catch (err: any) {
         console.warn(`[Bookings] status=${status} fetch failed:`, err?.response?.status || err?.message);
         if (err?.response?.status === 429) {
@@ -1416,9 +1913,48 @@ export async function fetchAllCustomerBookings(
     });
     const carItems = extractBookingsFromContent(resCar.data?.content);
     console.log(`[Bookings] car bookings: found ${carItems.length} items`);
-    carItems.forEach((item) => addToMap(item, "chauffeur"));
+    carItems.forEach((item) => addToMap(enrichBookingItemWithAddress(item), "chauffeur"));
   } catch (err: any) {
     console.warn("[Bookings] car fetch failed:", err?.response?.status || err?.message);
+  }
+
+  // Query single booking details (/customer/booking/{id}) for any items missing service address
+  const itemsNeedingDetails = Array.from(unifiedMap.values()).filter(
+    (b) =>
+      b.id &&
+      isUuidStr(b.id) &&
+      (!b.serviceAddress ||
+        isGenericPlaceholderAddress(b.serviceAddress) ||
+        !b.raw?.service_address ||
+        typeof b.raw?.service_address !== "object")
+  );
+
+  if (itemsNeedingDetails.length > 0) {
+    const slice = itemsNeedingDetails.slice(0, 10);
+    await Promise.allSettled(
+      slice.map(async (b) => {
+        try {
+          const detailRes = await apiClient.get(`/customer/booking/${b.id}`);
+          const detailedContent = detailRes.data?.content;
+          if (detailedContent && typeof detailedContent === "object") {
+            enrichBookingItemWithAddress(detailedContent);
+            addToMap(detailedContent, b.serviceType);
+            if (detailedContent.service_address) {
+              const extAddr = extractReadableAddress(detailedContent.service_address);
+              saveBookingMeta(b.id, {
+                serviceAddress: extAddr,
+                locationAddress: extAddr,
+                house: detailedContent.service_address.house,
+                floor: detailedContent.service_address.floor,
+                postcode: detailedContent.service_address.zip_code,
+              });
+            }
+          }
+        } catch (detailErr) {
+          console.warn(`[Bookings] Fetch detail for ${b.id} failed:`, detailErr);
+        }
+      })
+    );
   }
 
   // Read locally saved bookings to merge or backfill any missing items
@@ -1476,6 +2012,35 @@ export async function fetchAllCustomerBookings(
       if (local.isPartiallyPaid) {
         real.isPartiallyPaid = true;
       }
+
+      const localAddress = local.serviceAddress || local.locationAddress || local.pickupLocation;
+      const isRealAddressWeak =
+        !real.serviceAddress ||
+        isGenericPlaceholderAddress(real.serviceAddress) ||
+        !extractReadableAddress(real.serviceAddress);
+
+      if (localAddress && isRealAddressWeak) {
+        real.serviceAddress = extractReadableAddress(localAddress) || localAddress;
+      }
+      if (local.locationAddress && (!real.locationAddress || isGenericPlaceholderAddress(real.locationAddress))) {
+        real.locationAddress = extractReadableAddress(local.locationAddress) || local.locationAddress;
+      }
+      if (local.pickupLocation && (!real.pickupLocation || isGenericPlaceholderAddress(real.pickupLocation))) {
+        real.pickupLocation = extractReadableAddress(local.pickupLocation) || local.pickupLocation;
+      }
+      if (local.house && !real.house) {
+        real.house = local.house;
+      }
+      if (local.floor && !real.floor) {
+        real.floor = local.floor;
+      }
+      if (local.postcode && !real.postcode) {
+        real.postcode = local.postcode;
+      }
+      if (!real.locationAddress && (real.serviceAddress || real.pickupLocation)) {
+        real.locationAddress = real.serviceAddress || real.pickupLocation || "";
+      }
+
       saveBookingMeta(real.id, {
         serviceTitle: real.serviceTitle,
         providerName: real.providerName,
@@ -1485,6 +2050,12 @@ export async function fetchAllCustomerBookings(
         paidAmount: real.paidAmount,
         dueAmount: real.dueAmount,
         isPartiallyPaid: real.isPartiallyPaid,
+        serviceAddress: real.serviceAddress,
+        pickupLocation: real.pickupLocation,
+        locationAddress: real.locationAddress,
+        postcode: real.postcode,
+        house: real.house,
+        floor: real.floor,
       });
     };
 
@@ -1504,19 +2075,54 @@ export async function fetchAllCustomerBookings(
             return; // Merged into existing real server booking, skip adding duplicate
           }
 
-          if (isFakeDummyId(bId)) {
+          if (isFakeDummyId(bId) || isFakeDummyId(b.readableId)) {
             // Drop client-generated temporary dummy IDs so they never duplicate
             return;
           }
 
           addToMap({ ...b, ...(b.raw || {}) });
-          cleanedLocalList.push(b);
+          cleanedLocalList.push({
+            ...b,
+            readableId: formatToNumericBookingId(b.readableId || b.id),
+          });
         });
 
         localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(cleanedLocalList));
       }
     } catch (e) {
       console.warn("[Bookings] Could not read local bookings:", e);
+    }
+
+    try {
+      const tyreRaw = localStorage.getItem("mmc_tyre_assistance_bookings");
+      if (tyreRaw) {
+        const tyreList: any[] = JSON.parse(tyreRaw);
+        tyreList.forEach((t: any) => {
+          const tId = String(t.id || t.referenceNumber || "").trim();
+          if (!tId) return;
+          const matchingReal = findMatchingReal(t);
+          if (matchingReal) {
+            mergeLocalIntoReal(matchingReal, {
+              serviceTitle: t.categoryLabel || "Tyre Assistance",
+              serviceSubtitle: t.assistanceLabel || t.quote?.tyreDescription,
+              serviceAddress: t.serviceAddress || t.locationAddress,
+              pickupLocation: t.locationAddress || t.serviceAddress,
+              locationAddress: t.locationAddress || t.serviceAddress,
+              house: t.house,
+              floor: t.floor,
+              postcode: t.locationPostcode,
+              providerName: t.provider?.name || t.provider?.companyName,
+              providerPhone: t.provider?.phone,
+              vehicleReg: t.vehicleRegistration,
+              vehicleModel: t.vehicleMakeModel,
+              paidAmount: t.quote?.fareAmount ? (t.isPartiallyPaid ? Math.round(t.quote.fareAmount * 0.25) : t.quote.fareAmount) : undefined,
+              dueAmount: t.quote?.fareAmount && t.isPartiallyPaid ? Math.round(t.quote.fareAmount * 0.75) : 0,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("[Bookings] Could not read tyre assistance bookings:", e);
     }
 
     try {
@@ -1528,7 +2134,7 @@ export async function fetchAllCustomerBookings(
           const matchingReal = findMatchingReal(pending);
           if (matchingReal) {
             mergeLocalIntoReal(matchingReal, pending);
-          } else if (!isFakeDummyId(pId)) {
+          } else if (!isFakeDummyId(pId) && !isFakeDummyId(pending.readable_id)) {
             addToMap(pending);
           }
         }
@@ -1538,6 +2144,9 @@ export async function fetchAllCustomerBookings(
 
   // Sort: newest bookings strictly at the top
   const allList = Array.from(unifiedMap.values());
+  allList.forEach((b) => {
+    b.readableId = formatToNumericBookingId(b.readableId || b.id);
+  });
   allList.sort((a, b) => {
     const timeA = parseBookingTimestamp(a);
     const timeB = parseBookingTimestamp(b);
@@ -1599,4 +2208,67 @@ export async function switchBookingPaymentMethod(
     redirect_url: redirectUrl,
     data: data?.content || data,
   };
+}
+
+/**
+ * Fetch complete single booking details by ID directly from /customer/booking/{id}
+ */
+export async function fetchBookingDetails(bookingId: string | number): Promise<UnifiedBookingItem | null> {
+  let cleanId = String(bookingId || "").trim();
+  if (!cleanId) return null;
+
+  // If cleanId is not a UUID, check local metadata/confirmed bookings for the mapped backend UUID
+  if (!isUuidStr(cleanId) && typeof window !== "undefined") {
+    const meta = getBookingMeta(cleanId);
+    if (meta?.rawId && isUuidStr(meta.rawId)) {
+      cleanId = String(meta.rawId);
+    } else if (meta?.id && isUuidStr(meta.id)) {
+      cleanId = String(meta.id);
+    }
+  }
+
+  try {
+    const res = await apiClient.get(`/customer/booking/${cleanId}`);
+    const content = res.data?.content || res.data;
+    if (content && typeof content === "object") {
+      // If service_address is missing but service_address_id is present, attempt to fetch saved address
+      if (!content.service_address && content.service_address_id) {
+        try {
+          const addrRes = await apiClient.get("/customer/address", {
+            params: { limit: 50, offset: 1 },
+          });
+          const addrList = addrRes.data?.content?.data || addrRes.data?.content || addrRes.data || [];
+          if (Array.isArray(addrList)) {
+            const found = addrList.find((a: any) => String(a?.id) === String(content.service_address_id));
+            if (found) {
+              content.service_address = found;
+            }
+          }
+        } catch { }
+      }
+
+      const normalized = normalizeBooking(content);
+      if (content.service_address) {
+        const extAddr = extractReadableAddress(content.service_address);
+        const metaPayload = {
+          serviceAddress: extAddr,
+          locationAddress: extAddr,
+          house: content.service_address.house,
+          floor: content.service_address.floor,
+          street: content.service_address.street || normalized.street,
+          city: content.service_address.city || normalized.city,
+          postcode: content.service_address.zip_code || content.service_address.postcode,
+        };
+        saveBookingMeta(cleanId, metaPayload);
+        if (content.id) saveBookingMeta(content.id, metaPayload);
+        if (content.readable_id) saveBookingMeta(content.readable_id, metaPayload);
+        if (bookingId && String(bookingId) !== cleanId) saveBookingMeta(bookingId, metaPayload);
+      }
+      return normalized;
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[fetchBookingDetails] Failed to fetch booking #${cleanId}:`, err);
+    return null;
+  }
 }

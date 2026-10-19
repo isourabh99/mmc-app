@@ -32,6 +32,7 @@ import {
   dismissNotification,
   clearAllNotifications,
 } from "@/lib/service/notifications.api";
+import { formatToNumericBookingId } from "@/lib/service/bookings.api";
 import NotificationDetailModal from "@/components/NotificationDetailModal";
 
 interface NotificationCenterProps {
@@ -500,17 +501,17 @@ export default function NotificationCenter({
                         key={item.id}
                         onClick={() => handleNotificationClick(item)}
                         className={`
-                          group relative p-3 rounded-2xl cursor-pointer transition-all duration-200
+                          group relative p-3.5 sm:p-4 rounded-2xl cursor-pointer transition-all duration-200 border
                           ${item.read
-                            ? "bg-transparent hover:bg-white/[0.04] opacity-80 hover:opacity-100"
-                            : "bg-gradient-to-r from-[#FAD293]/[0.08] to-transparent border-l-2 border-[#FAD293] hover:bg-[#FAD293]/10"
+                            ? "bg-[#14110e]/80 border-[#2a221a] hover:border-[#d9a85f]/30 hover:bg-[#191410]"
+                            : "bg-[#18130e] border-[#3d2e1d] hover:border-[#d9a85f]/60 hover:bg-[#1f1812] shadow-md"
                           }
                         `}
                       >
-                        <div className="flex items-start gap-3">
-                          {/* Left: Circle Avatar (Image or Tag or Category Icon) */}
+                        <div className="flex items-start gap-3.5">
+                          {/* Left: Circle / Rounded Avatar (Matching mobile app: Tag for quotes, Calendar for bookings, or Image) */}
                           {item.image ? (
-                            <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 border border-[#FAD293]/35 bg-black/40 shadow-sm mt-0.5">
+                            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shrink-0 border border-[#d9a85f]/35 bg-black/40 shadow-sm mt-0.5">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={item.image}
@@ -536,72 +537,56 @@ export default function NotificationCenter({
                               />
                             </div>
                           ) : item.actionType === "quote" || item.category === "quote" ? (
-                            <div className="w-10 h-10 rounded-full bg-[#2A231C] border border-[#FAD293]/30 flex items-center justify-center text-[#CEA46B] shrink-0 shadow-sm mt-0.5">
-                              <Tag size={18} />
+                            <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
+                              <Tag size={19} />
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-[#1A1612] border border-white/10 group-hover:border-[#FAD293]/40 flex items-center justify-center shrink-0 shadow-sm text-[#FAD293] mt-0.5">
-                              {getCategoryIcon(item.category)}
+                            <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
+                              <Calendar size={19} />
                             </div>
                           )}
 
                           {/* Content */}
                           <div className="flex-1 min-w-0">
-                            {/* Title & Unread indicator */}
-                            <div className="flex items-center justify-between gap-1 mb-1">
-                              <h3
-                                className={`text-xs sm:text-sm truncate font-bold ${
-                                  item.read ? "text-white/80" : "text-white"
-                                }`}
-                              >
+                            {/* Title & Unread indicator (Matching mobile app: title on left, gold dot on right) */}
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm font-bold text-white leading-tight line-clamp-1">
                                 {item.title}
                               </h3>
                               {!item.read && (
-                                <span className="w-2 h-2 rounded-full bg-[#CEA46B] shrink-0 shadow-[0_0_8px_rgba(206,164,107,0.8)] mt-0.5" />
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#d9a85f] shrink-0 mt-0.5 shadow-[0_0_8px_rgba(217,168,95,0.8)]" />
                               )}
                             </div>
 
-                            {/* Subtitle / Description */}
-                            {item.description && (
-                              <p className="text-[11px] sm:text-xs text-white/60 line-clamp-2 leading-relaxed mb-1.5">
-                                {item.description}
-                              </p>
-                            )}
+                            {/* Description (Exact text e.g. "Your booking #100159 status has been updated to Completed." or quotation text) */}
+                            <p className="text-xs text-white/70 mt-1 leading-relaxed line-clamp-2">
+                              {item.description || (item.bookingId ? `Your booking #${formatToNumericBookingId(item.readableId || item.bookingId)} status has been updated.` : "")}
+                            </p>
 
-                            {/* Schedule & Price details (if booking) */}
-                            {item.totalAmount > 0 && !item.description?.includes(String(item.totalAmount)) && (
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/60 mb-1.5">
-                                <span className="font-semibold text-white/80">
-                                  £{item.totalAmount}
-                                </span>
-                                {item.isPaid && (
-                                  <span className="text-[10px] text-emerald-400 font-medium">
-                                    (Paid)
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                            {/* Footer: Time ago on left, View Bids / View Details on right */}
+                            <div className="flex items-center justify-between text-xs text-white/40 mt-2.5 pt-0.5">
+                              <span className="font-medium text-[11px] text-white/40">
+                                {item.timeAgo}
+                              </span>
 
-                            {/* Time ago & actions */}
-                            <div className="flex items-center justify-between text-[10px] text-white/40 pt-0.5">
-                              <span>{item.timeAgo}</span>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2.5">
                                 {item.actionType === "quote" ? (
-                                  <span className="text-[#CEA46B] text-[11px] font-semibold flex items-center gap-0.5 group-hover:underline">
+                                  <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
                                     View Bids &gt;
                                   </span>
-                                ) : (
-                                  <span className="text-[#FAD293] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px] font-semibold">
-                                    Details <ChevronRight size={12} />
+                                ) : item.actionType === "booking" || (item.bookingId && item.bookingId !== "N/A") || item.targetUrl ? (
+                                  <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
+                                    View Details &gt;
                                   </span>
-                                )}
+                                ) : null}
+
                                 <button
                                   type="button"
                                   onClick={(e) => handleDismiss(e, item.id)}
                                   title="Dismiss"
-                                  className="text-white/30 hover:text-red-400 p-1 rounded transition-colors"
+                                  className="text-white/25 hover:text-red-400 p-0.5 rounded transition"
                                 >
-                                  <X size={12} />
+                                  <X size={13} />
                                 </button>
                               </div>
                             </div>

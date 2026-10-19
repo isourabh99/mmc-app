@@ -70,6 +70,13 @@ interface BookingPageViewProps {
     bookingConfirmed: boolean;
     bookingApiResult: any;
     bookingError: string | null;
+    serviceAddress?: string;
+    locationAddress?: string;
+    house?: string;
+    floor?: string;
+    street?: string;
+    city?: string;
+    postcode?: string;
     onSubmitBooking: () => Promise<void>;
     onBackToQuotes: () => void;
     onBackToHome: () => void;
@@ -110,6 +117,13 @@ export default function BookingPageView({
     bookingConfirmed,
     bookingApiResult,
     bookingError,
+    serviceAddress,
+    locationAddress,
+    house,
+    floor,
+    street,
+    city,
+    postcode,
     onSubmitBooking,
     onBackToQuotes,
     onBackToHome,
@@ -202,6 +216,20 @@ export default function BookingPageView({
                             <span className="text-zinc-400">Service Mode:</span>
                             <span className="font-bold text-white capitalize">{serviceLocation === "customer" ? "Mobile To Your Location" : "Workshop Visit"}</span>
                         </div>
+                        {(locationAddress || serviceAddress || house || floor) && (
+                            <div className="flex items-start justify-between gap-4 pt-1 border-t border-zinc-800/60">
+                                <span className="text-zinc-400 shrink-0">Service Location:</span>
+                                <span className="font-bold text-white text-right break-words">
+                                    {[
+                                        house ? `House/Flat: ${house}` : "",
+                                        floor ? `Floor ${floor}` : "",
+                                        locationAddress || serviceAddress || "Indore, 452001, India",
+                                    ]
+                                        .filter(Boolean)
+                                        .join(", ")}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                             <span className="text-zinc-400">Agreed Price:</span>
                             <span className="text-base font-extrabold text-[#E8AF66]">{priceFormatted}</span>
@@ -333,6 +361,57 @@ export default function BookingPageView({
                             <span>Workshop Drop-Off</span>
                         </button>
                     </div>
+
+                    {serviceLocation === "customer" && (
+                        <div className="p-4 rounded-2xl bg-[#18181B] border border-zinc-800 space-y-2 mt-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-[#E8AF66] uppercase tracking-wider flex items-center gap-1.5">
+                                    <Building2 className="w-3.5 h-3.5" />
+                                    Service Location &amp; Destination Address
+                                </span>
+                                {postcode && (
+                                    <span className="px-2 py-0.5 rounded bg-black/40 border border-zinc-700 font-mono text-[10px] text-zinc-300">
+                                        📮 {postcode}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-white font-medium break-words">
+                                {[
+                                    house ? `Flat/House: ${house}` : "",
+                                    floor ? `Floor: ${floor}` : "",
+                                    street ? `Street: ${street}` : "",
+                                    city ? `City: ${city}` : "",
+                                    locationAddress || serviceAddress || (postcode ? `Postcode: ${postcode}` : "Service Location Selected"),
+                                ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                            </p>
+                            {(house || floor || street || city) && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                    {house && (
+                                        <span className="px-2 py-0.5 rounded bg-[#E8AF66]/10 border border-[#E8AF66]/20 text-[10px] text-[#E8AF66] font-bold">
+                                            🏠 Flat/House: {house}
+                                        </span>
+                                    )}
+                                    {floor && (
+                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
+                                            🏢 Floor: {floor}
+                                        </span>
+                                    )}
+                                    {street && (
+                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
+                                            🛣️ Street: {street}
+                                        </span>
+                                    )}
+                                    {city && (
+                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
+                                            🏙️ City: {city}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* 2. Description & Notes */}

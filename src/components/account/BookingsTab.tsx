@@ -26,7 +26,6 @@ import {
   Truck,
   SlidersHorizontal,
   ChevronDown,
-  Navigation,
   Eye,
   RotateCcw,
   Building2,
@@ -40,12 +39,32 @@ import {
   BookingServiceType,
   getServiceCategoryLabel,
   extractReadableAddress,
+  getBookingDisplayAddress,
   cleanReadableText,
   saveBookingMeta,
   parseBookingTimestamp,
   getDigitalPaymentCallbackUrl,
   switchBookingPaymentMethod,
+  formatToNumericBookingId,
+  fetchBookingDetails,
+  isUuidStr,
 } from "@/lib/service/bookings.api";
+
+const NavigationIcon = ({ className, size = 15 }: { className?: string; size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <polygon points="3 11 22 2 13 21 11 13 3 11" />
+  </svg>
+);
 
 interface BookingsTabProps {
   bookings: UnifiedBookingItem[];
@@ -224,7 +243,33 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
     if (pendingBookingIdToOpen && bookings.length > 0) {
       openBookingById(pendingBookingIdToOpen, initialStatus || undefined);
     }
-  }, [pendingBookingIdToOpen, bookings, initialStatus, openBookingById]);
+  }, [pendingBookingIdToOpen, bookings, openBookingById, initialStatus]);
+
+  // When modal is opened, fetch live fresh details from /customer/booking/{id} to guarantee full service_address
+  useEffect(() => {
+    const rawId = selectedBookingForModal?.rawId || selectedBookingForModal?.id || selectedBookingForModal?.readableId;
+    if (rawId) {
+      fetchBookingDetails(rawId).then((fresh) => {
+        if (fresh) {
+          setSelectedBookingForModal((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              ...fresh,
+              raw: fresh.raw || prev.raw,
+              serviceAddress: fresh.serviceAddress || prev.serviceAddress,
+              locationAddress: fresh.locationAddress || prev.locationAddress,
+              house: fresh.house || prev.house,
+              floor: fresh.floor || prev.floor,
+              street: fresh.street || prev.street,
+              city: fresh.city || prev.city,
+              postcode: fresh.postcode || prev.postcode,
+            };
+          });
+        }
+      });
+    }
+  }, [selectedBookingForModal?.id, selectedBookingForModal?.rawId, selectedBookingForModal?.readableId]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -732,15 +777,15 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                         <div className="flex flex-wrap items-center gap-2.5 text-xs text-zinc-400 mt-0.5">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-sm font-black text-[#FAD293] tracking-wide">
-                              {item.readableId || item.id}
+                              {formatToNumericBookingId(item.readableId || item.id)}
                             </span>
                             <button
                               type="button"
-                              onClick={() => handleCopy(String(item.readableId || item.id))}
+                              onClick={() => handleCopy(formatToNumericBookingId(item.readableId || item.id))}
                               className="text-zinc-400 hover:text-white transition p-0.5 cursor-pointer"
                               title="Copy Booking ID"
                             >
-                              {copiedId === String(item.readableId || item.id) ? (
+                              {copiedId === formatToNumericBookingId(item.readableId || item.id) ? (
                                 <Check size={13} className="text-emerald-400" />
                               ) : (
                                 <Copy size={13} />
@@ -812,16 +857,46 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                             {item.destinationLocation ? "Pickup Location" : "Service Location"}
                           </span>
                           <span className="text-white font-medium break-words block">
-                            {extractReadableAddress(item.pickupLocation) ||
+                            {getBookingDisplayAddress(item) ||
+                              (typeof item.raw?.service_address === "object" && item.raw?.service_address?.address) ||
                               extractReadableAddress(item.serviceAddress) ||
-                              item.postcode ||
-                              (item.coordinates?.latitude && Number(item.coordinates.latitude) !== 0
-                                ? `Service Area (${Number(item.coordinates.latitude).toFixed(4)}, ${Number(item.coordinates.longitude).toFixed(4)})`
-                                : "London, UK (Customer Location)")}
+                              item.serviceAddress ||
+                              item.locationAddress ||
+                              (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
+                              "Customer Location, United Kingdom"}
                           </span>
-                          {item.coordinates?.latitude && Number(item.coordinates.latitude) !== 0 && (
+                          {(item.house || item.floor || item.street || item.city || item.raw?.service_address?.house || item.raw?.service_address?.floor || item.raw?.service_address?.street || item.raw?.service_address?.city) && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              {(item.house || item.raw?.service_address?.house) && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-[10px] text-[#FAD293] font-bold">
+                                  🏠 Flat/House: {item.house || item.raw?.service_address?.house}
+                                </span>
+                              )}
+                              {(item.floor || item.raw?.service_address?.floor) && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-zinc-300 font-semibold">
+                                  🏢 Floor: {item.floor || item.raw?.service_address?.floor}
+                                </span>
+                              )}
+                              {(item.street || item.raw?.service_address?.street) && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-zinc-300 font-semibold">
+                                  🛣️ Street: {item.street || item.raw?.service_address?.street}
+                                </span>
+                              )}
+                              {(item.city || item.raw?.service_address?.city) && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-zinc-300 font-semibold">
+                                  🏙️ City: {item.city || item.raw?.service_address?.city}
+                                </span>
+                              )}
+                              {(item.postcode || item.raw?.service_address?.zip_code) && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/40 border border-white/10 text-[10px] font-mono text-zinc-400">
+                                  📮 {item.postcode || item.raw?.service_address?.zip_code}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {(item.coordinates?.latitude || item.raw?.service_address?.lat) && Number(item.coordinates?.latitude || item.raw?.service_address?.lat) !== 0 && (
                             <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">
-                              📍 Coordinates: {Number(item.coordinates.latitude).toFixed(4)}, {Number(item.coordinates.longitude).toFixed(4)}
+                              📍 Coordinates: {Number(item.coordinates?.latitude || item.raw?.service_address?.lat).toFixed(4)}, {Number(item.coordinates?.longitude || item.raw?.service_address?.lon).toFixed(4)}
                             </span>
                           )}
                         </div>
@@ -1007,27 +1082,24 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   <span className="text-2xl sm:text-3xl font-black text-zinc-950 uppercase tracking-tight">
                     {selectedBookingForModal.statusDisplay}
                   </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-black/20 text-zinc-950 border border-black/25">
-                    {selectedBookingForModal.serviceCategoryName}
-                  </span>
-                  {selectedBookingForModal.serviceNature && (
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/20 text-zinc-950 border border-black/15">
-                      {selectedBookingForModal.serviceNature}
+                  {selectedBookingForModal.serviceCategoryName && (
+                    <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-black/20 text-zinc-950 border border-black/25">
+                      {selectedBookingForModal.serviceCategoryName}
                     </span>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2 pt-0.5">
                   <span className="text-sm font-black text-zinc-900 font-mono tracking-wide">
-                    Booking ID - {selectedBookingForModal.readableId || selectedBookingForModal.id}
+                    Booking ID - {formatToNumericBookingId(selectedBookingForModal.readableId || selectedBookingForModal.id)}
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleCopy(String(selectedBookingForModal.readableId || selectedBookingForModal.id))}
+                    onClick={() => handleCopy(formatToNumericBookingId(selectedBookingForModal.readableId || selectedBookingForModal.id))}
                     className="p-1 rounded-md bg-black/10 hover:bg-black/20 text-zinc-900 transition cursor-pointer"
                     title="Copy Booking ID"
                   >
-                    {copiedId === String(selectedBookingForModal.readableId || selectedBookingForModal.id) ? (
+                    {copiedId === formatToNumericBookingId(selectedBookingForModal.readableId || selectedBookingForModal.id) ? (
                       <Check size={14} className="text-emerald-950 font-bold" />
                     ) : (
                       <Copy size={14} />
@@ -1158,18 +1230,57 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   </div>
 
                   {/* Service Location / Route Address */}
-                  {(selectedBookingForModal.pickupLocation || selectedBookingForModal.serviceAddress || selectedBookingForModal.postcode) && (
-                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-2">
-                      <div className="flex items-center gap-2 text-[#FAD293]">
-                        <MapPin size={15} />
-                        <span className="text-xs font-bold uppercase tracking-wider">Service Location / Address</span>
+                  {(selectedBookingForModal.pickupLocation || selectedBookingForModal.serviceAddress || selectedBookingForModal.locationAddress || selectedBookingForModal.postcode || selectedBookingForModal.house || selectedBookingForModal.raw?.service_address) && (
+                    <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-2.5">
+                      <div className="flex items-center justify-between text-[#FAD293]">
+                        <div className="flex items-center gap-2">
+                          <MapPin size={15} />
+                          <span className="text-xs font-bold uppercase tracking-wider">Service Location / Address</span>
+                        </div>
+                        {(selectedBookingForModal.postcode || selectedBookingForModal.raw?.service_address?.zip_code) && (
+                          <span className="px-2 py-0.5 rounded bg-[#251d16] border border-[#FAD293]/30 font-mono font-bold text-[11px] text-[#FAD293]">
+                            📮 {selectedBookingForModal.postcode || selectedBookingForModal.raw?.service_address?.zip_code}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs sm:text-sm font-semibold text-zinc-200 leading-relaxed">
-                        {extractReadableAddress(selectedBookingForModal.pickupLocation) ||
+                        {getBookingDisplayAddress(selectedBookingForModal) ||
+                          (typeof selectedBookingForModal.raw?.service_address === "object" && selectedBookingForModal.raw?.service_address?.address) ||
                           extractReadableAddress(selectedBookingForModal.serviceAddress) ||
-                          selectedBookingForModal.postcode ||
-                          "Indore, Indore, Madhya Pradesh, India"}
+                          selectedBookingForModal.serviceAddress ||
+                          selectedBookingForModal.locationAddress ||
+                          (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
+                          "Customer Location, United Kingdom"}
                       </p>
+                      {(selectedBookingForModal.house || selectedBookingForModal.floor || selectedBookingForModal.street || selectedBookingForModal.city || selectedBookingForModal.raw?.service_address?.house || selectedBookingForModal.raw?.service_address?.floor || selectedBookingForModal.raw?.service_address?.street || selectedBookingForModal.raw?.service_address?.city) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {(selectedBookingForModal.house || selectedBookingForModal.raw?.service_address?.house) && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-xs text-[#FAD293] font-semibold">
+                              🏠 Flat / House: {selectedBookingForModal.house || selectedBookingForModal.raw?.service_address?.house}
+                            </span>
+                          )}
+                          {(selectedBookingForModal.floor || selectedBookingForModal.raw?.service_address?.floor) && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-zinc-300 font-semibold">
+                              🏢 Floor: {selectedBookingForModal.floor || selectedBookingForModal.raw?.service_address?.floor}
+                            </span>
+                          )}
+                          {(selectedBookingForModal.street || selectedBookingForModal.raw?.service_address?.street) && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-zinc-300 font-semibold">
+                              🛣️ Street: {selectedBookingForModal.street || selectedBookingForModal.raw?.service_address?.street}
+                            </span>
+                          )}
+                          {(selectedBookingForModal.city || selectedBookingForModal.raw?.service_address?.city) && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-zinc-300 font-semibold">
+                              🏙️ City: {selectedBookingForModal.city || selectedBookingForModal.raw?.service_address?.city}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) && Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) !== 0 && (
+                        <span className="text-[11px] text-emerald-400 font-mono block pt-1">
+                          📍 Coordinates: {Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat).toFixed(5)}, {Number(selectedBookingForModal.coordinates?.longitude || selectedBookingForModal.raw?.service_address?.lon).toFixed(5)}
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -1177,7 +1288,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   {selectedBookingForModal.destinationLocation && (
                     <div className="p-4 rounded-xl bg-[#0e0c0a] border border-white/10 space-y-2">
                       <div className="flex items-center gap-2 text-emerald-400">
-                        <Navigation size={15} />
+                        <NavigationIcon size={15} />
                         <span className="text-xs font-bold uppercase tracking-wider">Destination Drop-Off</span>
                       </div>
                       <p className="text-xs sm:text-sm font-semibold text-zinc-200 leading-relaxed">
@@ -1414,7 +1525,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   {bookingForPayment.serviceTitle}
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5 font-mono">
-                  Booking #{bookingForPayment.id} • {bookingForPayment.statusDisplay}
+                  Booking #{formatToNumericBookingId(bookingForPayment.readableId || bookingForPayment.id)} • {bookingForPayment.statusDisplay}
                 </p>
               </div>
 

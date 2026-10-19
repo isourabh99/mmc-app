@@ -38,6 +38,7 @@ import {
 import apiClient from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { isAuthenticated } from "@/lib/auth.api";
+import { saveBookingMeta } from "@/lib/service/bookings.api";
 
 interface ChauffeurBookingModalProps {
   bookingChauffeur: Chauffeur | null;
@@ -59,6 +60,20 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
   // Booking Form Inputs
   const [pickupLocation, setPickupLocation] = useState("");
   const [pickupCoordinates, setPickupCoordinates] = useState<ChauffeurBookingCoordinates | undefined>(undefined);
+  const [pickupStreet, setPickupStreet] = useState(() => {
+    if (typeof window !== "undefined") {
+      const s = localStorage.getItem("user_street") || localStorage.getItem("street");
+      return s && s !== "Baker St" && s !== "Baker Street" ? s : "";
+    }
+    return "";
+  });
+  const [pickupCity, setPickupCity] = useState(() => {
+    if (typeof window !== "undefined") {
+      const c = localStorage.getItem("user_city") || localStorage.getItem("city");
+      return c || "";
+    }
+    return "";
+  });
 
   const [dropLocation, setDropLocation] = useState("");
   const [dropCoordinates, setDropCoordinates] = useState<ChauffeurBookingCoordinates | undefined>(undefined);
@@ -216,6 +231,8 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         pickup_coordinates: finalPickupCoords,
         drop_location: dropLocation,
         drop_coordinates: finalDropCoords,
+        street: pickupStreet.trim() || undefined,
+        city: pickupCity.trim() || undefined,
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
@@ -301,6 +318,21 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
           })
         );
       } catch { }
+
+      saveBookingMeta(bookingRef, {
+        serviceTitle: `Chauffeur: ${bookingChauffeur.brand} ${bookingChauffeur.model}`,
+        serviceCategoryName: "Chauffeur Drive",
+        serviceType: "chauffeur",
+        vehicleModel: `${bookingChauffeur.brand} ${bookingChauffeur.model}`,
+        providerName: bookingChauffeur.provider?.company_name || "Motor Market Club Chauffeur Fleet",
+        price: numericPrice,
+        pickup_location: pickupLocation,
+        drop_location: dropLocation,
+        street: pickupStreet.trim() || undefined,
+        city: pickupCity.trim() || undefined,
+        scheduleDate: startDate,
+        scheduleTime: pickupTime,
+      });
 
       if (redirectLink && redirectLink.startsWith("http") && !redirectLink.includes("payment_id=MMC-")) {
         window.location.href = redirectLink;
@@ -451,13 +483,30 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
                   placeholder="Enter pickup address, hotel or airport"
                   value={pickupLocation}
                   coordinates={pickupCoordinates}
-                  onChange={(address, coords) => {
+                  initialStreet={pickupStreet}
+                  initialCity={pickupCity}
+                  onChange={(address, coords, details) => {
                     setPickupLocation(address);
                     setPickupCoordinates(coords);
+                    if (details?.street) {
+                      setPickupStreet(details.street);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("user_street", details.street);
+                        localStorage.setItem("street", details.street);
+                      }
+                    }
+                    if (details?.city) {
+                      setPickupCity(details.city);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("user_city", details.city);
+                        localStorage.setItem("city", details.city);
+                      }
+                    }
                   }}
                   required
                   type="pickup"
                 />
+
 
                 {/* Drop Location with Autocomplete */}
                 <LocationSearchInput

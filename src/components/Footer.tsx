@@ -180,7 +180,7 @@ export default function Footer() {
               {/* Newsletter Subscription */}
               <div className="mb-6 max-w-sm">
                 <p className="text-xs text-white/60 mb-2.5 tracking-wide font-medium">
-                  Stay updated with Motor Market Club news
+                  Stay updated with Motor Market Club
                 </p>
                 <div className="flex gap-2">
                   <input

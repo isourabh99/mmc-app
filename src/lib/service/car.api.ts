@@ -169,6 +169,8 @@ export interface CarBookingPayload {
   delivery_longitude?: number;
   pickup_location?: string;
   drop_location?: string;
+  street?: string;
+  city?: string;
   payment_method: string; // "cash_after_service" | "stripe" | "offline"
   is_partial?: number;
   payment_platform?: string;
