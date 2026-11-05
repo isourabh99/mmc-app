@@ -2,7 +2,7 @@
 
 export default function ProviderCTA() {
   return (
-    <section id="become-provider" className="py-6 sm:py-12 lg:py-16 relative overflow-hidden">
+    <section id="become-provider" className="pt-1 pb-6 sm:pt-2 sm:pb-10 lg:pt-3 lg:pb-12 relative overflow-hidden">
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div
           className="relative rounded-3xl overflow-hidden"

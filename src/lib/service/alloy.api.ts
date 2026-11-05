@@ -1,3 +1,4 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
@@ -42,7 +43,7 @@ export const getAlloyServices = async (
   offset: number = 1
 ): Promise<AlloyServiceItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<any>(
       `/customer/service/category/${categoryId}`,
@@ -174,7 +175,7 @@ export const searchProvidersByService = async (params: {
   longitude?: string | number;
 }): Promise<ProviderItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const lat =
       params.latitude ||
@@ -466,7 +467,7 @@ export const sendQuotationRequest = async (
     formData.append("attachments[]", params.car_image);
   }
 
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
 
   const response = await apiClient.post<CreateQuotationResponse>(
     "/customer/post",
@@ -617,7 +618,7 @@ export const getMyQuotationRequests = async (
   offset: number = 1
 ): Promise<CustomerQuotationPostItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<CustomerQuotationPostsResponse>(
       "/customer/post",
@@ -749,7 +750,7 @@ export const getReceivedBidsForPost = async (
   }
 
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<PostBidsResponse>(
       "/customer/post/bid",
@@ -853,7 +854,7 @@ export const getProviderSlots = async (
   date?: string
 ): Promise<BookingSlotItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<any>(
       "/customer/booking/provider/slots",

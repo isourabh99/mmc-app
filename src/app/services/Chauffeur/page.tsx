@@ -1,3 +1,4 @@
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -563,6 +564,15 @@ export default function ChauffeurServicePage() {
                 </div>
               </div>
             )}
+          </div>
+          {/* ─── OUR WORK SHOWCASE ─── */}
+          <div className="mt-14 pt-8 border-t border-[#2c2219]">
+            <ServiceOurWorkShowcase
+              categoryId="fd6a04cf-3803-4a9b-a830-6cfa9c3c48d4"
+              categoryName="Chauffeur"
+              customSubtitle="Explore our verified luxury chauffeur experiences, VIP airport transfers, and corporate event fleets."
+              viewAllUrl="/services/our-work"
+            />
           </div>
         </div>
       </div>

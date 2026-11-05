@@ -1,3 +1,4 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import axios from "axios";
 import apiClient, { getApiBaseUrl, getBackendRootUrl } from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
@@ -71,7 +72,7 @@ export const getEmergencyCategoryId = async (): Promise<string> => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       Accept: "application/json",
-      zoneid: DEFAULT_ZONE_ID,
+      zoneid: getStoredZoneId(),
     };
     if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -121,7 +122,7 @@ export const getEmergencyServices = async (
   try {
     const headers: Record<string, string> = {
       Accept: "application/json",
-      zoneid: DEFAULT_ZONE_ID,
+      zoneid: getStoredZoneId(),
     };
     if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -334,7 +335,7 @@ export interface SearchEmergencyProvidersParams {
 export const searchEmergencyProviders = async (
   params: SearchEmergencyProvidersParams
 ): Promise<EmergencyProviderItem[]> => {
-  const staticZoneId = DEFAULT_ZONE_ID; // Strictly "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+  const staticZoneId = getStoredZoneId(); // Strictly "a1614dbe-4732-11ee-9702-dee6e8d77be4"
 
   const lat =
     params.latitude ||
@@ -411,7 +412,7 @@ export interface AddEmergencyToCartParams {
 export const addEmergencyToCart = async (
   params: AddEmergencyToCartParams
 ): Promise<any> => {
-  const staticZoneId = DEFAULT_ZONE_ID; // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+  const staticZoneId = getStoredZoneId(); // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
   const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
@@ -454,9 +455,9 @@ export const getEmergencyCartList = async (): Promise<any> => {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {
     Accept: "application/json",
-    zoneid: DEFAULT_ZONE_ID,
-    ZoneId: DEFAULT_ZONE_ID,
-    "zone-id": DEFAULT_ZONE_ID,
+    zoneid: getStoredZoneId(),
+    ZoneId: getStoredZoneId(),
+    "zone-id": getStoredZoneId(),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -504,7 +505,7 @@ export const sendEmergencyBookingRequest = async (
   params: SendEmergencyBookingRequestParams
 ): Promise<any> => {
   const apiBase = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
-  const staticZoneId = DEFAULT_ZONE_ID; // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+  const staticZoneId = getStoredZoneId(); // "a1614dbe-4732-11ee-9702-dee6e8d77be4"
   const nowFormatted = new Date().toISOString().replace("T", " ").substring(0, 19);
   const effectiveAddress = params.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "221B Baker Street, London";
   const effectivePostcode = params.postcode || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") : null) || extractPostcode(effectiveAddress);
@@ -626,7 +627,7 @@ export const bookEmergencyProvider = async (
         category_id: EMERGENCY_CATEGORY_ID,
         quantity: 1,
         is_terms_accepted: 1,
-        zone_id: DEFAULT_ZONE_ID,
+        zone_id: getStoredZoneId(),
       });
     } catch (cartErr) {
       console.warn("Cart add step note for", svcId, cartErr);
@@ -644,7 +645,7 @@ export const bookEmergencyProvider = async (
   const bookingRes = await sendEmergencyBookingRequest({
     payment_method: "stripe",
     is_partial: params.is_partial !== undefined ? params.is_partial : 0,
-    zone_id: DEFAULT_ZONE_ID,
+    zone_id: getStoredZoneId(),
     service_schedule: nowSchedule,
     service_address_id: (typeof window !== "undefined" && localStorage.getItem("service_address_id")) || "9",
     service_address: params.service_address || (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) || "221B Baker Street, London",

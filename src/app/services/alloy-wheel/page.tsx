@@ -97,6 +97,8 @@ import {
     clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
 
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+
 export default function AlloyWheelPage() {
     const router = useRouter();
     const { showToast } = useToast();
@@ -927,6 +929,24 @@ export default function AlloyWheelPage() {
         }
     };
 
+    // Auto-load bid and enter booking view directly if post_id & bid_id are provided (eliminates duplicate screen)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const urlParams = new URLSearchParams(window.location.search);
+        const bidId = urlParams.get("bid_id");
+        const postId = urlParams.get("post_id");
+        if (bidId && postId && !bookingProviderModal) {
+            getReceivedBidsForPost(postId, 20, 1).then((bids) => {
+                const targetBid = bids?.find((b) => String(b.id) === bidId) || bids?.[0];
+                if (targetBid) {
+                    const post = myQuotationRequests.find((p) => p.id === postId) || null;
+                    if (post) setSelectedPostForBids(post);
+                    handleBookBidOffer(targetBid);
+                }
+            }).catch((err) => console.warn("Failed to auto-select bid for direct booking:", err));
+        }
+    }, [myQuotationRequests, bookingProviderModal]);
+
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to book this quotation offer.", "info");
@@ -1627,7 +1647,7 @@ export default function AlloyWheelPage() {
                             {/* Left Column: Heading, Badges, Video Card */}
                             <div className="lg:col-span-7 flex flex-col justify-between">
                                 <div>
-                                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.08] mb-5">
+                                    <h1 className="text-2xl sm:text-3xl lg:text-3.5xl font-black tracking-tight text-white leading-tight mb-2">
                                         Alloy Wheel <br />
                                         <span
                                             style={{
@@ -1641,13 +1661,13 @@ export default function AlloyWheelPage() {
                                         </span>
                                     </h1>
 
-                                    <p className="text-zinc-300 text-base sm:text-lg max-w-xl leading-relaxed mb-8">
+                                    <p className="text-zinc-400 text-xs sm:text-sm max-w-lg leading-relaxed mb-2.5">
                                         Restore your alloy wheels with professional finishing and expert
                                         refurbishment services.
                                     </p>
 
                                     {/* 3 Badges */}
-                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-10">
+                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-3 gap-4 sm:gap-6">
                                         {/* Badge 1 */}
                                         <div className="flex items-center gap-3">
                                             <div className="w-11 h-11 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#E8AF66] shadow-[0_0_20px_rgba(232,175,102,0.15)]">
@@ -1683,47 +1703,13 @@ export default function AlloyWheelPage() {
                                     </div>
                                 </div>
 
-                                {/* Video / Feature Highlight Banner Card */}
-                                <div className="relative group rounded-2xl border border-zinc-800/90 bg-[#121316]/90 p-5 sm:p-6 backdrop-blur-md overflow-hidden max-w-xl shadow-2xl transition-all duration-300 hover:border-zinc-700">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                                        <div className="z-10 flex-1">
-                                            <span className="inline-block text-xs font-bold tracking-widest text-[#E8AF66] uppercase mb-1">
-                                                Featured Service
-                                            </span>
-                                            <h3 className="text-lg sm:text-xl font-extrabold tracking-wide text-white uppercase leading-snug">
-                                                ALLOY WHEEL <br className="hidden sm:block" />
-                                                REFURBISHMENT
-                                            </h3>
-                                            <p className="text-[11px] tracking-widest text-zinc-400 font-medium mt-1.5 uppercase">
-                                                CLEAN &bull; REFRESH &bull; REFINE
-                                            </p>
-                                            <p className="text-xs text-zinc-400 mt-2 font-normal">
-                                                Professional care for a lasting impression.
-                                            </p>
-                                        </div>
-
-                                        {/* Image & Play Button */}
-                                        <div className="relative w-full sm:w-48 h-32 rounded-xl overflow-hidden shrink-0 border border-zinc-700/60 shadow-inner">
-                                            <Image
-                                                src="/images/alloy-wheel/alloy_detailing.jpg"
-                                                alt="Alloy Wheel Buffing Process"
-                                                fill
-                                                className="object-cover group-hover:scale-105 transition-transform duration-500"
-                                            />
-                                            <div className="absolute inset-0 bg-black/35 group-hover:bg-black/20 transition-colors" />
-
-                                            {/* Play Button */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowVideoModal(true)}
-                                                aria-label="Play refurbishment video"
-                                                className="absolute inset-0 m-auto w-11 h-11 rounded-full border-2 border-[#E8AF66] bg-black/70 flex items-center justify-center text-[#E8AF66] hover:scale-110 active:scale-95 transition-all shadow-[0_0_15px_rgba(232,175,102,0.4)] cursor-pointer"
-                                            >
-                                                <Play className="w-5 h-5 ml-0.5 fill-[#E8AF66]" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                {/* OUR WORK SHOWCASE */}
+                                <ServiceOurWorkShowcase
+                                    categoryId={ALLOY_CATEGORY_ID}
+                                    categoryName="Alloy Wheel Refurbishment"
+                                    customSubtitle="Explore our verified diamond-cut wheel CNC lathe recuts, powder coating, and kerb scuff restorations."
+                                    viewAllUrl="/services/our-work"
+                                />
                             </div>
 
                             {/* Right Column: Get Alloy Quote Form Card */}

@@ -1,3 +1,4 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
 
@@ -170,6 +171,8 @@ export interface SendValetBookingPayload {
   car_manufacture_year?: string;
   special_conditions?: string;
   notes?: string;
+  answers?: Record<string, any> | string;
+  car_images?: (File | string)[];
   postcode?: string;
   house?: string;
   floor?: string;
@@ -237,6 +240,10 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     name: "Full Exterior Valet",
     short_description: "Deep hand wash, wheel decontamination & ceramic spray sealant",
     description: "Complete exterior decontamination wash, hand dry with plush microfiber, wheel face and barrel clean, tyre dressing, and high-gloss ceramic paint protection.",
+    cover_image: "/images/valet/exterior_valet.jpg",
+    cover_image_full_path: "/images/valet/exterior_valet.jpg",
+    thumbnail: "/images/valet/exterior_valet.jpg",
+    thumbnail_full_path: "/images/valet/exterior_valet.jpg",
     price: 45,
     category_id: VALET_CATEGORY_ID,
     is_active: 1,
@@ -252,6 +259,10 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     name: "Interior Deep Clean & Valet",
     short_description: "Full vacuum, upholstery extraction, leather care & dashboard dress",
     description: "Intensive cabin refresh including multi-stage vacuuming, steam sanitisation, shampoo extraction on seats/carpets, leather conditioning, and streak-free glass.",
+    cover_image: "/images/valet/interior_valet.jpg",
+    cover_image_full_path: "/images/valet/interior_valet.jpg",
+    thumbnail: "/images/valet/interior_valet.jpg",
+    thumbnail_full_path: "/images/valet/interior_valet.jpg",
     price: 50,
     category_id: VALET_CATEGORY_ID,
     is_active: 1,
@@ -267,6 +278,10 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     name: "Full Valet & Polish",
     short_description: "Comprehensive interior deep clean + exterior gloss enhancement",
     description: "The complete transformation package. Full exterior decontamination and single-stage gloss enhancement machine polish paired with comprehensive interior deep clean.",
+    cover_image: "/images/valet/showroom_valet.jpg",
+    cover_image_full_path: "/images/valet/showroom_valet.jpg",
+    thumbnail: "/images/valet/showroom_valet.jpg",
+    thumbnail_full_path: "/images/valet/showroom_valet.jpg",
     price: 85,
     category_id: VALET_CATEGORY_ID,
     is_active: 1,
@@ -282,6 +297,10 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     name: "Mini Valet & Express Wash",
     short_description: "Quick turnaround wash and interior tidy for everyday maintenance",
     description: "Fast, efficient maintenance valet. Gentle exterior hand wash, wheel face blast, quick interior vacuum, and dashboard wipe-down.",
+    cover_image: "/images/valet/mini_valet.jpg",
+    cover_image_full_path: "/images/valet/mini_valet.jpg",
+    thumbnail: "/images/valet/mini_valet.jpg",
+    thumbnail_full_path: "/images/valet/mini_valet.jpg",
     price: 30,
     category_id: VALET_CATEGORY_ID,
     is_active: 1,
@@ -296,6 +315,10 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     name: "Ceramic Coating & Showroom Detail",
     short_description: "Ultimate multi-stage paint correction with ceramic shield",
     description: "Premium detailing for automotive enthusiasts. Full chemical and mechanical decontamination, multi-stage paint correction, and ceramic coating protection.",
+    cover_image: "/images/valet/showroom_valet.jpg",
+    cover_image_full_path: "/images/valet/showroom_valet.jpg",
+    thumbnail: "/images/valet/showroom_valet.jpg",
+    thumbnail_full_path: "/images/valet/showroom_valet.jpg",
     price: 150,
     category_id: VALET_CATEGORY_ID,
     is_active: 1,
@@ -306,6 +329,54 @@ export const DEFAULT_VALET_PACKAGES: WashTypeItem[] = [
     ],
   },
 ];
+
+/**
+ * Resolves a reliable image URL for any Valet/Wash service
+ */
+export const getValetServiceImageUrl = (item: Partial<WashTypeItem>): string => {
+  if (
+    item.thumbnail_full_path &&
+    item.thumbnail_full_path.startsWith("http") &&
+    !item.thumbnail_full_path.includes("def.png")
+  ) {
+    return item.thumbnail_full_path;
+  }
+  if (
+    item.cover_image_full_path &&
+    item.cover_image_full_path.startsWith("http") &&
+    !item.cover_image_full_path.includes("def.png")
+  ) {
+    return item.cover_image_full_path;
+  }
+  if (item.thumbnail && !item.thumbnail.includes("def.png")) {
+    if (item.thumbnail.startsWith("http") || item.thumbnail.startsWith("/")) return item.thumbnail;
+    const base = getBackendRootUrl();
+    return `${base}/storage/app/public/service/${item.thumbnail}`;
+  }
+  if (item.cover_image && !item.cover_image.includes("def.png")) {
+    if (item.cover_image.startsWith("http") || item.cover_image.startsWith("/")) return item.cover_image;
+    const base = getBackendRootUrl();
+    return `${base}/storage/app/public/service/${item.cover_image}`;
+  }
+
+  const n = (item.name || "").toLowerCase();
+  if (n.includes("exterior")) {
+    return "/images/valet/exterior_valet.jpg";
+  }
+  if (n.includes("mini") || n.includes("express")) {
+    return "/images/valet/mini_valet.jpg";
+  }
+  if (n.includes("showroom") || n.includes("polish") || n.includes("ceramic")) {
+    return "/images/valet/showroom_valet.jpg";
+  }
+  if (n.includes("interior") || n.includes("deep clean") || n.includes("cabin") || n.includes("leather")) {
+    return "/images/valet/interior_valet.jpg";
+  }
+  if (n.includes("wash") || n.includes("valet")) {
+    return "/images/valet/valet_wash.jpg";
+  }
+  return "/valet.png";
+};
 
 export const FALLBACK_VALET_PROVIDERS: ValetProvider[] = [
   {
@@ -571,12 +642,83 @@ export const getWashTypes = async (
   return DEFAULT_VALET_PACKAGES;
 };
 
+export interface ValetQuestionItem {
+  id: string;
+  provider_id?: string | null;
+  category_id?: string;
+  question_text: string;
+  options: string[];
+  raw_options?: string;
+  question_type: "select" | "text" | "number" | "file" | string;
+  is_required?: boolean | number;
+  is_active?: boolean | number;
+  display_order?: number;
+}
+
+export const getValetQuestions = async (
+  categoryId: string = VALET_CATEGORY_ID,
+  providerId?: string,
+  zoneId: string = DEFAULT_ZONE_ID
+): Promise<ValetQuestionItem[]> => {
+  const activeZone = getActiveZoneId(zoneId);
+  try {
+    const res = await apiClient.get<any>("/customer/booking/provider/questions", {
+      params: {
+        category_id: categoryId || VALET_CATEGORY_ID,
+        ...(providerId ? { provider_id: providerId } : {}),
+      },
+      headers: {
+        zoneid: activeZone,
+        ZoneId: activeZone,
+        "zone-id": activeZone,
+      },
+    });
+
+    const rawData = res.data?.content || res.data?.data || res.data;
+    let list: any[] = [];
+    if (Array.isArray(rawData)) {
+      list = rawData;
+    } else if (rawData && typeof rawData === "object") {
+      list = rawData.questions || rawData.data || [];
+    }
+
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((q: any) => {
+        let parsedOptions: string[] = [];
+        if (Array.isArray(q.options)) {
+          parsedOptions = q.options;
+        } else if (typeof q.options === "string" && q.options.trim()) {
+          parsedOptions = q.options
+            .split(",")
+            .map((o: string) => o.trim())
+            .filter(Boolean);
+        }
+        return {
+          id: String(q.id),
+          provider_id: q.provider_id,
+          category_id: q.category_id,
+          question_text: q.question_text || q.question || "",
+          options: parsedOptions,
+          raw_options: typeof q.options === "string" ? q.options : undefined,
+          question_type: q.question_type || (parsedOptions.length > 0 ? "select" : "text"),
+          is_required: Boolean(q.is_required),
+          is_active: Boolean(q.is_active ?? true),
+          display_order: Number(q.display_order || 0),
+        };
+      });
+    }
+  } catch (err) {
+    console.warn("getValetQuestions error:", err);
+  }
+  return [];
+};
+
 /**
  * Search providers by service ID using the MMC backend endpoint:
  * POST /customer/provider/search-by-service
  */
 export const searchProvidersByService = async (
-  serviceId: string = "16c0655b-38ca-412f-94d1-1db5463cf70c",
+  serviceId: string | string[] = "16c0655b-38ca-412f-94d1-1db5463cf70c",
   limit: number = 10,
   offset: number = 1,
   zoneId: string = DEFAULT_ZONE_ID,
@@ -587,12 +729,18 @@ export const searchProvidersByService = async (
   const lat = latitude ? String(latitude) : "51.5074";
   const lon = longitude ? String(longitude) : "-0.1278";
 
+  const serviceIds = Array.isArray(serviceId)
+    ? serviceId.filter(Boolean)
+    : serviceId
+    ? [serviceId]
+    : [];
+
   // 1. Primary: POST /customer/provider/search-by-service with FormData
   try {
     const formData = new FormData();
-    if (serviceId) {
-      formData.append("service_id", serviceId);
-      formData.append("service_ids[]", serviceId);
+    if (serviceIds.length > 0) {
+      formData.append("service_id", serviceIds[0]);
+      serviceIds.forEach((id) => formData.append("service_ids[]", id));
     }
     formData.append("category_id", VALET_CATEGORY_ID);
     formData.append("latitude", lat);
@@ -914,55 +1062,127 @@ export const sendValetBookingRequest = async (
   const effectiveStreet = (payload.street || (typeof window !== "undefined" ? localStorage.getItem("user_street") || localStorage.getItem("street") : null) || "").trim();
   const effectiveCity = (payload.city || (typeof window !== "undefined" ? localStorage.getItem("user_city") || localStorage.getItem("city") : null) || "").trim();
 
-  // STEP 2: Exact JSON payload matching Demandium's mobile app spec and working curl
-  const postData: Record<string, any> = {
-    payment_method: "stripe",
-    is_partial: isPartialNum,
-    zone_id: activeZone,
-    service_schedule: payload.service_schedule || fallbackSchedule,
-    service_location: "customer",
-    service_address: ensureServiceAddressJson(rawAddr, {
-      lat: payload.latitude,
-      lon: payload.longitude,
-      address: rawAddr,
-      zip_code: rawPostcode,
-      house: payload.house,
-      floor: payload.floor,
-      street: effectiveStreet,
-      city: effectiveCity,
-    }),
-    postcode: rawPostcode,
-    ...(payload.house ? { house: payload.house } : {}),
-    ...(payload.floor ? { floor: payload.floor } : {}),
-    ...(effectiveStreet ? { street: effectiveStreet } : {}),
-    ...(effectiveCity ? { city: effectiveCity } : {}),
-    booking_type: "emergency",
-    car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
-    car_model: payload.car_model || "Audi A4",
-    notes: payload.notes || "Valet wash service requested with online payment.",
-    callback: callbackUrl,
+  const effectivePaymentMethod = payload.payment_method || "stripe";
+  const hasFiles =
+    Array.isArray(payload.car_images) &&
+    payload.car_images.some((img) => typeof File !== "undefined" && img instanceof File);
+
+  const formattedAnswers = payload.answers
+    ? typeof payload.answers === "string"
+      ? payload.answers
+      : JSON.stringify(payload.answers)
+    : undefined;
+
+  let postBody: any;
+  let headers: Record<string, string> = {
+    zoneid: activeZone,
+    "zone-id": activeZone,
+    ZoneId: activeZone,
+    Accept: "application/json",
   };
 
-  if (!hasAuthToken && guestId) {
-    postData.guest_id = guestId;
+  if (hasFiles) {
+    const formData = new FormData();
+    formData.append("payment_method", effectivePaymentMethod);
+    formData.append("is_partial", String(isPartialNum));
+    formData.append("zone_id", activeZone);
+    formData.append("service_schedule", payload.service_schedule || fallbackSchedule);
+    formData.append("service_location", payload.service_location || "customer");
+    if (payload.service_address_id) {
+      formData.append("service_address_id", String(payload.service_address_id));
+    }
+    if (payload.selected_slot_id) {
+      formData.append("selected_slot_id", payload.selected_slot_id);
+    }
+    formData.append(
+      "car_registration_number",
+      (payload.car_registration_number || "AB24 MMC").trim().toUpperCase()
+    );
+    if (payload.car_model) formData.append("car_model", payload.car_model);
+    if (payload.car_color) formData.append("car_color", payload.car_color);
+    if (payload.special_conditions) formData.append("special_conditions", payload.special_conditions);
+    if (payload.notes) formData.append("notes", payload.notes);
+    if (formattedAnswers) formData.append("answers", formattedAnswers);
+
+    formData.append(
+      "service_address",
+      ensureServiceAddressJson(rawAddr, {
+        lat: payload.latitude,
+        lon: payload.longitude,
+        address: rawAddr,
+        zip_code: rawPostcode,
+        house: payload.house,
+        floor: payload.floor,
+        street: effectiveStreet,
+        city: effectiveCity,
+      })
+    );
+    formData.append("postcode", rawPostcode);
+    formData.append("booking_type", "emergency");
+    formData.append("callback", callbackUrl);
+
+    if (!hasAuthToken && guestId) {
+      formData.append("guest_id", guestId);
+    }
+
+    payload.car_images?.forEach((img) => {
+      if (typeof File !== "undefined" && img instanceof File) {
+        formData.append("car_images[]", img);
+      }
+    });
+
+    postBody = formData;
+  } else {
+    // Exact JSON / form object matching Demandium and cURL specification
+    const postData: Record<string, any> = {
+      payment_method: effectivePaymentMethod,
+      is_partial: isPartialNum,
+      zone_id: activeZone,
+      service_schedule: payload.service_schedule || fallbackSchedule,
+      service_location: payload.service_location || "customer",
+      ...(payload.service_address_id ? { service_address_id: payload.service_address_id } : {}),
+      ...(payload.selected_slot_id ? { selected_slot_id: payload.selected_slot_id } : {}),
+      service_address: ensureServiceAddressJson(rawAddr, {
+        lat: payload.latitude,
+        lon: payload.longitude,
+        address: rawAddr,
+        zip_code: rawPostcode,
+        house: payload.house,
+        floor: payload.floor,
+        street: effectiveStreet,
+        city: effectiveCity,
+      }),
+      postcode: rawPostcode,
+      ...(payload.house ? { house: payload.house } : {}),
+      ...(payload.floor ? { floor: payload.floor } : {}),
+      ...(effectiveStreet ? { street: effectiveStreet } : {}),
+      ...(effectiveCity ? { city: effectiveCity } : {}),
+      booking_type: "emergency",
+      car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
+      car_model: payload.car_model || "Mercedes C-Class",
+      car_color: payload.car_color || "Silver",
+      ...(payload.special_conditions ? { special_conditions: payload.special_conditions } : {}),
+      notes: payload.notes || "Valet wash service requested.",
+      ...(formattedAnswers ? { answers: formattedAnswers } : {}),
+      callback: callbackUrl,
+    };
+
+    if (!hasAuthToken && guestId) {
+      postData.guest_id = guestId;
+    }
+
+    headers["Content-Type"] = "application/json";
+    postBody = postData;
   }
 
-  console.log("[ValetBooking] POST /customer/booking/request/send body:", postData);
+  console.log("[ValetBooking] POST /customer/booking/request/send body:", postBody);
 
   let res: any = null;
   try {
     const apiRes = await apiClient.post(
       "/customer/booking/request/send",
-      postData,
-      {
-        headers: {
-          zoneid: activeZone,
-          "zone-id": activeZone,
-          ZoneId: activeZone,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      }
+      postBody,
+      { headers }
     );
     res = apiRes;
     console.log("[ValetBooking] POST /customer/booking/request/send response:", res.data);
@@ -990,24 +1210,24 @@ export const sendValetBookingRequest = async (
       : String(res?.data?.message || "").toLowerCase().includes("payment amount"));
 
   if (isPaymentAmountZero || (!redirectLink && res?.data?.response_code === "default_400")) {
-    console.log("[ValetBooking] Auto-recovery: Re-adding verified standard service variation and retrying...");
+    console.log("[ValetBooking] Retrying cart addition with valet package...");
     try {
       await apiClient.post(
         "/customer/cart/add",
         {
           ...(hasAuthToken ? {} : { guest_id: guestId }),
-          provider_id: DEFAULT_PROVIDER_ID,
-          service_id: "1e5455a9-62f8-4489-bfa8-4eb52d033a7d",
-          category_id: "5d98d5c9-509e-4ab7-859d-806174384e27",
-          variant_key: "puncture",
+          provider_id: effectiveProviderId,
+          service_id: payload.service_id || "4ddde005-4ec2-442c-9e21-d05b4165d545",
+          category_id: VALET_CATEGORY_ID,
+          variant_key: payload.variant_key || "basic",
           quantity: 1,
           is_terms_accepted: 1,
         },
         {
           headers: {
-            zoneid: DEFAULT_ZONE_ID,
-            "zone-id": DEFAULT_ZONE_ID,
-            ZoneId: DEFAULT_ZONE_ID,
+            zoneid: activeZone,
+            "zone-id": activeZone,
+            ZoneId: activeZone,
             "Content-Type": "application/json",
             Accept: "application/json",
           },
@@ -1017,9 +1237,9 @@ export const sendValetBookingRequest = async (
       const retryPostData: Record<string, any> = {
         payment_method: "stripe",
         is_partial: isPartialNum,
-        zone_id: DEFAULT_ZONE_ID,
+        zone_id: activeZone,
         service_schedule: payload.service_schedule || fallbackSchedule,
-        service_location: "customer",
+        service_location: payload.service_location || "customer",
         service_address: ensureServiceAddressJson(rawAddr, {
           lat: payload.latitude,
           lon: payload.longitude,
@@ -1037,7 +1257,7 @@ export const sendValetBookingRequest = async (
         ...(effectiveCity ? { city: effectiveCity } : {}),
         booking_type: "emergency",
         car_registration_number: (payload.car_registration_number || "AB24 MMC").trim().toUpperCase(),
-        car_model: payload.car_model || "Audi A4",
+        car_model: payload.car_model || "Vehicle",
         notes: payload.notes || "Valet wash service requested with online payment.",
         callback: callbackUrl,
       };
@@ -1051,9 +1271,9 @@ export const sendValetBookingRequest = async (
         retryPostData,
         {
           headers: {
-            zoneid: DEFAULT_ZONE_ID,
-            "zone-id": DEFAULT_ZONE_ID,
-            ZoneId: DEFAULT_ZONE_ID,
+            zoneid: activeZone,
+            "zone-id": activeZone,
+            ZoneId: activeZone,
             "Content-Type": "application/json",
             Accept: "application/json",
           },
@@ -1099,3 +1319,119 @@ export const sendValetBookingRequest = async (
 
   return res?.data || null;
 };
+
+export interface ValetSlotItem {
+  id: string;
+  start_time: string;
+  end_time: string;
+  title: string;
+  is_available?: boolean;
+  day_of_week?: string;
+  [key: string]: any;
+}
+
+/**
+ * Format 24-hour time "11:02:00" to friendly 12-hour "11:02 AM"
+ */
+export function formatSlotTime12(timeStr: string): string {
+  if (!timeStr) return "";
+  const parts = String(timeStr).trim().split(":");
+  if (parts.length >= 2) {
+    let h = parseInt(parts[0], 10);
+    const m = parts[1];
+    if (isNaN(h)) return timeStr;
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    const hStr = h < 10 ? `0${h}` : `${h}`;
+    return `${hStr}:${m} ${ampm}`;
+  }
+  return timeStr;
+}
+
+/**
+ * Dynamic Provider Slots API:
+ * GET /customer/booking/provider/slots?provider_id={provider_id}&date={date}
+ */
+export const getValetProviderSlots = async (
+  providerId: string,
+  date?: string
+): Promise<ValetSlotItem[]> => {
+  const activeZone = getStoredZoneId() || DEFAULT_ZONE_ID;
+  const formattedDate = date || new Date().toISOString().split("T")[0];
+  const targetProviderId = providerId || DEFAULT_PROVIDER_ID;
+
+  const mapSlot = (s: any, idx: number): ValetSlotItem => {
+    const startTime = s.start_time || s.start || s.from || s.time || "";
+    const endTime = s.end_time || s.end || s.to || "";
+    let title = s.title || s.name || s.slot || "";
+    if (!title && startTime) {
+      const start12 = formatSlotTime12(startTime);
+      const end12 = endTime ? formatSlotTime12(endTime) : "";
+      title = end12 ? `${start12} - ${end12}` : start12;
+    }
+    return {
+      id: String(s.id || s.slot_id || `slot-${idx}`),
+      start_time: startTime,
+      end_time: endTime,
+      title: title || `Slot ${idx + 1}`,
+      day_of_week: s.day_of_week,
+      is_available:
+        s.is_available !== false &&
+        s.available !== false &&
+        s.is_booked !== 1 &&
+        s.is_booked !== true,
+      ...s,
+    };
+  };
+
+  const executeSlotsQuery = async (pId: string, d: string): Promise<any[]> => {
+    try {
+      const response = await apiClient.get<any>(
+        "/customer/booking/provider/slots",
+        {
+          params: {
+            provider_id: pId,
+            date: d,
+          },
+          headers: {
+            zoneid: activeZone,
+            "zone-id": activeZone,
+            ZoneId: activeZone,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const rawData = response.data?.content || response.data?.data || response.data;
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        return rawData;
+      }
+      if (rawData && typeof rawData === "object") {
+        const list = rawData.slots || rawData.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          return list;
+        }
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
+  try {
+    // Query API strictly for requested provider and requested date ONLY
+    const rawList = await executeSlotsQuery(targetProviderId, formattedDate);
+
+    // STRICT: Only return slots if API returns slots for this provider and date! Zero static/fallback data.
+    if (rawList.length > 0) {
+      return rawList.map(mapSlot);
+    }
+
+    return [];
+  } catch (error) {
+    console.error("Failed to load valet provider slots from API:", error);
+    return [];
+  }
+};
+

@@ -91,6 +91,8 @@ import {
     clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
 
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+
 export default function BodyworkPage() {
     const router = useRouter();
     const { showToast } = useToast();
@@ -715,6 +717,24 @@ export default function BodyworkPage() {
         }
     };
 
+    // Auto-load bid and enter booking view directly if post_id & bid_id are provided (eliminates duplicate screen)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const urlParams = new URLSearchParams(window.location.search);
+        const bidId = urlParams.get("bid_id");
+        const postId = urlParams.get("post_id");
+        if (bidId && postId && !bookingProviderModal) {
+            getReceivedBidsForPost(postId, 20, 1).then((bids) => {
+                const targetBid = bids?.find((b) => String(b.id) === bidId) || bids?.[0];
+                if (targetBid) {
+                    const post = myQuotationRequests.find((p) => p.id === postId) || null;
+                    if (post) setSelectedPostForBids(post);
+                    handleBookBidOffer(targetBid);
+                }
+            }).catch((err) => console.warn("Failed to load bid for direct booking:", err));
+        }
+    }, [myQuotationRequests, bookingProviderModal]);
+
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to proceed with booking", "info");
@@ -729,7 +749,7 @@ export default function BodyworkPage() {
             combined.includes("alloy") ||
             combined.includes("wheel")
         ) {
-            router.push(`/services/alloy-wheel?view=quotes&post_id=${post?.id}`);
+            router.push(`/services/alloy-wheel?view=booking&post_id=${post?.id}&bid_id=${bid.id}`);
             return;
         }
         const priceNum =
@@ -1375,7 +1395,7 @@ export default function BodyworkPage() {
             {activeView === "landing" && (
                 <>
                     {/* Hero Section */}
-                    <section className="relative pt-2 sm:pt-4 pb-16 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-visible z-10">
+                    <section className="relative pt-1 sm:pt-2 pb-10 px-4 sm:px-8 lg:px-[50px] max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto overflow-visible z-10">
                         {/* Background Ambient Car Image & Rich Automotive Spotlight */}
                         <div className="absolute right-0 top-0 w-full lg:w-3/5 h-full pointer-events-none opacity-55 lg:opacity-75 select-none z-0">
                             <Image
@@ -1414,13 +1434,13 @@ export default function BodyworkPage() {
                             {/* Left Column: Heading, Value Props */}
                             <div className="lg:col-span-7 flex flex-col justify-between">
                                 <div>
-                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FAD293]/10 border border-[#FAD293]/30 text-[#FAD293] text-xs font-bold mb-4">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FAD293]/10 border border-[#FAD293]/30 text-[#FAD293] text-[11px] font-bold mb-2">
                                         <Sparkles className="w-3.5 h-3.5" />
                                         Certified Automotive Coachworks &amp; SMART Repair
                                     </div>
 
-                                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.08] mb-5">
-                                        Bodywork &amp; Paint <br />
+                                    <h1 className="text-2xl sm:text-3xl lg:text-3.5xl font-black tracking-tight text-white leading-tight mb-2">
+                                        Bodywork &amp; Paint{" "}
                                         <span
                                             style={{
                                                 background:
@@ -1433,36 +1453,50 @@ export default function BodyworkPage() {
                                         </span>
                                     </h1>
 
-                                    <p className="text-base sm:text-lg text-zinc-300 max-w-xl font-normal leading-relaxed mb-8">
+                                    <p className="text-xs text-zinc-400 max-w-lg font-normal leading-relaxed mb-2">
                                         Precision panel beating, scratch removal, dent pulling (PDR), and factory color-matched oven spray painting. Compare competitive bids from accredited local bodyshops and mobile SMART repairers.
                                     </p>
 
-                                    {/* 3 Value Pillars */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-8">
-                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
-                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
-                                                <ShieldCheck className="w-5 h-5 text-[#FAD293]" />
+                                    {/* 3 Value Badges (Sleek Horizontal Like Image 2) */}
+                                    <div className="flex flex-wrap items-center gap-4 sm:gap-6 mb-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#FAD293] shadow-inner shrink-0">
+                                                <ShieldCheck className="w-4 h-4 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Showroom Finish</div>
-                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">OEM digital color matching</div>
+                                            <div>
+                                                <h4 className="text-xs font-bold text-white">Showroom Finish</h4>
+                                                <p className="text-[10px] text-zinc-400">OEM digital matching</p>
+                                            </div>
                                         </div>
 
-                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
-                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
-                                                <Crown className="w-5 h-5 text-[#FAD293]" />
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#FAD293] shadow-inner shrink-0">
+                                                <Crown className="w-4 h-4 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Guaranteed Quality</div>
-                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">Lifetime anti-peel warranty</div>
+                                            <div>
+                                                <h4 className="text-xs font-bold text-white">Guaranteed Quality</h4>
+                                                <p className="text-[10px] text-zinc-400">Lifetime warranty</p>
+                                            </div>
                                         </div>
 
-                                        <div className="bg-gradient-to-br from-[#1C1814]/95 via-[#15120F]/90 to-[#0F0D0B]/90 border border-[#CEA46B]/35 hover:border-[#CEA46B] hover:shadow-[0_10px_25px_rgba(206,164,107,0.2)] rounded-2xl p-4.5 backdrop-blur-md transition-all duration-300 group hover:-translate-y-1">
-                                            <div className="w-10 h-10 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] mb-3 group-hover:scale-110 transition-transform shadow-inner">
-                                                <Zap className="w-5 h-5 text-[#FAD293]" />
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#FAD293] shadow-inner shrink-0">
+                                                <Zap className="w-4 h-4 text-[#FAD293]" />
                                             </div>
-                                            <div className="text-xs font-black text-white group-hover:text-[#FAD293] transition-colors">Fast Transparent Bids</div>
-                                            <div className="text-[11px] text-zinc-300 mt-1 leading-snug">No-obligation quote comparison</div>
+                                            <div>
+                                                <h4 className="text-xs font-bold text-white">Fast Transparent Bids</h4>
+                                                <p className="text-[10px] text-zinc-400">No-obligation quotes</p>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {/* OUR WORK SHOWCASE */}
+                                    <ServiceOurWorkShowcase
+                                        categoryId={DEFAULT_BODYWORK_CATEGORY_ID}
+                                        categoryName="Bodywork & Paint Repair"
+                                        customSubtitle="Explore our verified bodywork repairs, scratch removals, panel beatings, and oven spray resprays."
+                                        viewAllUrl="/services/our-work"
+                                    />
                                 </div>
                             </div>
 
@@ -1476,7 +1510,7 @@ export default function BodyworkPage() {
                                     {heroStep === 1 ? (
                                         <>
                                             {/* Bodywork Showcase Banner */}
-                                            <div className="relative -mx-6 -mt-6 sm:-mx-7 sm:-mt-7 mb-6 overflow-hidden rounded-t-2xl border-b border-zinc-800/80 aspect-[1672/941] shadow-lg group">
+                                            <div className="relative -mx-6 -mt-6 sm:-mx-7 sm:-mt-7 mb-4 overflow-hidden rounded-t-2xl border-b border-zinc-800/80 aspect-[21/9] max-h-[140px] sm:max-h-[165px] shadow-lg group">
                                                 <Image
                                                     src="/bodywork.png"
                                                     alt="MMC Bodywork Repairs & Restorations"
@@ -1488,11 +1522,11 @@ export default function BodyworkPage() {
                                                 <div className="absolute inset-0 bg-gradient-to-t from-[#131417] via-transparent to-transparent pointer-events-none" />
                                             </div>
 
-                                            <div className="mb-6">
-                                                <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                                            <div className="mb-3.5">
+                                                <h2 className="text-xl font-black text-white tracking-tight">
                                                     Get Bodywork Provider
                                                 </h2>
-                                                <p className="text-xs text-zinc-400 mt-1 mb-0">
+                                                <p className="text-[11px] text-zinc-400 mt-0.5 mb-0">
                                                     Fill in the details and get an instant quote
                                                 </p>
                                             </div>
@@ -1666,7 +1700,7 @@ export default function BodyworkPage() {
                                                             <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 text-xs text-zinc-400">
                                                                 <span className="font-semibold">
                                                                     {selectedServices.length === 0
-                                                                        ? "Select one or more services"
+                                                                        ? "“Choose Detailers"
                                                                         : `${selectedServices.length} selected`}
                                                                 </span>
                                                                 {selectedServices.length > 0 && (

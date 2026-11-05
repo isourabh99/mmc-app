@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -6,42 +7,26 @@ const steps = [
   {
     number: "01",
     title: "Describe Your Need",
-    desc: "Tell us what service you need, your vehicle details, and preferred location. Takes less than 60 seconds.",
-    icon: (
-      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-      </svg>
-    ),
+    desc: "Tell us your vehicle details, service requirements and preferred location.",
+    icon: "01",
   },
   {
     number: "02",
-    title: "Receive Matched Quotes",
-    desc: "Our algorithm instantly matches you with verified providers and you receive competitive quotes within minutes.",
-    icon: (
-      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
-    ),
+    title: "Receive Quotes",
+    desc: "Get matched with trusted automotive professionals in your area.",
+    icon: "02",
   },
   {
     number: "03",
     title: "Compare & Choose",
-    desc: "Review provider profiles, ratings, photos, and price breakdowns. Pick the perfect fit for your budget.",
-    icon: (
-      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
+    desc: "Compare prices, ratings and services. Select your perfect provider.",
+    icon: "03",
   },
   {
     number: "04",
-    title: "Book & Drive Away",
-    desc: "Confirm your booking securely through Motor Market Club. Track the job, pay safely, and leave a review.",
-    icon: (
-      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
+    title: "Book & Drive",
+    desc: "Confirm your booking, track your service and enjoy complete peace of mind.",
+    icon: "04",
   },
 ];
 
@@ -57,121 +42,153 @@ export default function HowItWorksSection({
   return (
     <section
       id="how-it-works"
-      className={`${
-        isStandalone ? "pt-1 pb-10 sm:pt-3 sm:pb-14" : "py-6 sm:py-12 lg:py-16"
-      } relative overflow-hidden ${className}`}
-      style={{ background: "linear-gradient(180deg, #000000, #0a0800, #000000)" }}
+      className={`relative overflow-hidden bg-[#050505] ${
+        isStandalone ? "py-10" : "py-12 sm:py-16 lg:py-20"
+      } ${className}`}
     >
-      {/* Decorative lines */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-0 left-0 right-0 h-px"
-          style={{ background: "linear-gradient(90deg, transparent, #FAD293, transparent)" }}
-        />
-        <div
-          className="absolute bottom-0 left-0 right-0 h-px"
-          style={{ background: "linear-gradient(90deg, transparent, #FAD293, transparent)" }}
-        />
-      </div>
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-12">
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
-        <div className="text-center mb-8 sm:mb-14">
-          <div className="flex items-center justify-center gap-3 mb-3">
-            <div className="h-px w-12" style={{ background: "linear-gradient(90deg, transparent, #FAD293)" }} />
-            <span
-              className="text-xs font-semibold tracking-[0.25em] uppercase"
-              style={{
-                background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              How It Works
-            </span>
-            <div className="h-px w-12" style={{ background: "linear-gradient(90deg, #CEA46B, transparent)" }} />
+        {/* Header */}
+        <div className="mb-9 flex flex-col justify-between gap-5 lg:mb-12 lg:flex-row lg:items-end">
+
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="h-[2px] w-7 bg-[#D6AD68]" />
+
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D6AD68]">
+                The MMC Experience
+              </span>
+            </div>
+
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-[42px]">
+              Automotive care,{" "}
+              <span className="bg-gradient-to-r from-[#F7DCA5] to-[#B88945] bg-clip-text text-transparent">
+                made simple.
+              </span>
+            </h2>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Four Steps to{" "}
-            <span
-              style={{
-                background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              Perfect Service
-            </span>
-          </h2>
-          <p className="text-white/50 text-lg max-w-2xl mx-auto">
-            From request to completion, Motor Market Club handles everything so you can focus on the road ahead.
-          </p>
+
+          <div className="max-w-md lg:pb-1">
+            <p className="text-sm leading-6 text-white/45">
+              From finding the right professional to getting back on the road.
+              Your entire automotive journey, simplified.
+            </p>
+          </div>
         </div>
 
-        {/* Steps Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Steps */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
           {steps.map((step, index) => (
             <div
               key={step.number}
-              id={`step-${step.number}`}
-              className="relative group p-7 rounded-2xl border border-white/8 bg-white/3 backdrop-blur-sm hover:border-[#FAD293]/25 hover:bg-white/5 transition-all duration-400 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#0D0C0A] p-5 transition-all duration-300 hover:border-[#D6AD68]/40 hover:bg-[#12100D] sm:p-6"
             >
-              {/* Connector line (desktop) */}
-              {index < steps.length - 1 && (
-                <div
-                  className="hidden lg:block absolute top-10 left-full w-6 h-px z-20"
-                  style={{ background: "linear-gradient(90deg, #FAD293, transparent)" }}
-                />
-              )}
+              {/* Top */}
+              <div className="mb-6 flex items-center justify-between">
 
-              {/* Step number */}
-              <div className="flex items-start justify-between mb-5">
-                <div
-                  className="w-14 h-14 rounded-xl flex items-center justify-center"
-                  style={{
-                    background: "linear-gradient(135deg, rgba(250,210,147,0.12), rgba(206,164,107,0.06))",
-                    border: "1px solid rgba(250,210,147,0.2)",
-                    color: "#FAD293",
-                  }}
-                >
-                  {step.icon}
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#D6AD68]/25 bg-[#D6AD68]/[0.07] text-[#D6AD68] transition-all group-hover:bg-[#D6AD68]/15">
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    {index === 0 && (
+                      <path
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                      />
+                    )}
+
+                    {index === 1 && (
+                      <path
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.4-4 8-9 8a10 10 0 01-4-.9L3 20l1.4-3.7A8 8 0 013 12c0-4.4 4-8 9-8s9 3.6 9 8z"
+                      />
+                    )}
+
+                    {index === 2 && (
+                      <path
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 3v18h18M7 14h3v4H7zm5-5h3v9h-3zm5-5h3v14h-3z"
+                      />
+                    )}
+
+                    {index === 3 && (
+                      <path
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    )}
+                  </svg>
                 </div>
-                <span
-                  className="text-5xl font-black opacity-10 leading-none"
-                  style={{
-                    background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
+
+                <span className="font-mono text-3xl font-medium tracking-tight text-white/[0.12] transition-colors group-hover:text-[#D6AD68]/50">
                   {step.number}
                 </span>
               </div>
 
-              <h3 className="text-xl font-bold mb-3 group-hover:text-[#FAD293] transition-colors duration-300">
+              {/* Content */}
+              <h3 className="text-base font-semibold text-white transition-colors group-hover:text-[#E7C58A] sm:text-lg">
                 {step.title}
               </h3>
-              <p className="text-sm text-white/45 leading-relaxed">{step.desc}</p>
+
+              <p className="mt-2 text-xs leading-6 text-white/40 sm:text-sm">
+                {step.desc}
+              </p>
+
+              {/* Bottom line */}
+              <div className="mt-5 h-px w-full bg-white/[0.06]" />
+
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-[9px] uppercase tracking-[0.18em] text-white/25">
+                  STEP {step.number}
+                </span>
+
+                <span className="text-xs text-[#D6AD68]/60 transition-transform group-hover:translate-x-1">
+                  →
+                </span>
+              </div>
+
+              {/* Gold hover accent */}
+              <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-[#D6AD68] transition-all duration-500 group-hover:w-full" />
             </div>
           ))}
         </div>
 
-        {/* CTA */}
-        <div className="text-center mt-14">
+        {/* Bottom CTA */}
+        <div className="mt-7 flex flex-col items-center justify-between gap-4 rounded-xl border border-[#D6AD68]/15 bg-[#0B0A08] px-5 py-5 sm:flex-row sm:px-7">
+
+          <div>
+            <h3 className="text-sm font-medium text-white">
+              Your next automotive service starts here.
+            </h3>
+
+            <p className="mt-1 text-xs text-white/40">
+              Find trusted professionals and get competitive quotes.
+            </p>
+          </div>
+
           <Link
             href="/services"
             id="how-it-works-cta"
-            className="inline-flex items-center gap-3 px-8 py-4 rounded-full font-semibold text-black text-sm transition-all duration-300 hover:shadow-[0_0_30px_rgba(250,210,147,0.35)] hover:scale-105"
-            style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
+            className="inline-flex shrink-0 items-center gap-3 rounded-lg bg-gradient-to-r from-[#F1D39A] to-[#C69A56] px-5 py-3 text-xs font-semibold text-black transition-all hover:brightness-110"
           >
-            Get Your Free Quote
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
+            Explore Services
+
+            <span>→</span>
           </Link>
         </div>
+
       </div>
     </section>
   );

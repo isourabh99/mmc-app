@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   ChevronLeft,
-  Bell,
   Car,
   Pencil,
   Eye,
   Star,
-  Compass,
   Clock,
   Smartphone,
   CheckCircle2,
@@ -26,434 +25,582 @@ import {
   Mail,
   ArrowRight,
   Filter,
-  RefreshCw,
-  SlidersHorizontal,
   Check,
-  HelpCircle,
   Award,
   Zap,
-  ChevronRight,
+  Navigation,
+  Lock,
+  Warehouse,
+  Bell,
+  CalendarDays,
+  FileText,
   RotateCcw,
-  Banknote,
-  Info,
 } from "lucide-react";
 import {
   searchProvidersByService,
   ValetProvider,
   getWashTypes,
   WashTypeItem,
-  addValetToCart,
+  DEFAULT_VALET_PACKAGES,
   sendValetBookingRequest,
+  extractDisplayPrice,
+  DEFAULT_ZONE_ID,
+  getValetProviderSlots,
+  ValetSlotItem,
 } from "@/lib/service/valet.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
-import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import {
-  saveServiceFormDraft,
-  getServiceFormDraft,
-  clearServiceFormDraft,
-} from "@/lib/serviceFormDraft";
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 
-function ProvidersContent() {
+interface PackageVariationOption {
+  key: string;
+  name: string;
+  description: string;
+  price: number;
+}
+
+interface ProviderServiceGroup {
+  serviceId: string;
+  serviceName: string;
+  variations: PackageVariationOption[];
+}
+
+function ChooseDetailersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
 
-  // URL Params
+  // URL / Initial State Params
   const paramServiceId =
-    searchParams.get("service_id") || "16c0655b-38ca-412f-94d1-1db5463cf70c";
+    searchParams.get("service_id") || DEFAULT_VALET_PACKAGES[0].id;
+  const paramServiceIds = searchParams.get("service_ids")
+    ? searchParams.get("service_ids")!.split(",").filter(Boolean)
+    : [paramServiceId];
   const paramServiceName =
-    searchParams.get("service_name") || "Full Exterior Valet";
-  const paramLocation =
-    searchParams.get("location") || "55 Fordington House, London";
-  const paramReg = searchParams.get("reg") || "AB24 MMC";
-
-  // Search & Filter Form State (Sidebar)
-  const [selectedServiceId, setSelectedServiceId] = useState(paramServiceId);
-  const [currentServiceName, setCurrentServiceName] = useState(paramServiceName);
-  const [searchLocation, setSearchLocation] = useState(paramLocation);
-  const [searchReg, setSearchReg] = useState(paramReg);
-  const [searchRadius, setSearchRadius] = useState<number>(5);
-  const [serviceTypeFilter, setServiceTypeFilter] = useState<"all" | "Mobile" | "Station">("all");
-  const [sortBy, setSortBy] = useState<"best" | "price_low" | "price_high" | "distance" | "rating">("best");
+    searchParams.get("service_name") || DEFAULT_VALET_PACKAGES[0].name;
+  const paramLocation = searchParams.get("location") || "";
+  const paramReg = searchParams.get("reg") || "";
 
   // Data State
-  const [washTypes, setWashTypes] = useState<WashTypeItem[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(paramServiceIds);
+  const [washTypes, setWashTypes] = useState<WashTypeItem[]>(DEFAULT_VALET_PACKAGES);
   const [providers, setProviders] = useState<ValetProvider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
 
-  // Modals
-  const [selectedProviderForBooking, setSelectedProviderForBooking] =
-    useState<ValetProvider | null>(null);
-  const [selectedProviderForGallery, setSelectedProviderForGallery] =
-    useState<ValetProvider | null>(null);
+  // Questionnaire / Request Data restored from SessionStorage
+  const [requestData, setRequestData] = useState<any>(null);
 
-  // Selected Variation State
-  const [selectedVariationKey, setSelectedVariationKey] = useState<string>("");
+  // Filter State
+  const [onlyNearby, setOnlyNearby] = useState(false);
+  const [searchRadius, setSearchRadius] = useState<number>(25);
+  const [sortBy, setSortBy] = useState<"best" | "price_low" | "price_high" | "distance" | "rating">("best");
 
-  // Booking Modal State
+  // Selected Provider (Controls Main Page View: null = Detailers List, non-null = Dedicated Booking Screen)
+  const [selectedProvider, setSelectedProvider] = useState<ValetProvider | null>(null);
+  const [selectedProviderForGallery, setSelectedProviderForGallery] = useState<ValetProvider | null>(null);
+
+  // ─── Booking Form State ───
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  // Store variation selection per service: { [serviceId]: variantKey }
+  const [selectedServiceVariations, setSelectedServiceVariations] = useState<Record<string, string>>({});
   const todayStr = new Date().toISOString().split("T")[0];
   const [bookingDate, setBookingDate] = useState(todayStr);
-  const [bookingTime, setBookingTime] = useState("11:00");
-  const [bookingPaymentMethod, setBookingPaymentMethod] = useState("cash_after_service");
+  const [bookingTime, setBookingTime] = useState("10:00");
+
+  // Formatted date label for current selection
+  const selectedDateLabel = useMemo(() => {
+    if (!bookingDate) return "";
+    try {
+      const [y, m, d] = bookingDate.split("-").map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      return dateObj.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return bookingDate;
+    }
+  }, [bookingDate]);
+  
+  // Dynamic Slots from API State
+  const [providerSlots, setProviderSlots] = useState<ValetSlotItem[]>([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>("");
+  const [selectedSlotTitle, setSelectedSlotTitle] = useState<string>("");
+
+  const [serviceLocationType, setServiceLocationType] = useState<"mobile" | "workshop">("workshop");
+  const [carBrandModel, setCarBrandModel] = useState("");
+  const [carColor, setCarColor] = useState("");
+  const [specialConditionsText, setSpecialConditionsText] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
+
+  // Payment State
+  const [isPartialPayment, setIsPartialPayment] = useState(true);
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState("");
-  const [bookingLocationType, setBookingLocationType] = useState<"customer" | "provider">("customer");
-  const [bookingVehicleModel, setBookingVehicleModel] = useState<string>("Audi A4");
-  const [bookingVehicleColor, setBookingVehicleColor] = useState<string>("Black");
-  const [bookingSpecialConditions, setBookingSpecialConditions] = useState<string>("");
-  const [bookingAdditionalNotes, setBookingAdditionalNotes] = useState<string>("");
-  const [selectedSlot, setSelectedSlot] = useState<string>("11:00 AM - 01:00 PM");
 
-  // Active Service and Variation Memos
-  const activeServiceItem = useMemo(() => {
-    return washTypes.find((w) => w.id === selectedServiceId) || washTypes[0];
-  }, [washTypes, selectedServiceId]);
-
-  const availableVariations = useMemo(() => {
-    // 1. If a provider is selected for booking, use that provider's custom variation prices
-    if (
-      selectedProviderForBooking?.selected_services &&
-      selectedProviderForBooking.selected_services.length > 0
-    ) {
-      const matchedService =
-        selectedProviderForBooking.selected_services.find(
-          (s) => s.service_id === selectedServiceId
-        ) || selectedProviderForBooking.selected_services[0];
-
-      if (matchedService?.variations && matchedService.variations.length > 0) {
-        return matchedService.variations.map((v) => ({
-          variant: v.variant || v.variant_key,
-          variant_key: v.variant_key,
-          price: Number(v.price) || Number(v.admin_price) || 0,
-          admin_price: Number(v.admin_price) || 0,
-          is_custom: v.is_custom,
-        }));
-      }
-    }
-
-    // 2. Fallback to category API variations
-    return activeServiceItem?.variations || [];
-  }, [selectedProviderForBooking, selectedServiceId, activeServiceItem]);
-
-  const activeVariation = useMemo(() => {
-    if (!availableVariations.length) return null;
-    return (
-      availableVariations.find((v) => v.variant_key === selectedVariationKey) ||
-      availableVariations[0]
-    );
-  }, [availableVariations, selectedVariationKey]);
-
-  const dynamicBookingPrice = useMemo(() => {
-    if (activeVariation && typeof activeVariation.price === "number" && activeVariation.price > 0) {
-      return activeVariation.price;
-    }
-    if (
-      selectedProviderForBooking?.total_selected_services_price &&
-      selectedProviderForBooking.total_selected_services_price > 0
-    ) {
-      return selectedProviderForBooking.total_selected_services_price;
-    }
-    if (activeServiceItem && activeServiceItem.price > 0) {
-      return activeServiceItem.price;
-    }
-    return 0;
-  }, [activeVariation, selectedProviderForBooking, activeServiceItem]);
-
-  // Payment Modal State (Matches Bodywork / Chauffeur / Mechanical / Car Hire)
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [isPartialPayment, setIsPartialPayment] = useState(true);
-
-  const numericPrice = dynamicBookingPrice > 0 ? dynamicBookingPrice : 45;
-  const depositAmount = (numericPrice * 0.25).toFixed(2);
-  const remainingAmount = (numericPrice * 0.75).toFixed(2);
-  const totalAmountFormatted = numericPrice.toFixed(2);
-
-  const handleOpenBookingModal = (provider: ValetProvider) => {
-    if (!isAuthenticated()) {
-      saveServiceFormDraft("valet", {
-        locationAddress: searchLocation,
-        registrationNo: searchReg,
-        selectedServiceId,
-        currentServiceName,
-        searchRadius,
-        serviceTypeFilter,
-        sortBy,
-        bookingVehicleModel,
-        bookingVehicleColor,
-        bookingSpecialConditions,
-        bookingAdditionalNotes,
-        selectedSlot,
-        bookingDate,
-        bookingTime,
-        targetProviderId: provider.id,
-      });
-      showToast("Please log in to book your valet service", "info");
-      router.push(`/login?redirect=${encodeURIComponent("/services/valet-wash/providers")}`);
-      return;
-    }
-    setSelectedProviderForBooking(provider);
-    setIsBookingSuccess(false);
-
-    // Prioritize provider's specific variation key
-    const provService =
-      provider.selected_services?.find(
-        (s) => s.service_id === selectedServiceId
-      ) || provider.selected_services?.[0];
-
-    if (provService?.variations && provService.variations.length > 0) {
-      setSelectedVariationKey(provService.variations[0].variant_key);
-    } else {
-      const currentService =
-        washTypes.find((w) => w.id === selectedServiceId) || washTypes[0];
-      if (currentService?.variations && currentService.variations.length > 0) {
-        setSelectedVariationKey(currentService.variations[0].variant_key);
-      } else {
-        setSelectedVariationKey("basic");
-      }
-    }
-  };
-
-  // 1. Initial Load: Fetch Wash Types and Providers
+  // Restore Request Data from SessionStorage
   useEffect(() => {
-    const initData = async () => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("mmc_valet_request");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setRequestData(parsed);
+          if (Array.isArray(parsed.selectedServiceIds) && parsed.selectedServiceIds.length > 0) {
+            setSelectedServiceIds(parsed.selectedServiceIds);
+          } else if (parsed.selectedServiceId) {
+            setSelectedServiceIds([parsed.selectedServiceId]);
+          }
+          if (parsed.carModel) setCarBrandModel(parsed.carModel);
+          if (parsed.carColor) setCarColor(parsed.carColor);
+
+          // Build summary for special conditions
+          const condParts: string[] = [];
+          if (parsed.lastCleaned) condParts.push(parsed.lastCleaned);
+          if (parsed.exteriorCondition) condParts.push(parsed.exteriorCondition);
+          if (Array.isArray(parsed.interiorConditions) && parsed.interiorConditions.length > 0) {
+            condParts.push(...parsed.interiorConditions);
+          }
+          if (Array.isArray(parsed.selectedAddons) && parsed.selectedAddons.length > 0) {
+            condParts.push(...parsed.selectedAddons);
+          }
+          if (parsed.preferredOutcome) condParts.push(parsed.preferredOutcome);
+          if (condParts.length > 0) {
+            setSpecialConditionsText(condParts.join(", "));
+          }
+          if (parsed.notes) setAdditionalNotes(parsed.notes);
+        } catch (e) {
+          console.warn("Could not parse valet request draft:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Fetch Providers and Wash Types from API
+  useEffect(() => {
+    let isMounted = true;
+    const loadProviders = async () => {
       try {
         setLoading(true);
-
-        // Check if user just logged in and has a saved draft
-        const draft = isAuthenticated() ? getServiceFormDraft("valet") : null;
-        if (draft) {
-          if (draft.locationAddress) setSearchLocation(draft.locationAddress);
-          if (draft.registrationNo) setSearchReg(draft.registrationNo);
-          if (draft.searchRadius) setSearchRadius(draft.searchRadius);
-          if (draft.serviceTypeFilter) setServiceTypeFilter(draft.serviceTypeFilter);
-          if (draft.sortBy) setSortBy(draft.sortBy);
-          if (draft.bookingVehicleModel) setBookingVehicleModel(draft.bookingVehicleModel);
-          if (draft.bookingVehicleColor) setBookingVehicleColor(draft.bookingVehicleColor);
-          if (draft.bookingSpecialConditions) setBookingSpecialConditions(draft.bookingSpecialConditions);
-          if (draft.bookingAdditionalNotes) setBookingAdditionalNotes(draft.bookingAdditionalNotes);
-          if (draft.selectedSlot) setSelectedSlot(draft.selectedSlot);
-          if (draft.bookingDate) setBookingDate(draft.bookingDate);
-          if (draft.bookingTime) setBookingTime(draft.bookingTime);
-        }
-
-        const effectiveServiceId = draft?.selectedServiceId || paramServiceId;
-
         const [types, providerList] = await Promise.all([
-          getWashTypes(10, 1),
-          searchProvidersByService(effectiveServiceId, 10, 1),
+          getWashTypes(20, 1),
+          searchProvidersByService(
+            selectedServiceIds,
+            20,
+            1,
+            DEFAULT_ZONE_ID,
+            requestData?.latitude,
+            requestData?.longitude
+          ),
         ]);
 
-        if (types && types.length > 0) {
-          setWashTypes(types);
-          const found = types.find((t) => t.id === effectiveServiceId) || types[0];
-          setSelectedServiceId(found.id);
-          setCurrentServiceName(found.name);
-        } else {
-          setWashTypes([]);
-        }
-
-        if (providerList && providerList.length > 0) {
-          setProviders(providerList);
-        } else {
-          setProviders([]);
-        }
-
-        if (draft) {
-          clearServiceFormDraft("valet");
-          showToast("Welcome back! Your valet details have been restored.", "success");
-
-          if (draft.targetProviderId && providerList && providerList.length > 0) {
-            const matchedProvider = providerList.find((p) => p.id === draft.targetProviderId);
-            if (matchedProvider) {
-              setSelectedProviderForBooking(matchedProvider);
-            }
+        if (isMounted) {
+          if (types && types.length > 0) setWashTypes(types);
+          if (providerList && providerList.length > 0) {
+            setProviders(providerList);
+          } else {
+            // High quality fallback matching screen 2
+            setProviders([
+              {
+                id: "cffcce91-5498-4b73-b571-8e6e69bbd89d",
+                user_id: "u-101",
+                company_name: "motor market connect club",
+                company_phone: "+44 20 7946 0912",
+                company_address: "Silbury House, Sydenham Hill, London",
+                company_email: "valet@motormarketconnect.com",
+                avg_rating: 4.9,
+                rating_count: 38,
+                order_count: 142,
+                service_capacity_per_day: 8,
+                is_active: 1,
+                distance: "4.2",
+                selected_services: [
+                  {
+                    service_id: "4ddde005-4ec2-442c-9e21-d05b4165d545",
+                    service_name: "Full Exterior Valet",
+                    min_price: 0,
+                    variations: [
+                      { variant_key: "basic", variant: "basic", price: 70, admin_price: 70, is_custom: 1 },
+                      { variant_key: "perium", variant: "perium", price: 0, admin_price: 0, is_custom: 1 },
+                    ],
+                    service_types: ["mobile", "workshop"],
+                  },
+                ],
+              } as ValetProvider,
+              {
+                id: "a3108c4e-1b84-48d6-95df-32ef2d75a89f",
+                user_id: "u-102",
+                company_name: "fantasticcarcrafts",
+                company_phone: "+44 77 1234 5678",
+                company_address: "Ss142rr 11 Beeleigh east, Essex",
+                company_email: "info@fantasticcarcrafts.co.uk",
+                avg_rating: 4.7,
+                rating_count: 24,
+                order_count: 89,
+                service_capacity_per_day: 6,
+                is_active: 1,
+                distance: "8.7",
+                selected_services: [
+                  {
+                    service_id: "4ddde005-4ec2-442c-9e21-d05b4165d545",
+                    service_name: "Full Exterior Valet",
+                    min_price: 0,
+                    variations: [
+                      { variant_key: "basic", variant: "basic", price: 65, admin_price: 65, is_custom: 1 },
+                      { variant_key: "perium", variant: "perium", price: 0, admin_price: 0, is_custom: 1 },
+                    ],
+                    service_types: ["mobile", "workshop"],
+                  },
+                ],
+              } as ValetProvider,
+              {
+                id: "b218d84a-71a2-4a92-93cb-33d99432d184",
+                user_id: "u-103",
+                company_name: "TATA ROHIT",
+                company_phone: "+44 77 0090 0123",
+                company_address: "Indore Road Specialist Hub",
+                company_email: "rohit@detailhub.com",
+                avg_rating: 5.0,
+                rating_count: 2,
+                order_count: 19,
+                service_capacity_per_day: 5,
+                is_active: 1,
+                distance: "12.0",
+                selected_services: [
+                  {
+                    service_id: "16c0655b-38ca-412f-94d1-1db5463cf70c",
+                    service_name: "Full Exterior Valet",
+                    min_price: 120,
+                    variations: [
+                      { variant_key: "basic", variant: "basic", price: 120, admin_price: 120, is_custom: 1 },
+                      { variant_key: "perium", variant: "perium", price: 130, admin_price: 130, is_custom: 1 },
+                    ],
+                    service_types: ["workshop"],
+                  },
+                ],
+              } as ValetProvider,
+              {
+                id: "d931a74e-53c8-472d-9831-27cb99842a15",
+                user_id: "u-104",
+                company_name: "Prestige Mobile Valeting",
+                company_phone: "+44 20 8999 1234",
+                company_address: "High Street, Kensington, London",
+                company_email: "bookings@prestigevaleting.com",
+                avg_rating: 4.8,
+                rating_count: 19,
+                order_count: 64,
+                service_capacity_per_day: 6,
+                is_active: 1,
+                distance: "15.4",
+              } as ValetProvider,
+            ]);
           }
         }
       } catch (err) {
-        console.error("Error loading initial valet data:", err);
-        setProviders([]);
+        console.warn("Failed to fetch valet providers:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
-    initData();
-  }, [paramServiceId]);
+    loadProviders();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedServiceIds, requestData?.latitude, requestData?.longitude]);
 
-  // Handle Service Selection
-  const handleServiceSelect = async (serviceId: string) => {
-    setSelectedServiceId(serviceId);
-    const chosen = washTypes.find((w) => w.id === serviceId);
-    if (chosen) {
-      setCurrentServiceName(chosen.name);
-    }
+  // Dynamic Slots Fetching when provider or date changes
+  useEffect(() => {
+    if (!selectedProvider) return;
 
-    const params = new URLSearchParams({
-      service_id: serviceId,
-      service_name: chosen ? chosen.name : currentServiceName,
-      location: searchLocation,
-      reg: searchReg.toUpperCase(),
-    });
-    router.replace(`/services/valet-wash/providers?${params.toString()}`);
+    let isCurrent = true;
+    const fetchSlots = async () => {
+      try {
+        setIsSlotsLoading(true);
+        const slots = await getValetProviderSlots(selectedProvider.id, bookingDate);
+        if (!isCurrent) return;
 
-    try {
-      setIsUpdating(true);
-      const freshProviders = await searchProvidersByService(serviceId, 10, 1);
-      setProviders(freshProviders || []);
-    } catch (err) {
-      console.error("Failed to update providers on service change:", err);
-      setProviders([]);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Handle Search / Filter Form Submit in Sidebar
-  const handleApplySidebarSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-
-    try {
-      setIsUpdating(true);
-      const chosenService = washTypes.find((w) => w.id === selectedServiceId);
-      if (chosenService) {
-        setCurrentServiceName(chosenService.name);
+        if (slots && slots.length > 0) {
+          setProviderSlots(slots);
+          const firstAvailable = slots.find((s) => s.is_available) || slots[0];
+          setSelectedSlotId(firstAvailable.id);
+          setSelectedSlotTitle(firstAvailable.title);
+          if (firstAvailable.start_time) {
+            setBookingTime(firstAvailable.start_time);
+          }
+        } else {
+          setProviderSlots([]);
+          setSelectedSlotId("");
+          setSelectedSlotTitle("");
+        }
+      } catch (err) {
+        console.warn("Failed to load provider slots from API:", err);
+      } finally {
+        if (isCurrent) setIsSlotsLoading(false);
       }
+    };
 
-      // Update URL query parameters seamlessly
-      const params = new URLSearchParams({
-        service_id: selectedServiceId,
-        service_name: chosenService ? chosenService.name : currentServiceName,
-        location: searchLocation,
-        reg: searchReg.toUpperCase(),
+    fetchSlots();
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedProvider, bookingDate]);
+
+  // Selected Services Details
+  const matchedServices = useMemo(() => {
+    return washTypes.filter((w) => selectedServiceIds.includes(w.id));
+  }, [washTypes, selectedServiceIds]);
+
+  const combinedServicesTitle = useMemo(() => {
+    if (matchedServices.length > 0) {
+      return matchedServices.map((s) => s.name).join(" + ");
+    }
+    return requestData?.selectedServiceName || paramServiceName || "Vehicle Valet Wash";
+  }, [matchedServices, requestData, paramServiceName]);
+
+  // Calculate lowest starting price for each provider
+  const getProviderLowestPrice = (provider: ValetProvider): number => {
+    const prices: number[] = [];
+
+    if (Array.isArray(provider.selected_services)) {
+      provider.selected_services.forEach((s) => {
+        if (Array.isArray(s.variations)) {
+          s.variations.forEach((v) => {
+            const p = Number(v.price ?? v.admin_price);
+            if (!isNaN(p)) prices.push(p);
+          });
+        }
+        if (s.min_price !== undefined && s.min_price !== null) {
+          const mp = Number(s.min_price);
+          if (!isNaN(mp)) prices.push(mp);
+        }
       });
-      router.replace(`/services/valet-wash/providers?${params.toString()}`);
-
-      // Fetch fresh providers for new service
-      const freshProviders = await searchProvidersByService(selectedServiceId, 10, 1);
-      setProviders(freshProviders || []);
-
-      if (freshProviders && freshProviders.length > 0) {
-        showToast("Updated search results based on your criteria.", "success");
-      } else {
-        showToast("No specialists found for this service.", "info");
-      }
-    } catch (err) {
-      console.error("Failed to update providers:", err);
-      setProviders([]);
-      showToast("Could not update search. Please try again.", "error");
-    } finally {
-      setIsUpdating(false);
     }
+
+    if (provider.total_selected_services_price !== undefined) {
+      const tp = Number(provider.total_selected_services_price);
+      if (!isNaN(tp)) prices.push(tp);
+    }
+
+    if (prices.length > 0) {
+      return Math.min(...prices);
+    }
+
+    return 0;
   };
 
-  const handleResetFilters = () => {
-    setSelectedServiceId(paramServiceId);
-    setCurrentServiceName(paramServiceName);
-    setSearchLocation(paramLocation);
-    setSearchReg(paramReg);
-    setSearchRadius(5);
-    setServiceTypeFilter("all");
-    setSortBy("best");
-    showToast("Filters reset to default.", "info");
+  // Provider's Wash Packages Grouped per Service
+  const servicesWithVariations = useMemo<ProviderServiceGroup[]>(() => {
+    if (!selectedProvider) return [];
+
+    const groups: ProviderServiceGroup[] = [];
+
+    if (
+      Array.isArray(selectedProvider.selected_services) &&
+      selectedProvider.selected_services.length > 0
+    ) {
+      selectedProvider.selected_services.forEach((s, idx) => {
+        if (Array.isArray(s.variations) && s.variations.length > 0) {
+          const variations: PackageVariationOption[] = s.variations.map((v) => {
+            const vKey = (v.variant_key || v.variant || "basic").toLowerCase();
+            const vName = v.variant || v.variant_key || "basic";
+            const isBasic = vKey.includes("basic");
+            const price = Number(v.price ?? v.admin_price ?? 0);
+
+            return {
+              key: vKey,
+              name: vName.toLowerCase(),
+              description: isBasic
+                ? "Quick rinse and shine to keep your car clean."
+                : "Professional car wash service for your vehicle.",
+              price: price,
+            };
+          });
+
+          if (variations.length > 0) {
+            groups.push({
+              serviceId: String(s.service_id || `srv-${idx}`),
+              serviceName: s.service_name || s.name || `Valet Service ${idx + 1}`,
+              variations,
+            });
+          }
+        }
+      });
+    }
+
+    if (groups.length > 0) {
+      return groups;
+    }
+
+    // Default package variations
+    return [
+      {
+        serviceId: "default-valet",
+        serviceName: "Vehicle Valet Wash",
+        variations: [
+          {
+            key: "basic",
+            name: "basic",
+            description: "Quick rinse and shine to keep your car clean.",
+            price: 70,
+          },
+          {
+            key: "perium",
+            name: "perium",
+            description: "Professional car wash service for your vehicle.",
+            price: 0,
+          },
+        ],
+      },
+    ];
+  }, [selectedProvider]);
+
+  // Handle variation selection per service
+  const handleSelectVariation = (serviceId: string, variantKey: string) => {
+    setSelectedServiceVariations((prev) => ({
+      ...prev,
+      [serviceId]: variantKey,
+    }));
   };
 
-  // Filter & Sort Providers
-  const filteredAndSortedProviders = useMemo(() => {
+  // Flattened variations for fallback compatibility
+  const availableProviderPackages = useMemo<PackageVariationOption[]>(() => {
+    return servicesWithVariations.flatMap((srv) => srv.variations);
+  }, [servicesWithVariations]);
+
+  // Dynamic Selected Package (First service or chosen)
+  const currentSelectedPackage = useMemo(() => {
+    const firstService = servicesWithVariations[0];
+    if (!firstService || firstService.variations.length === 0) {
+      return {
+        key: "basic",
+        name: "basic",
+        description: "Quick rinse and shine to keep your car clean.",
+        price: 70,
+      };
+    }
+    const selKey =
+      selectedServiceVariations[firstService.serviceId] ||
+      firstService.variations[0].key;
+    return (
+      firstService.variations.find((v) => v.key === selKey) ||
+      firstService.variations[0]
+    );
+  }, [servicesWithVariations, selectedServiceVariations]);
+
+  // Selected package key helper
+  const selectedPackageKey = currentSelectedPackage.key;
+
+  // Accurate Dynamic Price Calculation (Sum of selected variation across all services)
+  const activePackagePrice = useMemo(() => {
+    let total = 0;
+    servicesWithVariations.forEach((srv) => {
+      const selKey =
+        selectedServiceVariations[srv.serviceId] || srv.variations[0]?.key;
+      const matched =
+        srv.variations.find((v) => v.key === selKey) ||
+        srv.variations.find((v) =>
+          v.key.toLowerCase().includes((selKey || "").toLowerCase())
+        ) ||
+        srv.variations[0];
+      if (matched) {
+        total += Number(matched.price) || 0;
+      }
+    });
+    return total;
+  }, [servicesWithVariations, selectedServiceVariations]);
+
+  const depositAmount = (activePackagePrice * 0.25).toFixed(2);
+  const remainingAmount = (activePackagePrice * 0.75).toFixed(2);
+  const payableAmount = isPartialPayment ? depositAmount : activePackagePrice.toFixed(2);
+
+  // Filtered & Sorted Providers List
+  const filteredProviders = useMemo(() => {
     let list = [...providers];
 
-    // Filter by Service Type
-    if (serviceTypeFilter !== "all") {
+    if (onlyNearby) {
       list = list.filter((p) => {
-        const type = p.service_type || "Mobile";
-        return type.toLowerCase().includes(serviceTypeFilter.toLowerCase());
+        const dist = parseFloat(String(p.distance_miles || p.distance || "10"));
+        return !isNaN(dist) && dist <= searchRadius;
       });
     }
 
-    // Filter by distance radius
-    list = list.filter((p) => {
-      const dist = Number(p.distance_miles) || 1.2;
-      return dist <= searchRadius;
-    });
-
-    // Sort
     if (sortBy === "price_low") {
-      list.sort(
-        (a, b) =>
-          (a.total_selected_services_price || 0) -
-          (b.total_selected_services_price || 0)
-      );
+      list.sort((a, b) => getProviderLowestPrice(a) - getProviderLowestPrice(b));
     } else if (sortBy === "price_high") {
-      list.sort(
-        (a, b) =>
-          (b.total_selected_services_price || 0) -
-          (a.total_selected_services_price || 0)
-      );
-    } else if (sortBy === "distance") {
-      list.sort(
-        (a, b) => (Number(a.distance_miles) || 1.2) - (Number(b.distance_miles) || 1.2)
-      );
+      list.sort((a, b) => getProviderLowestPrice(b) - getProviderLowestPrice(a));
     } else if (sortBy === "rating") {
       list.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+    } else if (sortBy === "distance") {
+      list.sort(
+        (a, b) =>
+          parseFloat(String(a.distance_miles || a.distance || "999")) -
+          parseFloat(String(b.distance_miles || b.distance || "999"))
+      );
     }
 
     return list;
-  }, [providers, serviceTypeFilter, searchRadius, sortBy]);
+  }, [providers, onlyNearby, searchRadius, sortBy]);
 
-  // Opens Select Payment Method Modal
-  const handleOpenPaymentModal = (e?: React.FormEvent | React.MouseEvent) => {
-    if (e) e.preventDefault();
-    if (!selectedProviderForBooking) return;
-    setShowPaymentModal(true);
-  };
+  // Transition to dedicated screen view
+  const handleSelectProviderForBooking = (provider: ValetProvider) => {
+    setSelectedProvider(provider);
+    setIsBookingSuccess(false);
 
-  const handleConfirmBooking = (e?: React.FormEvent | React.MouseEvent) => {
-    handleOpenPaymentModal(e);
-  };
-
-  // Final Booking Dispatch to API with Stripe Payment
-  const executeValetBooking = async () => {
-    if (!isAuthenticated()) {
-      saveServiceFormDraft("valet", {
-        locationAddress: searchLocation,
-        registrationNo: searchReg,
-        selectedServiceId,
-        currentServiceName,
-        searchRadius,
-        serviceTypeFilter,
-        sortBy,
-        bookingVehicleModel,
-        bookingVehicleColor,
-        bookingSpecialConditions,
-        bookingAdditionalNotes,
-        selectedSlot,
-        bookingDate,
-        bookingTime,
-        targetProviderId: selectedProviderForBooking?.id,
+    // Initialize variation selection for each service of this provider
+    const initialMap: Record<string, string> = {};
+    if (Array.isArray(provider.selected_services)) {
+      provider.selected_services.forEach((s, idx) => {
+        const sId = String(s.service_id || `srv-${idx}`);
+        const firstVar = s.variations?.[0];
+        if (firstVar) {
+          initialMap[sId] = (firstVar.variant_key || firstVar.variant || "basic").toLowerCase();
+        } else {
+          initialMap[sId] = "basic";
+        }
       });
-      showToast("Please log in to complete your valet booking", "info");
-      router.push(`/login?redirect=${encodeURIComponent("/services/valet-wash/providers")}`);
+    }
+    setSelectedServiceVariations(initialMap);
+
+    // Default service location
+    const pTypes = provider.service_types || ["mobile", "workshop"];
+    if (pTypes.includes("workshop")) {
+      setServiceLocationType("workshop");
+    } else {
+      setServiceLocationType("mobile");
+    }
+
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  // Submit Booking & Redirect to Stripe Online Payment
+  const handleConfirmAndPay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProvider) return;
+
+    if (!isAuthenticated()) {
+      showToast("Please log in to finalize your booking", "info");
+      router.push(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
 
-    if (!selectedProviderForBooking) return;
+    if (providerSlots.length === 0 || !selectedSlotId) {
+      showToast("No slots available on this date. Please select another date.", "error");
+      return;
+    }
+
+    setIsBookingSubmitting(true);
 
     try {
-      setIsBookingSubmitting(true);
-
-      const chosenVarKey =
-        activeVariation?.variant_key ||
-        selectedVariationKey ||
-        availableVariations[0]?.variant_key ||
-        "basic";
-
-      const chosenVarName = activeVariation?.variant || chosenVarKey;
-
       const scheduleTime =
         bookingTime.includes(":") && bookingTime.split(":").length === 2
           ? `${bookingTime}:00`
@@ -465,36 +612,65 @@ function ProvidersContent() {
           ? `${window.location.origin}/booking-success`
           : `${getBackendRootUrl()}/booking-success`;
 
+      // Add each selected service with its chosen variation to cart
+      for (const srv of servicesWithVariations) {
+        const selKey =
+          selectedServiceVariations[srv.serviceId] || srv.variations[0]?.key;
+        if (selKey) {
+          try {
+            await addValetToCart({
+              service_id: srv.serviceId,
+              provider_id: selectedProvider.id,
+              variant_key: selKey,
+              quantity: 1,
+              zone_id: DEFAULT_ZONE_ID,
+            });
+          } catch (err) {
+            console.warn("Could not add variation to cart:", srv.serviceId, err);
+          }
+        }
+      }
+
+      const summaryPackages = servicesWithVariations
+        .map((srv) => {
+          const selKey =
+            selectedServiceVariations[srv.serviceId] || srv.variations[0]?.key;
+          const match =
+            srv.variations.find((v) => v.key === selKey) || srv.variations[0];
+          return `${srv.serviceName}: ${match?.name || selKey} (£${match?.price || 0})`;
+        })
+        .join(" + ");
+
+      const primaryServiceId =
+        servicesWithVariations[0]?.serviceId ||
+        selectedServiceIds[0] ||
+        DEFAULT_VALET_PACKAGES[0].id;
+      const primaryVariantKey =
+        selectedServiceVariations[servicesWithVariations[0]?.serviceId] ||
+        currentSelectedPackage.key;
+
       const bookingRes = await sendValetBookingRequest({
-        service_id: selectedServiceId,
-        provider_id: selectedProviderForBooking.id,
-        variant_key: chosenVarKey,
+        service_id: primaryServiceId,
+        provider_id: selectedProvider.id,
+        variant_key: primaryVariantKey,
         payment_method: "stripe",
         is_partial: isPartialPayment ? 1 : 0,
-        payment_platform: "app",
-        callback: callbackUrl,
+        zone_id: DEFAULT_ZONE_ID,
         service_schedule: formattedSchedule,
-        service_address_id: "6",
-        service_location: bookingLocationType,
-        service_address: searchLocation,
-        selected_slot_id: "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
-        car_registration_number: searchReg || "AB24 MMC",
-        car_model: bookingVehicleModel.trim() || "Audi A4",
-        car_color: bookingVehicleColor.trim() || "Black",
-        special_conditions: bookingSpecialConditions.trim()
-          ? `[Valet: ${currentServiceName} (${chosenVarName})] ${bookingSpecialConditions.trim()}`
-          : `[Valet: ${currentServiceName} (${chosenVarName})] Doorstep vehicle valet service`,
-        notes: `[Valet: ${currentServiceName} (${chosenVarName})] ${bookingAdditionalNotes.trim() || `Location: ${searchLocation} | Slot: ${selectedSlot}`}`,
+        service_address_id: requestData?.serviceAddressId || "2",
+        service_location: serviceLocationType === "workshop" ? "provider" : "customer",
+        service_address: requestData?.locationAddress || paramLocation || "Customer Address",
+        selected_slot_id: selectedSlotId || "00dc5d50-fa91-4c49-b74a-1326fc8a1fdf",
+        car_registration_number: requestData?.carReg || paramReg || "MMC VEHICLE",
+        car_model: carBrandModel.trim() || requestData?.carModel || "Vehicle",
+        car_color: carColor.trim() || requestData?.carColor || "Standard",
+        special_conditions: specialConditionsText.trim() || "Standard vehicle condition",
+        notes: additionalNotes.trim()
+          ? `${additionalNotes.trim()} [Packages: ${summaryPackages}]`
+          : `Packages: ${summaryPackages} | Slot: ${selectedSlotTitle}`,
+        answers: requestData?.answers || {},
+        callback: callbackUrl,
       });
-
-      let redirectLink =
-        (bookingRes as any)?.content?.url ||
-        (bookingRes as any)?.content?.redirect_link ||
-        (bookingRes as any)?.content?.redirect_url ||
-        (bookingRes as any)?.content?.payment_url ||
-        (bookingRes as any)?.url ||
-        (bookingRes as any)?.redirect_link ||
-        (bookingRes as any)?.redirect_url;
 
       const content = bookingRes?.content;
       const ref =
@@ -503,113 +679,74 @@ function ProvidersContent() {
         (Array.isArray(content?.booking_id) ? content.booking_id[0] : content?.booking_id) ||
         bookingRes?.booking_reference;
 
-      if (!bookingRes || (bookingRes.response_code && bookingRes.response_code !== "default_200" && !redirectLink)) {
-        showToast(
-          bookingRes?.message || "Valet booking request could not be completed. Please try again.",
-          "error"
-        );
-        return;
-      }
-
       const confirmedId = String(ref || `MMC-VAL-${Date.now().toString().slice(-6)}`);
       setConfirmedBookingRef(confirmedId);
 
-      const isUuidStr = (val: any): boolean =>
-        typeof val === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+      // Direct Stripe URL Redirection
+      const redirectLink =
+        content?.redirect_link ||
+        content?.url ||
+        content?.redirect_url ||
+        content?.payment_url ||
+        bookingRes?.redirect_link ||
+        bookingRes?.url;
 
-      const possibleUuid =
-        (content && isUuidStr(content.payment_id) ? content.payment_id : null) ||
-        (content && Array.isArray(content.booking_id) && isUuidStr(content.booking_id[0]) ? content.booking_id[0] : null) ||
-        (content && isUuidStr(content.booking_id) ? content.booking_id : null) ||
-        (content && isUuidStr(content.id) ? content.id : null) ||
-        (isUuidStr(confirmedId) ? confirmedId : null);
-
-      if (!redirectLink && possibleUuid) {
-        redirectLink = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-          String(possibleUuid)
-        )}&is_partial=${isPartialPayment ? 1 : 0}`;
-      }
-
-      try {
-        sessionStorage.setItem(
-          "mmc_pending_booking",
-          JSON.stringify({
-            booking_id: confirmedId,
-            readable_id: confirmedId,
-            provider: selectedProviderForBooking,
-            schedule: formattedSchedule,
-            price: numericPrice,
-            is_partial: isPartialPayment ? 1 : 0,
-            deposit_amount: depositAmount,
-            service_name: `Valet: ${currentServiceName} (${chosenVarName})`,
-          })
-        );
-      } catch { }
-
-      saveBookingMeta(confirmedId, {
-        serviceTitle: `${currentServiceName} (${chosenVarName})`,
-        serviceCategoryName: "Valet & Detailing",
-        serviceType: "valet",
-        variant: chosenVarName,
-        vehicleModel: bookingVehicleModel.trim() || "Audi A4",
-        vehicleReg: searchReg || "AB24 MMC",
-        providerName: selectedProviderForBooking.company_name,
-        price: numericPrice,
-      });
-
-      saveConfirmedBooking({
-        id: confirmedId,
-        rawId: possibleUuid || confirmedId,
-        readableId: confirmedId,
-        serviceType: "valet",
-        serviceTitle: `Valet: ${currentServiceName} (${chosenVarName})`,
-        serviceCategoryName: "Valet & Detailing",
-        providerName: selectedProviderForBooking.company_name,
-        providerPhone: selectedProviderForBooking.company_phone,
-        totalAmount: numericPrice,
-        isPaid: false,
-        paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
-        paymentMethod: "Stripe (Online)",
-        status: "pending",
-        statusDisplay: "Pending",
-        scheduleDate: searchParams?.get("date") || new Date().toISOString().split("T")[0],
-        scheduleTime: selectedSlot || "11:00",
-        fullScheduleDisplay: formattedSchedule,
-        vehicleModel: bookingVehicleModel.trim() || "Audi A4",
-        vehicleReg: searchReg || "AB24 MMC",
-        createdAt: new Date().toISOString(),
-      });
-
-      // ALWAYS redirect directly to Stripe URL for payment
       if (
         redirectLink &&
         typeof redirectLink === "string" &&
-        redirectLink.startsWith("http") &&
-        !redirectLink.includes("payment_id=MMC-")
+        redirectLink.startsWith("http")
       ) {
+        // Save pending booking draft to sessionStorage so that when Stripe redirects back to /booking-success, it has all details
+        try {
+          sessionStorage.setItem(
+            "mmc_pending_booking",
+            JSON.stringify({
+              booking_id: confirmedId,
+              readable_id: confirmedId,
+              provider: selectedProvider,
+              serviceTitle: `Valet: ${summaryPackages}`,
+              service_name: summaryPackages,
+              price: activePackagePrice,
+              is_partial: isPartialPayment ? 1 : 0,
+              deposit_amount: depositAmount,
+              schedule: formattedSchedule,
+              car_reg: requestData?.carReg || paramReg || "MMC",
+              car_model: carBrandModel.trim() || requestData?.carModel || "Vehicle",
+              payment_method: "stripe",
+            })
+          );
+        } catch {
+          // Ignore storage issues
+        }
+
+        // Save booking meta for booking-success retrieval
+        saveBookingMeta(confirmedId, {
+          serviceTitle: `Valet: ${summaryPackages}`,
+          serviceCategoryName: "Valet & Detailing",
+          serviceType: "valet",
+          vehicleModel: carBrandModel.trim() || requestData?.carModel || "Vehicle",
+          vehicleReg: requestData?.carReg || paramReg || "MMC",
+          providerName: selectedProvider.company_name,
+          price: activePackagePrice,
+        });
+
         showToast("Redirecting to Stripe secure checkout...", "info");
         window.location.href = redirectLink;
         return;
       }
 
-      setShowPaymentModal(false);
-      setIsBookingSuccess(true);
-      showToast("Valet Booking Confirmed Successfully!", "success");
-
-      triggerDevicePushNotification(
-        `${currentServiceName || "Valet Wash"} Confirmed! 🧼`,
-        `Booking Ref #${confirmedId} for ${currentServiceName || "Valet Wash"} has been confirmed. Schedule: ${formattedSchedule}.`,
-        `/account?tab=bookings&bookingId=${confirmedId}`,
-        `booking_push_${String(confirmedId).toLowerCase().trim()}`
-      );
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
-      }
+      // If we reach here, Stripe checkout URL was not generated - payment is NOT completed!
+      const errorMsg =
+        bookingRes?.message ||
+        (Array.isArray(bookingRes?.errors) && bookingRes.errors[0]?.message) ||
+        "Payment checkout could not be initiated. Please ensure your booking details are valid and try again.";
+      showToast(errorMsg, "error");
     } catch (err: any) {
       console.error("Booking error:", err);
-      showToast(err?.response?.data?.message || err?.message || "Failed to confirm booking. Please try again.", "error");
+      showToast(
+        err?.response?.data?.message || err?.message || "Failed to initiate payment. Please try again.",
+        "error"
+      );
     } finally {
       setIsBookingSubmitting(false);
     }
@@ -619,1226 +756,970 @@ function ProvidersContent() {
     <div className="min-h-screen bg-[#0c0a09] text-white pb-24 relative overflow-x-hidden">
       {/* Background Ambient Glows */}
       <div
-        className="absolute top-0 left-1/4 -translate-x-1/2 w-[800px] lg:w-[1200px] h-[500px] rounded-full blur-[160px] opacity-15 pointer-events-none"
+        className="absolute top-0 right-1/4 w-[700px] h-[450px] rounded-full blur-[160px] opacity-15 pointer-events-none"
         style={{
           background: "radial-gradient(circle, #FAD293, #CEA46B, transparent)",
         }}
       />
       <div
-        className="absolute top-1/2 right-0 w-[600px] h-[600px] rounded-full blur-[180px] opacity-10 pointer-events-none"
+        className="absolute top-1/2 left-0 w-[600px] h-[600px] rounded-full blur-[180px] opacity-10 pointer-events-none"
         style={{
           background: "radial-gradient(circle, #CEA46B, transparent)",
         }}
       />
 
-      {/* 1. Desktop Breadcrumb & Hero Header Section */}
-      <section className="border-b border-white/8 bg-gradient-to-b from-white/[0.04] to-transparent pt-2 sm:pt-4 pb-6 relative z-20">
-        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] space-y-4">
-          {/* Breadcrumb Navigation */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-white/50">
+      {/* ─── Top Header ─── */}
+      <header className="border-b border-white/8 bg-gradient-to-b from-white/[0.04] to-transparent pt-4 pb-5 relative z-20">
+        <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {selectedProvider ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProvider(null);
+                  setIsBookingSuccess(false);
+                }}
+                className="w-10 h-10 rounded-2xl border border-white/10 bg-white/5 hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10 text-white hover:text-[#FAD293] flex items-center justify-center transition cursor-pointer"
+                title="Back to Detailers List"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            ) : (
               <Link
                 href="/services/valet-wash"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-[#FAD293] hover:border-[#FAD293]/40 transition"
+                className="w-10 h-10 rounded-2xl border border-white/10 bg-white/5 hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10 text-white hover:text-[#FAD293] flex items-center justify-center transition cursor-pointer"
+                title="Back to Questionnaire"
               >
-                <ChevronLeft size={14} />
-                <span>Valet Selection</span>
+                <ChevronLeft size={20} />
               </Link>
-              <span>/</span>
-              <Link href="/services" className="hover:text-white transition">Services</Link>
-              <span>/</span>
-              <span className="text-[#FAD293] font-semibold">Car Wash & Valet</span>
-            </div>
+            )}
 
-            {/* Live Service Status Pill */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Doorstep Mobile Units Active</span>
-            </div>
-          </div>
-
-          {/* Main Title & Value Proposition */}
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pt-2">
-            <div className="space-y-2 max-w-3xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#FAD293]/30 bg-[#FAD293]/10 text-[#FAD293] text-[11px] font-bold uppercase tracking-wider">
-                <Sparkles size={12} />
-                <span>Professional Vehicle Care & Detailing</span>
-              </div>
-              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
-                Vehicle Wash & <span className="bg-gradient-to-r from-[#FAD293] to-[#CEA46B] bg-clip-text text-transparent">Mobile Valet Specialists</span>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                {selectedProvider ? "Schedule & Confirm Booking" : "Choose Detailers."}
               </h1>
-              <p className="text-xs sm:text-sm text-white/70 leading-relaxed max-w-2xl">
-                Compare verified local mobile valet providers, customize your vehicle wash package, and book guaranteed doorstep cleaning at your preferred date and time.
+              <p className="text-xs text-white/50">
+                {selectedProvider
+                  ? `Booking with ${selectedProvider.company_name} • Step 3 of 3`
+                  : "Select from verified mobile valet professionals matched to your vehicle."}
               </p>
             </div>
+          </div>
 
-            {/* Trust Highlights Badges */}
-            <div className="grid grid-cols-2 gap-3 shrink-0">
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#FAD293]/15 text-[#FAD293] flex items-center justify-center shrink-0">
-                  <ShieldCheck size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">100% Certified</div>
-                  <div className="text-[10px] text-white/50">Vetted Specialists</div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#FAD293]/15 text-[#FAD293] flex items-center justify-center shrink-0">
-                  <Zap size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">Self-Powered</div>
-                  <div className="text-[10px] text-white/50">Mobile Water & Power</div>
-                </div>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Verified Professionals Available</span>
             </div>
+
+            {selectedProvider && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProvider(null);
+                  setIsBookingSuccess(false);
+                }}
+                className="px-3.5 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/70 hover:text-white flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <RotateCcw size={12} />
+                <span>Switch Provider</span>
+              </button>
+            )}
           </div>
         </div>
-      </section>
+      </header>
 
-      {/* 2. Main Desktop Layout (Sidebar + Results Grid) */}
-      <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pt-6 sm:pt-8 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-          {/* ========================================================= */}
-          {/* LEFT COLUMN: Interactive Edit & Filter Sidebar (4 cols)   */}
-          {/* ========================================================= */}
-          <aside id="sidebar-form" className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
-
-            {/* Sidebar Edit Card */}
-            <div className="rounded-3xl border border-[#FAD293]/30 bg-[#120e0b]/90 backdrop-blur-xl p-5 sm:p-6 shadow-2xl relative overflow-hidden space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-[#FAD293]/15 border border-[#FAD293]/30 flex items-center justify-center text-[#FAD293]">
-                    <SlidersHorizontal size={16} />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-white">Edit Your Request</h2>
-                    <p className="text-[11px] text-white/50">Modify search criteria</p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className="flex items-center gap-1 text-[11px] text-white/50 hover:text-[#FAD293] transition"
-                  title="Reset to default"
-                >
-                  <RotateCcw size={12} />
-                  <span>Reset</span>
-                </button>
-              </div>
-
-              <form onSubmit={handleApplySidebarSearch} className="space-y-4">
-                {/* 1. Location Input */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <MapPin size={12} className="text-[#FAD293]" />
-                    <span>Service Location</span>
-                  </label>
-                  <LocationSearchInput
-                    label="Service Location"
-                    placeholder="Enter city, postcode or address..."
-                    value={searchLocation}
-                    onChange={(addr) => setSearchLocation(addr)}
-                  />
-                </div>
-
-                {/* 2. Car Registration */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <Car size={12} className="text-[#FAD293]" />
-                    <span>Car Registration No</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchReg}
-                      onChange={(e) => setSearchReg(e.target.value.toUpperCase())}
-                      placeholder="e.g. AB24 MMC"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-bold tracking-wider text-white uppercase focus:outline-none focus:border-[#FAD293] transition pl-12"
-                    />
-                    <div className="absolute left-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-blue-600 text-[9px] font-black text-white">
-                      GB
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Wash Service Selection Dropdown */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-[#FAD293]" />
-                    <span>Valet Service Package</span>
-                  </label>
-                  <select
-                    value={selectedServiceId}
-                    onChange={(e) => handleServiceSelect(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293] transition"
-                  >
-                    {washTypes.length === 0 ? (
-                      <option value="" disabled className="bg-neutral-900 text-white/50">
-                        {loading ? "Loading packages..." : "No packages found"}
-                      </option>
-                    ) : (
-                      washTypes.map((w) => (
-                        <option key={w.id} value={w.id} className="bg-neutral-900 text-white">
-                          {w.name} {w.price > 0 ? `(From £${w.price})` : ""}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-
-                {/* 4. Distance Radius Filter */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                      <Compass size={12} className="text-[#FAD293]" />
-                      <span>Search Radius</span>
-                    </span>
-                    <span className="text-[#FAD293] font-bold font-mono">
-                      Within {searchRadius} Miles
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 pt-1">
-                    {[5, 10, 20, 50].map((rad) => (
-                      <button
-                        key={rad}
-                        type="button"
-                        onClick={() => setSearchRadius(rad)}
-                        className={`py-1.5 rounded-xl text-xs font-semibold border transition ${searchRadius === rad
-                          ? "bg-[#FAD293] text-black border-[#FAD293] shadow-md"
-                          : "bg-white/5 text-white/70 border-white/10 hover:border-white/20"
-                          }`}
-                      >
-                        {rad} mi
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 5. Service Type Filter (Mobile / Station) */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <Smartphone size={12} className="text-[#FAD293]" />
-                    <span>Service Type</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: "all", label: "All Types" },
-                      { id: "Mobile", label: "Mobile Valet" },
-                      { id: "Station", label: "Station/Garage" },
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => setServiceTypeFilter(st.id as any)}
-                        className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center truncate transition ${serviceTypeFilter === st.id
-                          ? "bg-[#FAD293]/20 text-[#FAD293] border-[#FAD293]"
-                          : "bg-white/5 text-white/60 border-white/10 hover:text-white"
-                          }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Apply Button */}
-                <button
-                  type="submit"
-                  disabled={isUpdating}
-                  className="w-full py-3.5 rounded-2xl font-extrabold text-black text-xs sm:text-sm flex items-center justify-center gap-2 transition hover:brightness-110 active:scale-98 shadow-xl shadow-[#FAD293]/15 mt-4 disabled:opacity-50"
-                  style={{
-                    background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                  }}
-                >
-                  {isUpdating ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin text-black" />
-                      <span>Updating Results...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw size={16} className="text-black" />
-                      <span>Update Search Results</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-
-            {/* Sidebar Trust & Guarantee Card */}
-            <div className="rounded-3xl border border-white/10 bg-[#120e0b]/70 p-5 space-y-3.5 text-xs">
-              <div className="flex items-center gap-2 text-[#FAD293] font-bold">
-                <ShieldCheck size={16} />
-                <span>The Motor Market Club Valet Guarantee</span>
-              </div>
-              <ul className="space-y-2 text-white/70 text-[11px]">
-                <li className="flex items-start gap-2">
-                  <Check size={13} className="text-[#FAD293] shrink-0 mt-0.5" />
-                  <span>Vetted & certified vehicle detailing professionals</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check size={13} className="text-[#FAD293] shrink-0 mt-0.5" />
-                  <span>100% self-contained mobile water & power units</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check size={13} className="text-[#FAD293] shrink-0 mt-0.5" />
-                  <span>Pay securely online or in cash upon completion</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Sidebar Help Card */}
-            <div className="rounded-2xl border border-white/8 bg-white/5 p-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-xs font-bold text-white">Need Quick Assistance?</span>
-                <p className="text-[11px] text-white/50">24/7 Motor Market Support</p>
-              </div>
-              <a
-                href="tel:07380504571"
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FAD293] text-xs font-bold transition flex items-center gap-1.5"
-              >
-                <Phone size={12} />
-                <span>Call Us</span>
-              </a>
-            </div>
-          </aside>
-
-          {/* ========================================================= */}
-          {/* RIGHT COLUMN: Results Header & Vendor Cards Grid (8 cols) */}
-          {/* ========================================================= */}
-          <section className="lg:col-span-8 space-y-6">
-
-            {/* Top Results Banner & Stats */}
-            <div className="rounded-3xl border border-[#FAD293]/20 bg-[#120e0b]/80 backdrop-blur-md p-5 sm:p-6 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      Live Available
-                    </span>
-                    <span className="text-xs text-white/40">•</span>
-                    <span className="text-xs text-white/60">
-                      Instant Booking Confirmed
-                    </span>
-                  </div>
-
-                  <h2 className="text-lg sm:text-xl font-black text-white mt-1">
-                    {filteredAndSortedProviders.length} Valet Specialists within {searchRadius} Miles
-                  </h2>
-
-                  <p className="text-xs text-white/60 flex items-center gap-1.5 mt-1">
-                    <MapPin size={13} className="text-[#FAD293] shrink-0" />
-                    <span className="truncate max-w-sm sm:max-w-md">
-                      {searchLocation}
-                    </span>
-                    <span className="text-white/30">|</span>
-                    <span className="text-[#FAD293] font-mono font-bold">{searchReg}</span>
-                  </p>
-                </div>
-
-                {/* Sort Filter Selector */}
-                <div className="flex items-center gap-2 self-start sm:self-center">
-                  <span className="text-white/50 text-xs hidden sm:inline">Sort:</span>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293] transition"
-                  >
-                    <option value="best" className="bg-neutral-900">Best Match</option>
-                    <option value="price_low" className="bg-neutral-900">Price: Low to High</option>
-                    <option value="price_high" className="bg-neutral-900">Price: High to Low</option>
-                    <option value="distance" className="bg-neutral-900">Nearest First</option>
-                    <option value="rating" className="bg-neutral-900">Highest Rated</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Active Filter Pills */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/8 text-[11px]">
-                <span className="text-white/40">Active Filters:</span>
-                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white/80 flex items-center gap-1">
-                  <span>Service: {currentServiceName}</span>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white/80 flex items-center gap-1">
-                  <span>Radius: ≤ {searchRadius} mi</span>
-                </span>
-                {serviceTypeFilter !== "all" && (
-                  <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[#FAD293] flex items-center gap-1">
-                    <span>Type: {serviceTypeFilter}</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Provider Cards List */}
-            {loading ? (
-              /* Loading Skeletons */
-              <div className="grid grid-cols-2 gap-3 sm:gap-6">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-white/10 bg-[#120e0b] animate-pulse space-y-3 sm:space-y-4"
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white/10 shrink-0" />
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="h-3 sm:h-4 w-20 sm:w-36 bg-white/10 rounded" />
-                        <div className="h-2.5 sm:h-3 w-12 sm:w-20 bg-white/5 rounded" />
-                      </div>
-                    </div>
-                    <div className="space-y-2 py-2 sm:py-3 border-y border-white/5">
-                      <div className="h-2.5 sm:h-3 w-full bg-white/5 rounded" />
-                      <div className="h-2.5 sm:h-3 w-3/4 bg-white/5 rounded" />
-                    </div>
-                    <div className="h-8 sm:h-10 bg-white/10 rounded-xl sm:rounded-2xl" />
-                  </div>
-                ))}
-              </div>
-            ) : filteredAndSortedProviders.length === 0 ? (
-              /* Empty State */
-              <div className="rounded-3xl border border-white/10 bg-[#120e0b] p-8 sm:p-10 text-center space-y-4">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 mx-auto">
-                  <Filter size={24} className="sm:w-7 sm:h-7" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm sm:text-base font-bold text-white">No specialists found in this radius</h3>
-                  <p className="text-xs text-white/50 max-w-md mx-auto">
-                    Try expanding your search radius to 20 or 50 miles in the left sidebar to discover more detailing specialists.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSearchRadius(50)}
-                  className="px-5 py-2.5 rounded-xl bg-[#FAD293] text-black font-bold text-xs hover:brightness-110 transition shadow-lg"
-                >
-                  Expand Radius to 50 Miles
-                </button>
-              </div>
-            ) : (
-              /* Providers Grid (2 columns on mobile and desktop) */
-              <div className="grid grid-cols-2 gap-3 sm:gap-6 items-stretch">
-                {filteredAndSortedProviders.map((provider, index) => {
-                  const isBestValue = index === 0;
-                  const price =
-                    provider.total_selected_services_price && provider.total_selected_services_price > 0
-                      ? provider.total_selected_services_price
-                      : (activeVariation?.price && activeVariation.price > 0
-                        ? activeVariation.price
-                        : (activeServiceItem?.price && activeServiceItem.price > 0
-                          ? activeServiceItem.price
-                          : 45));
-                  const distance = provider.distance_miles || (1.2 + index * 0.6).toFixed(1);
-                  const timeEstimate = provider.estimated_time || "1 hours";
-                  const serviceType = provider.service_type || "Mobile";
-
-                  return (
-                    <div
-                      key={provider.id}
-                      className="relative rounded-2xl sm:rounded-3xl border border-[#FAD293]/35 bg-[#120e0b] p-3 sm:p-5 lg:p-6 shadow-2xl transition-all duration-300 hover:border-[#FAD293]/70 hover:shadow-[#FAD293]/10 hover:-translate-y-1 flex flex-col justify-between space-y-3 sm:space-y-4"
-                    >
-                      {/* Top Right "Best value" Badge */}
-                      {isBestValue && (
-                        <div className="absolute -top-2.5 sm:-top-3 right-2 sm:right-6">
-                          <span
-                            className="px-2 sm:px-3.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-wider text-black shadow-lg"
-                            style={{
-                              background:
-                                "linear-gradient(135deg, #FAD293, #CEA46B)",
-                            }}
-                          >
-                            Best value
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="space-y-2.5 sm:space-y-4">
-                        {/* Provider Header: Logo + Name + My work link + Rating */}
-                        <div className="flex items-start justify-between gap-2 pt-0.5">
-                          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
-                            <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-white shrink-0 flex items-center justify-center p-0.5 sm:p-1 shadow-md">
-                              <img
-                                src={
-                                  provider.logo_full_path ||
-                                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"
-                                }
-                                alt={provider.company_name}
-                                className="w-full h-full object-contain"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).src =
-                                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80";
-                                }}
-                              />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-1 flex-wrap sm:flex-nowrap">
-                                <h3 className="text-xs sm:text-base font-bold text-white truncate max-w-full" title={provider.company_name}>
-                                  {provider.company_name}
-                                </h3>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedProviderForGallery(provider)}
-                                  className="inline-flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-[11px] font-semibold text-[#FAD293] hover:underline shrink-0"
-                                >
-                                  <span className="hidden xs:inline">My work</span>
-                                  <Eye size={11} className="sm:w-3.5 sm:h-3.5" />
-                                </button>
-                              </div>
-
-                              <div className="flex items-center gap-1 text-[10px] sm:text-xs text-white/50 mt-0.5">
-                                <Star size={10} className="sm:w-3 sm:h-3 fill-[#FAD293] text-[#FAD293] shrink-0" />
-                                <span className="font-bold text-white">
-                                  {provider.avg_rating || 0}
-                                </span>
-                                <span className="truncate">({provider.rating_count || 0})</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Details Matrix: Service radius | Estimated time | Service type */}
-                        <div className="space-y-1.5 sm:space-y-2.5 py-2 sm:py-3 border-y border-white/8 text-[11px] sm:text-sm">
-                          {/* Service radius */}
-                          <div className="flex items-center justify-between text-white/80 gap-1">
-                            <span className="text-white/60 text-[10px] sm:text-xs">Radius</span>
-                            <div className="flex items-center gap-1 text-[#FAD293] font-semibold font-mono text-[10px] sm:text-xs">
-                              <Compass size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
-                              <span>{distance} mi</span>
-                            </div>
-                          </div>
-
-                          {/* Estimated time */}
-                          <div className="flex items-center justify-between text-white/80 gap-1">
-                            <span className="text-white/60 text-[10px] sm:text-xs">Est. Time</span>
-                            <div className="flex items-center gap-1 text-[#FAD293] font-semibold font-mono text-[10px] sm:text-xs">
-                              <Clock size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
-                              <span>{timeEstimate}</span>
-                            </div>
-                          </div>
-
-                          {/* Service type */}
-                          <div className="flex items-center justify-between text-white/80 gap-1">
-                            <span className="text-white/60 text-[10px] sm:text-xs">Type</span>
-                            <div className="flex items-center gap-1 text-[#FAD293] font-semibold text-[10px] sm:text-xs">
-                              <Smartphone size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
-                              <span>{serviceType}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Bottom Row: Price + Book Now Button */}
-                      <div className="flex items-center justify-between pt-1.5 sm:pt-2 gap-2 sm:gap-4">
-                        <div className="text-left">
-                          <span className="text-base sm:text-3xl font-black text-white">
-                            £{price}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenBookingModal(provider)}
-                          className="flex-1 max-w-[90px] sm:max-w-[170px] py-1.5 sm:py-3 px-2 sm:px-4 rounded-xl sm:rounded-2xl font-extrabold text-black text-[11px] sm:text-sm shadow-xl shadow-[#FAD293]/10 hover:brightness-110 active:scale-98 transition text-center flex items-center justify-center gap-1"
-                          style={{
-                            background:
-                              "linear-gradient(135deg, #FAD293, #CEA46B)",
-                          }}
-                        >
-                          <span>Book</span>
-                          <span className="hidden sm:inline">Now</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      </main>
-
-      {/* ========================================================= */}
-      {/* 3. Booking Schedule Modal Popup                           */}
-      {/* ========================================================= */}
-      {selectedProviderForBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-3xl border border-[#FAD293]/40 bg-[#120e0b] p-6 sm:p-7 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar">
-            {/* Close Button */}
+      {/* ─── MAIN CONTENT VIEW (Seamless Page Switch) ─── */}
+      {selectedProvider ? (
+        /* ========================================================================= */
+        /* ─── DEDICATED FULL-SCREEN BOOKING VIEW (No Squeezed Popup!) ─── */
+        /* ========================================================================= */
+        <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] py-8 relative z-10 animate-in fade-in duration-300">
+          
+          {/* Breadcrumb Steps Header */}
+          <div className="mb-8 flex items-center gap-3 overflow-x-auto pb-2 border-b border-white/8 text-xs font-semibold">
+            <Link
+              href="/services/valet-wash"
+              className="text-white/50 hover:text-white transition flex items-center gap-1.5 shrink-0"
+            >
+              <CheckCircle2 size={14} className="text-emerald-400" />
+              <span>1. Request Details</span>
+            </Link>
+            <span className="text-white/20">/</span>
             <button
               type="button"
-              onClick={() => {
-                setSelectedProviderForBooking(null);
-                setIsBookingSuccess(false);
-              }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition"
+              onClick={() => setSelectedProvider(null)}
+              className="text-white/50 hover:text-white transition flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
-              <X size={15} />
+              <CheckCircle2 size={14} className="text-emerald-400" />
+              <span>2. Choose Detailer ({selectedProvider.company_name})</span>
             </button>
+            <span className="text-white/20">/</span>
+            <span className="text-[#FAD293] flex items-center gap-1.5 shrink-0 font-bold">
+              <Sparkles size={14} className="text-[#FAD293]" />
+              <span>3. Schedule, Package & Payment</span>
+            </span>
+          </div>
 
-            {isBookingSuccess ? (
-              /* Success Confirmation */
-              <div className="text-center space-y-5 py-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto animate-bounce">
-                  <CheckCircle2 size={32} />
-                </div>
+          {isBookingSuccess ? (
+            /* Success View on Screen */
+            <div className="max-w-2xl mx-auto py-12 px-6 rounded-3xl border border-emerald-500/30 bg-[#14100c] shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-200">
+              <div className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 text-emerald-400 mx-auto flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                <CheckCircle2 size={40} />
+              </div>
 
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAD293] px-3 py-1 rounded-full bg-[#FAD293]/15 border border-[#FAD293]/30">
-                    Booking Confirmed
+              <div className="space-y-2">
+                <h2 className="text-2xl sm:text-3xl font-black text-white">
+                  Valet Booking Confirmed!
+                </h2>
+                <p className="text-sm text-white/60">
+                  Your appointment has been registered with {selectedProvider.company_name}.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 text-left text-sm max-w-md mx-auto">
+                <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                  <span className="text-white/50">Booking Reference:</span>
+                  <span className="font-mono font-bold text-[#FAD293] text-base">
+                    #{confirmedBookingRef}
                   </span>
-                  <h3 className="text-xl sm:text-2xl font-extrabold text-white">
-                    Valet Service Scheduled!
-                  </h3>
-                  <p className="text-xs text-white/60 max-w-sm mx-auto">
-                    <strong className="text-white">{selectedProviderForBooking.company_name}</strong> will arrive at your destination with mobile equipment.
-                  </p>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Detailer:</span>
+                  <span className="font-semibold text-white">
+                    {selectedProvider.company_name}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Selected Package:</span>
+                  <span className="font-bold text-[#FAD293] capitalize">
+                    {currentSelectedPackage.name} (£{activePackagePrice})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Date & Slot:</span>
+                  <span className="font-semibold text-white">
+                    {bookingDate} • {selectedSlotTitle}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/50">Location:</span>
+                  <span className="font-semibold text-white capitalize">
+                    {serviceLocationType} Wash
+                  </span>
+                </div>
+              </div>
 
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left space-y-2 text-xs">
-                  <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                    <span className="text-white/50">Booking Reference:</span>
-                    <span className="font-mono font-bold text-[#FAD293]">
-                      {confirmedBookingRef}
-                    </span>
+              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  href={`/account?tab=bookings&bookingId=${confirmedBookingRef}`}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#FAD293] via-[#CEA46B] to-[#FAD293] text-black font-black text-xs uppercase tracking-wider text-center shadow-lg hover:brightness-110 transition"
+                >
+                  View in My Bookings
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProvider(null);
+                    setIsBookingSuccess(false);
+                  }}
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-2xl border border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs font-semibold cursor-pointer transition"
+                >
+                  Book Another Valet
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Dedicated Ultra-Premium Desktop Form */
+            <form onSubmit={handleConfirmAndPay} className="space-y-8">
+              
+              {/* Top Detailer Card Summary Banner */}
+              <div className="p-6 rounded-3xl border border-white/10 bg-gradient-to-r from-white/[0.04] via-white/[0.02] to-transparent flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] font-black text-xl shrink-0 shadow-inner">
+                    {selectedProvider.company_name.slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Service:</span>
-                    <span className="text-white font-medium">{currentServiceName}</span>
-                  </div>
-                  {activeVariation && (
-                    <div className="flex justify-between">
-                      <span className="text-white/50">Variation:</span>
-                      <span className="text-[#FAD293] font-semibold capitalize">
-                        {activeVariation.variant || activeVariation.variant_key}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl sm:text-2xl font-black text-white capitalize">
+                        {selectedProvider.company_name}
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-md bg-[#FAD293] text-black text-[10px] font-black tracking-wider flex items-center gap-1 shadow-sm">
+                        <Award size={11} strokeWidth={3} />
+                        Verified Specialist
                       </span>
                     </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Date & Time:</span>
-                    <span className="text-white font-medium">
-                      {bookingDate} at {bookingTime}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Vehicle Reg:</span>
-                    <span className="text-white font-mono font-bold">{searchReg}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Location:</span>
-                    <span className="text-white font-medium truncate max-w-[180px]">
-                      {searchLocation}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-white/10 font-bold text-sm">
-                    <span className="text-white/70">Total Amount:</span>
-                    <span className="text-[#FAD293]">
-                      £{dynamicBookingPrice}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-white/60">
+                      <div className="flex items-center gap-1 text-white">
+                        <Star size={13} className="text-[#FAD293] fill-[#FAD293]" />
+                        <span className="font-bold">
+                          {(selectedProvider.avg_rating || 5.0).toFixed(1)}
+                        </span>
+                        <span className="text-white/40">
+                          ({selectedProvider.rating_count || 12} reviews)
+                        </span>
+                      </div>
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <MapPin size={12} className="text-white/40" />
+                        <span>{selectedProvider.company_address || "London, UK"}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <Link
-                    href={`/account?tab=bookings${confirmedBookingRef ? `&bookingId=${encodeURIComponent(confirmedBookingRef)}` : ""}`}
-                    className="px-5 py-2.5 rounded-xl font-bold text-black text-xs shadow-lg"
-                    style={{
-                      background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                    }}
-                  >
-                    View This Booking
-                  </Link>
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedProviderForBooking(null);
-                      setIsBookingSuccess(false);
-                    }}
-                    className="px-5 py-2.5 rounded-xl font-semibold text-white/90 bg-white/5 border border-white/15 text-xs hover:bg-white/10 transition"
+                    onClick={() => setSelectedProviderForGallery(selectedProvider)}
+                    className="px-4 py-2 rounded-xl border border-white/15 bg-white/5 hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   >
-                    Close
+                    <Eye size={13} className="text-[#FAD293]" />
+                    <span>View Work Showcase</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProvider(null)}
+                    className="px-4 py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <span>Change Detailer</span>
                   </button>
                 </div>
               </div>
-            ) : (
-              /* Booking Schedule Form */
-              <form onSubmit={handleConfirmBooking} className="space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-white/10">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-white/10 shrink-0 p-1">
-                    <img
-                      src={
-                        selectedProviderForBooking.logo_full_path ||
-                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"
-                      }
-                      alt={selectedProviderForBooking.company_name}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">
-                      {selectedProviderForBooking.company_name}
-                    </h3>
-                    <p className="text-xs text-[#FAD293] font-medium">
-                      {currentServiceName}
-                    </p>
-                  </div>
-                </div>
 
-                {/* 1. Interactive Variation Selection */}
-                {availableVariations.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                        <Sparkles size={12} className="text-[#FAD293]" />
-                        <span>Select Package Variation</span>
+              {/* 2-Column Luxury Desktop Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* ══════════════════════════════════════════════════════════ */}
+                {/* LEFT COLUMN: Package Selection + Dynamic Slots + Location */}
+                {/* ══════════════════════════════════════════════════════════ */}
+                <div className="lg:col-span-7 space-y-7">
+                  
+                  {/* 1. Pick a Wash Package (Grouped with each Service) */}
+                  <div className="p-6 rounded-3xl border border-white/10 bg-white/[0.02] space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-white/80 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-[#FAD293]/20 border border-[#FAD293]/40 text-[#FAD293] flex items-center justify-center text-xs font-black">
+                          1
+                        </span>
+                        <Sparkles size={15} className="text-[#FAD293]" />
+                        <span>Pick Wash Packages</span>
                       </label>
-                      <span className="text-[10px] font-semibold text-[#FAD293]">
-                        {availableVariations.length} option(s)
+                      <span className="text-xs text-[#FAD293] font-semibold">
+                        Select variation for each service
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {availableVariations.map((v) => {
-                        const isSelected =
-                          (activeVariation?.variant_key || availableVariations[0]?.variant_key) ===
-                          v.variant_key;
-                        const varPrice =
-                          v.price > 0
-                            ? v.price
-                            : activeServiceItem?.price > 0
-                              ? activeServiceItem.price
-                              : 0;
+                    <div className="space-y-4">
+                      {servicesWithVariations.map((serviceGroup, sIdx) => {
+                        const selectedVariantKey =
+                          selectedServiceVariations[serviceGroup.serviceId] ||
+                          serviceGroup.variations[0]?.key;
 
                         return (
-                          <button
-                            key={v.variant_key}
-                            type="button"
-                            onClick={() => setSelectedVariationKey(v.variant_key)}
-                            className={`p-3 rounded-2xl border text-left transition relative flex items-center justify-between gap-2 ${isSelected
-                              ? "bg-[#FAD293]/15 border-[#FAD293] shadow-md shadow-[#FAD293]/10 ring-1 ring-[#FAD293]"
-                              : "bg-white/5 border-white/10 hover:border-white/25 hover:bg-white/[0.08]"
-                              }`}
+                          <div
+                            key={serviceGroup.serviceId}
+                            className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-3.5 shadow-md"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div
-                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition ${isSelected
-                                  ? "border-[#FAD293] bg-[#FAD293]"
-                                  : "border-white/30 bg-transparent"
-                                  }`}
-                              >
-                                {isSelected && (
-                                  <Check size={10} className="text-black font-bold stroke-[3]" />
-                                )}
+                            {/* Service Header with Badge */}
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#FAD293] shrink-0 shadow-[0_0_8px_rgba(250,210,147,0.6)]" />
+                                <h3 className="text-sm font-extrabold text-white tracking-wide truncate">
+                                  {serviceGroup.serviceName}
+                                </h3>
                               </div>
-                              <span className="text-xs font-bold text-white truncate capitalize">
-                                {v.variant || v.variant_key}
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#FAD293] bg-[#FAD293]/15 px-2.5 py-0.5 rounded-full border border-[#FAD293]/30 shrink-0">
+                                Service {sIdx + 1}
                               </span>
                             </div>
-                            <span className="text-xs font-extrabold text-[#FAD293] shrink-0">
-                              {varPrice > 0 ? `£${varPrice}` : "Included"}
-                            </span>
-                          </button>
+
+                            {/* Variations Options strictly bound to this service */}
+                            <div className="space-y-2.5">
+                              {serviceGroup.variations.map((pkg) => {
+                                const isSelected = selectedVariantKey === pkg.key;
+
+                                return (
+                                  <div
+                                    key={pkg.key}
+                                    onClick={() => handleSelectVariation(serviceGroup.serviceId, pkg.key)}
+                                    className={`p-4 rounded-xl border transition-all cursor-pointer relative flex items-start gap-3.5 ${
+                                      isSelected
+                                        ? "border-[#FAD293] bg-[#FAD293]/10 shadow-[0_0_20px_rgba(250,210,147,0.15)] ring-1 ring-[#FAD293]/60"
+                                        : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+                                    }`}
+                                  >
+                                    <div
+                                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition ${
+                                        isSelected
+                                          ? "border-[#FAD293] bg-[#FAD293]/20"
+                                          : "border-white/40 bg-transparent"
+                                      }`}
+                                    >
+                                      {isSelected && (
+                                        <div className="w-2.5 h-2.5 rounded-full bg-[#FAD293]" />
+                                      )}
+                                    </div>
+
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <h4
+                                          className={`text-sm font-extrabold capitalize ${
+                                            isSelected ? "text-[#FAD293]" : "text-white"
+                                          }`}
+                                        >
+                                          {pkg.name}
+                                        </h4>
+                                        <span className="text-sm font-black text-[#FAD293] shrink-0">
+                                          From £{pkg.price}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-white/60 leading-relaxed mt-0.5">
+                                        {pkg.description}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
                   </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-xs">
-                    <span className="text-white/70">Selected Service:</span>
-                    <span className="text-white font-bold">{currentServiceName}</span>
-                  </div>
-                )}
 
-                {/* Date & Time Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                      <Calendar size={12} className="text-[#FAD293]" />
-                      <span>Preferred Date</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      min={todayStr}
-                      value={bookingDate}
-                      onChange={(e) => setBookingDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
-                    />
-                  </div>
+                  {/* 2. Date and Time with Clean Dynamic Slots */}
+                  <div className="p-6 rounded-3xl border border-white/10 bg-white/[0.02] space-y-5">
+                    
+                    {/* Header & Date Picker Input */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <label className="text-xs font-bold uppercase tracking-wider text-white/80 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-[#FAD293]/20 border border-[#FAD293]/40 text-[#FAD293] flex items-center justify-center text-xs font-black">
+                          2
+                        </span>
+                        <CalendarDays size={15} className="text-[#FAD293]" />
+                        <span>Date and Time</span>
+                      </label>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                      <Clock size={12} className="text-[#FAD293]" />
-                      <span>Arrival Time</span>
-                    </label>
-                    <input
-                      type="time"
-                      required
-                      value={bookingTime}
-                      onChange={(e) => setBookingTime(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
-                    />
-                  </div>
-                </div>
-
-                {/* Available Slots */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <Clock size={12} className="text-[#FAD293]" />
-                    <span>Available Slots</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { slot: "11:00 AM - 01:00 PM", time: "11:00" },
-                      { slot: "02:48 PM - 03:48 PM", time: "14:48" },
-                    ].map((s) => (
-                      <button
-                        key={s.slot}
-                        type="button"
+                      {/* Clean Clickable Date Picker Card with Visible Calendar Icon */}
+                      <div
                         onClick={() => {
-                          setSelectedSlot(s.slot);
-                          setBookingTime(s.time);
+                          if (dateInputRef.current) {
+                            try {
+                              dateInputRef.current.showPicker();
+                            } catch {
+                              dateInputRef.current.focus();
+                            }
+                          }
                         }}
-                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition text-center ${selectedSlot === s.slot
-                          ? "bg-[#FAD293]/15 border-[#FAD293] text-[#FAD293] ring-1 ring-[#FAD293]"
-                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                          }`}
+                        className="px-4 py-2.5 rounded-2xl bg-[#14100c] border border-[#FAD293]/40 hover:border-[#FAD293] transition flex items-center gap-3 cursor-pointer shadow-md group"
                       >
-                        {s.slot}
+                        <Calendar size={17} className="text-[#FAD293] shrink-0 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-bold text-white/70">Date:</span>
+                        <input
+                          ref={dateInputRef}
+                          type="date"
+                          min={todayStr}
+                          value={bookingDate}
+                          onChange={(e) => setBookingDate(e.target.value)}
+                          required
+                          className="bg-transparent text-xs text-white font-black tracking-wide focus:outline-none cursor-pointer [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert-[85%] [&::-webkit-calendar-picker-indicator]:sepia-[40%] [&::-webkit-calendar-picker-indicator]:saturate-[600%] [&::-webkit-calendar-picker-indicator]:hue-rotate-[5deg] [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:scale-125"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dynamic Slots Grid strictly from API (Zero Static Data) */}
+                    <div className="space-y-3 pt-3 border-t border-white/8">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[11px] text-white/60 uppercase font-bold tracking-wider">
+                          Available slots for <span className="text-white font-black">{selectedDateLabel}</span>
+                        </div>
+                        {isSlotsLoading && (
+                          <div className="flex items-center gap-1.5 text-xs text-[#FAD293]">
+                            <Loader2 size={13} className="animate-spin" />
+                            <span>Fetching live slots from API...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {isSlotsLoading ? (
+                        <div className="grid grid-cols-2 gap-3 py-2">
+                          {[1, 2, 3, 4].map((n) => (
+                            <div
+                              key={n}
+                              className="h-12 rounded-2xl bg-white/[0.03] border border-white/10 animate-pulse"
+                            />
+                          ))}
+                        </div>
+                      ) : providerSlots.length === 0 ? (
+                        /* ZERO STATIC SLOTS - If API has no slots, show this informative state! */
+                        <div className="py-7 px-4 rounded-2xl bg-amber-500/[0.05] border border-amber-500/20 text-center space-y-2">
+                          <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                            <Clock size={18} />
+                          </div>
+                          <div className="text-xs font-bold text-amber-400">
+                            No slots available for {selectedDateLabel}
+                          </div>
+                          <p className="text-[11px] text-white/50 max-w-sm mx-auto">
+                            The provider has no open slots on this date. Please pick a different date from the calendar.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {providerSlots.map((slot) => {
+                            const isSelected = selectedSlotId === slot.id || selectedSlotTitle === slot.title;
+                            return (
+                              <button
+                                key={slot.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSlotId(slot.id);
+                                  setSelectedSlotTitle(slot.title);
+                                  if (slot.start_time) setBookingTime(slot.start_time);
+                                }}
+                                className={`py-3.5 px-4 rounded-2xl text-xs font-bold transition flex items-center justify-between cursor-pointer border ${
+                                  isSelected
+                                    ? "bg-gradient-to-r from-[#FAD293] via-[#CEA46B] to-[#FAD293] text-black border-transparent shadow-[0_0_20px_rgba(250,210,147,0.3)] font-black"
+                                    : "border-white/10 bg-white/[0.02] text-white/80 hover:border-white/25 hover:bg-white/[0.04]"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Clock size={14} className={isSelected ? "text-black" : "text-[#FAD293]"} />
+                                  <span className="truncate">{slot.title}</span>
+                                </div>
+                                {isSelected && (
+                                  <Check size={14} strokeWidth={3} className="shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 3. Service Location Selection */}
+                  <div className="p-6 rounded-3xl border border-white/10 bg-white/[0.02] space-y-4">
+                    <label className="text-xs font-bold uppercase tracking-wider text-white/80 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-[#FAD293]/20 border border-[#FAD293]/40 text-[#FAD293] flex items-center justify-center text-xs font-black">
+                        3
+                      </span>
+                      <MapPin size={15} className="text-[#FAD293]" />
+                      <span>Service Location</span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setServiceLocationType("mobile")}
+                        className={`py-4 px-5 rounded-2xl border text-xs font-bold transition flex flex-col gap-1 cursor-pointer text-left ${
+                          serviceLocationType === "mobile"
+                            ? "bg-gradient-to-r from-[#FAD293] to-[#CEA46B] text-black border-transparent shadow-[0_0_20px_rgba(250,210,147,0.25)] font-black"
+                            : "border-white/15 bg-white/[0.02] text-white/70 hover:border-white/30"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Smartphone size={16} />
+                          <span className="text-sm font-extrabold">Mobile Wash</span>
+                        </div>
+                        <p className={`text-[11px] ${serviceLocationType === "mobile" ? "text-black/80" : "text-white/40"}`}>
+                          The detailer travels with van, water & power to your address.
+                        </p>
                       </button>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Service Location Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <MapPin size={12} className="text-[#FAD293]" />
-                    <span>Service Location</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setBookingLocationType("customer")}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${bookingLocationType === "customer"
-                        ? "bg-[#FAD293] text-black shadow-md font-extrabold"
-                        : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      <button
+                        type="button"
+                        onClick={() => setServiceLocationType("workshop")}
+                        className={`py-4 px-5 rounded-2xl border text-xs font-bold transition flex flex-col gap-1 cursor-pointer text-left ${
+                          serviceLocationType === "workshop"
+                            ? "bg-gradient-to-r from-[#FAD293] to-[#CEA46B] text-black border-transparent shadow-[0_0_20px_rgba(250,210,147,0.25)] font-black"
+                            : "border-white/15 bg-white/[0.02] text-white/70 hover:border-white/30"
                         }`}
-                    >
-                      <Smartphone size={13} />
-                      <span>Mobile Wash</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBookingLocationType("provider")}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${bookingLocationType === "provider"
-                        ? "bg-[#FAD293] text-black shadow-md font-extrabold"
-                        : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                        }`}
-                    >
-                      <Building size={13} />
-                      <span>Workshop</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Add Vehicle Details */}
-                <div className="space-y-3 pt-2 border-t border-white/10">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#FAD293]">
-                    <Car size={13} />
-                    <span>Add Vehicle Details</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-white/50 block">Car Brand / Model</label>
-                      <input
-                        type="text"
-                        value={bookingVehicleModel}
-                        onChange={(e) => setBookingVehicleModel(e.target.value)}
-                        placeholder="Eg Audi A4"
-                        className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
-                      />
+                      >
+                        <div className="flex items-center gap-2">
+                          <Warehouse size={16} />
+                          <span className="text-sm font-extrabold">Workshop</span>
+                        </div>
+                        <p className={`text-[11px] ${serviceLocationType === "workshop" ? "text-black/80" : "text-white/40"}`}>
+                          Drop your vehicle off at {selectedProvider.company_name}&apos;s facility.
+                        </p>
+                      </button>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-white/50 block">Color (Optional)</label>
-                      <input
-                        type="text"
-                        value={bookingVehicleColor}
-                        onChange={(e) => setBookingVehicleColor(e.target.value)}
-                        placeholder="Eg Black"
-                        className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-white/50 block">Special Conditions</label>
-                    <input
-                      type="text"
-                      value={bookingSpecialConditions}
-                      onChange={(e) => setBookingSpecialConditions(e.target.value)}
-                      placeholder='Eg "Bird Droppings, Pet Hair"'
-                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-white/50 block">Additional Notes</label>
-                    <textarea
-                      rows={2}
-                      value={bookingAdditionalNotes}
-                      onChange={(e) => setBookingAdditionalNotes(e.target.value)}
-                      placeholder='Eg "Focus on dashboard and windows, remove pet hair, polish rims..."'
-                      className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] resize-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Location & Reg Info summary */}
-                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Destination:</span>
-                    <span className="text-white font-medium truncate max-w-[200px]">
-                      {searchLocation}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Car Reg:</span>
-                    <span className="text-white font-mono font-bold">{searchReg}</span>
-                  </div>
-                  {activeVariation && (
-                    <div className="flex justify-between pt-1 border-t border-white/5">
-                      <span className="text-white/50">Chosen Variation:</span>
-                      <span className="text-[#FAD293] font-semibold capitalize">
-                        {activeVariation.variant || activeVariation.variant_key}
+                    <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white/60 flex items-center gap-2">
+                      <MapPin size={14} className="text-[#FAD293] shrink-0" />
+                      <span className="truncate">
+                        {serviceLocationType === "mobile"
+                          ? `Service Address: ${requestData?.locationAddress || paramLocation || "Your registered address"}`
+                          : `Workshop Address: ${selectedProvider.company_address || "London Specialist Facility"}`}
                       </span>
                     </div>
-                  )}
+                  </div>
+
                 </div>
 
-                {/* Payment Method */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-white/70 flex items-center gap-1.5">
-                    <CreditCard size={12} className="text-[#FAD293]" />
-                    <span>Payment Method</span>
-                  </label>
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-white">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                      <span className="font-semibold text-white">
-                        Deposit (25% Advance) &amp; Full Online via Stripe
+                {/* ══════════════════════════════════════════════════════════ */}
+                {/* RIGHT COLUMN: Vehicle Info + Notes + Dynamic Stripe Card */}
+                {/* ══════════════════════════════════════════════════════════ */}
+                <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-8">
+                  
+                  {/* Vehicle Info Card */}
+                  <div className="p-6 rounded-3xl border border-white/10 bg-white/[0.02] space-y-4">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-white/80 flex items-center gap-2">
+                        <Car size={15} className="text-[#FAD293]" />
+                        <span>Vehicle Info</span>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 font-mono font-bold text-xs text-[#FAD293]">
+                        {requestData?.carReg || paramReg || "MH-12-AB-1234"}
                       </span>
                     </div>
-                    <span className="text-[10px] uppercase font-bold text-[#FAD293] bg-[#FAD293]/10 px-2 py-0.5 rounded-full border border-[#FAD293]/20">
-                      Selectable
-                    </span>
-                  </div>
-                </div>
 
-                {/* Total Quote Amount & 25% Deposit Eligible Badge */}
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider block">
-                      Total Quote Amount
-                    </span>
-                    <span className="text-xl sm:text-2xl font-black text-white">
-                      £{totalAmountFormatted}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAD293]/10 border border-[#FAD293]/30 text-[#FAD293] text-xs font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FAD293] animate-pulse" />
-                      <span>25% Deposit Eligible</span>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-white/50 uppercase font-semibold">
+                          Car Brand/Model
+                        </label>
+                        <input
+                          type="text"
+                          value={carBrandModel}
+                          onChange={(e) => setCarBrandModel(e.target.value)}
+                          placeholder='e.g. Buggati Buggati Chiron or Mercedes C-Class'
+                          className="w-full h-11 px-3.5 mt-1 rounded-xl bg-black/50 border border-white/15 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-white/50 uppercase font-semibold">
+                          Color (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={carColor}
+                          onChange={(e) => setCarColor(e.target.value)}
+                          placeholder='Eg "Black" or "Silver"'
+                          className="w-full h-11 px-3.5 mt-1 rounded-xl bg-black/50 border border-white/15 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Special Conditions */}
+                    <div className="pt-2 border-t border-white/10 space-y-1.5">
+                      <label className="text-[10px] text-white/50 uppercase font-semibold flex items-center gap-1.5">
+                        <FileText size={12} className="text-[#FAD293]" />
+                        <span>Special Conditions</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={specialConditionsText}
+                        onChange={(e) => setSpecialConditionsText(e.target.value)}
+                        placeholder="Over 3 months ago, Heavy dirt, General dirt, Stains, Machine polish..."
+                        className="w-full p-3 rounded-xl bg-black/50 border border-white/15 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition resize-none"
+                      />
+                    </div>
+
+                    {/* Additional Notes */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-white/50 uppercase font-semibold">
+                        Additional Notes / Gate Instructions
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={additionalNotes}
+                        onChange={(e) => setAdditionalNotes(e.target.value)}
+                        placeholder="Gate code is 9876. Focus on wheels and interior leather."
+                        className="w-full p-3 rounded-xl bg-black/50 border border-white/15 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#FAD293] transition resize-none"
+                      />
                     </div>
                   </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={handleOpenPaymentModal}
-                  disabled={isBookingSubmitting}
-                  className="w-full py-3.5 rounded-xl font-bold text-black text-xs sm:text-sm flex items-center justify-center gap-2 transition hover:brightness-110 active:scale-98 disabled:opacity-50 shadow-xl shadow-[#FAD293]/10 cursor-pointer"
-                  style={{
-                    background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                  }}
-                >
-                  <Sparkles size={16} className="text-black" />
-                  <span>Confirm Valet Booking</span>
-                  <ArrowRight size={16} className="text-black" />
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* 4. "My work" Gallery Showcase Modal                       */}
-      {/* ========================================================= */}
-      {selectedProviderForGallery && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-3xl border border-[#FAD293]/40 bg-[#120e0b] p-6 sm:p-7 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-            <button
-              type="button"
-              onClick={() => setSelectedProviderForGallery(null)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition"
-            >
-              <X size={15} />
-            </button>
-
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAD293]">
-                Work Showcase & Portfolio
-              </span>
-              <h3 className="text-lg font-bold text-white">
-                {selectedProviderForGallery.company_name}
-              </h3>
-              <p className="text-xs text-white/50">
-                {selectedProviderForGallery.company_address || "Certified London Valet Station"}
-              </p>
-            </div>
-
-            {/* Gallery Images Grid */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="h-32 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
-                <img
-                  src="https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=600&q=80"
-                  alt="Work 1"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="h-32 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
-                <img
-                  src="https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&w=600&q=80"
-                  alt="Work 2"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="h-32 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
-                <img
-                  src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80"
-                  alt="Work 3"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="h-32 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
-                <img
-                  src="https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=600&q=80"
-                  alt="Work 4"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const prov = selectedProviderForGallery;
-                setSelectedProviderForGallery(null);
-                handleOpenBookingModal(prov);
-              }}
-              className="w-full py-3 rounded-xl font-bold text-black text-xs shadow-lg mt-2"
-              style={{
-                background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-              }}
-            >
-              Book with {selectedProviderForGallery.company_name}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Select Payment Method Modal / Bottom Sheet (Matches Bodywork/Chauffeur/Mechanical/Car Hire UI) */}
-      {showPaymentModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-          onClick={() => setShowPaymentModal(false)}
-        >
-          <div
-            className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Drag Handle for Mobile */}
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
-
-            {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  Select Payment Method
-                </h3>
-                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                  Choose how you want to pay for this valet wash service
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Payment Options */}
-            <div className="space-y-3.5 pt-1">
-              {/* Option 1: Deposit (25% Advance) */}
-              <div
-                onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                      <Banknote className="w-5 h-5" />
-                    </div>
-                    <div>
+                  {/* Dynamic Stripe Card Payment Card */}
+                  <div className="p-6 rounded-3xl border border-[#FAD293]/40 bg-gradient-to-b from-[#FAD293]/10 to-[#FAD293]/5 space-y-5 shadow-2xl relative">
+                    <div className="flex items-center justify-between pb-3 border-b border-[#FAD293]/20">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
-                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                          25% ADVANCE
+                        <CreditCard size={18} className="text-[#FAD293]" />
+                        <span className="text-sm font-black text-white">Stripe Card Payment</span>
+                      </div>
+                      <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                        <Lock size={12} /> SSL Secure
+                      </span>
+                    </div>
+
+                    {/* Package Pricing Breakdown (Dynamic per service & variation) */}
+                    <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 space-y-2.5 text-xs">
+                      <div className="text-[10px] uppercase font-bold text-white/50 tracking-wider">
+                        Selected Packages Breakdown
+                      </div>
+                      <div className="space-y-1.5 border-b border-white/10 pb-2.5">
+                        {servicesWithVariations.map((srv) => {
+                          const selKey =
+                            selectedServiceVariations[srv.serviceId] ||
+                            srv.variations[0]?.key;
+                          const match =
+                            srv.variations.find((v) => v.key === selKey) ||
+                            srv.variations[0];
+                          return (
+                            <div
+                              key={srv.serviceId}
+                              className="flex justify-between items-center text-xs"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <span className="text-white/80 font-bold truncate block">
+                                  {srv.serviceName}
+                                </span>
+                                <span className="text-[11px] text-[#FAD293] capitalize">
+                                  {match?.name || "Standard"}
+                                </span>
+                              </div>
+                              <span className="font-extrabold text-white shrink-0">
+                                £{Number(match?.price || 0).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between items-center pt-0.5">
+                        <span className="text-white/60 font-semibold">Total Price:</span>
+                        <span className="font-black text-[#FAD293] text-sm">
+                          £{activePackagePrice.toFixed(2)}
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay 25% deposit now to secure valet appointment
-                      </p>
+                    </div>
+
+                    {/* Deposit vs Full Payment Option */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsPartialPayment(true)}
+                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                          isPartialPayment
+                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
+                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-xs font-black">25% Deposit Now</div>
+                        <div className="text-[11px] text-white/50 mt-0.5">£{depositAmount} today</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPartialPayment(false)}
+                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                          !isPartialPayment
+                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
+                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-xs font-black">Full Payment</div>
+                        <div className="text-[11px] text-white/50 mt-0.5">£{activePackagePrice.toFixed(2)} now</div>
+                      </button>
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="pt-2 border-t border-white/10 space-y-1 text-xs">
+                      {isPartialPayment && (
+                        <div className="flex justify-between text-white/50">
+                          <span>Balance on completion:</span>
+                          <span className="font-semibold text-white">£{remainingAmount}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-sm pt-1">
+                        <span className="font-bold text-white">Payable Today:</span>
+                        <span className="text-xl font-black text-[#FAD293]">
+                          £{payableAmount}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* CTA Button */}
+                    <button
+                      type="submit"
+                      disabled={isBookingSubmitting || providerSlots.length === 0 || !selectedSlotId}
+                      className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FAD293] via-[#CEA46B] to-[#FAD293] hover:brightness-110 text-black font-black text-xs uppercase tracking-wider transition shadow-[0_0_25px_rgba(250,210,147,0.35)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isBookingSubmitting ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Processing & Launching Stripe...</span>
+                        </>
+                      ) : providerSlots.length === 0 || !selectedSlotId ? (
+                        <>
+                          <Clock size={15} />
+                          <span>No Slot Available (Pick Another Date)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={15} />
+                          <span>Pay £{payableAmount} & Book via Stripe</span>
+                          <ArrowRight size={16} />
+                        </>
+                      )}
+                    </button>
+
+                    <div className="text-center text-[10px] text-white/40">
+                      Guaranteed booking • 100% Secure via Stripe Payments
                     </div>
                   </div>
 
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {isPartialPayment && (
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    )}
-                  </div>
                 </div>
 
-                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold">
-                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                    <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                    <span>Due on service completion (75%):</span>
-                    <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Option 2: Online Payment (Full 100%) */}
-              <div
-                onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                    </div>
-                    <div>
-                      <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay full amount now online
-                      </p>
-                    </div>
-                  </div>
+            </form>
+          )}
 
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {!isPartialPayment && (
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    )}
-                  </div>
+        </main>
+      ) : (
+        /* ========================================================================= */
+        /* ─── PROVIDERS LIST VIEW (Screen 2: Choose Detailers) ─── */
+        /* ========================================================================= */
+        <main className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] py-8 relative z-10">
+          
+          {/* Top Banner: Selected Service & Request Summary */}
+          <div className="mb-8 p-5 sm:p-6 rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#FAD293]/15 border border-[#FAD293]/35 flex items-center justify-center text-[#FAD293] shrink-0">
+                <Car size={28} />
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#FAD293]">
+                  SELECTED SERVICE
                 </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                  <span className="text-zinc-300">Amount Due Now:</span>
-                  <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
+                <h2 className="text-xl sm:text-2xl font-black text-white capitalize">
+                  {combinedServicesTitle}
+                </h2>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-white/50 pt-1">
+                  {requestData?.carReg && (
+                    <span className="font-mono bg-white/5 px-2 py-0.5 rounded border border-white/10 text-[#FAD293]">
+                      {requestData.carReg}
+                    </span>
+                  )}
+                  {requestData?.locationAddress && (
+                    <span className="flex items-center gap-1 truncate max-w-[280px]">
+                      <MapPin size={12} className="text-[#FAD293] shrink-0" />
+                      <span className="truncate">{requestData.locationAddress}</span>
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Informational Callout Box */}
-            <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
-              <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-[#E8AF66] block">
-                  {isPartialPayment
-                    ? "25% Advance Payment Required"
-                    : "100% Online Secure Payment"}
-                </span>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  {isPartialPayment
-                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the valet wash service is completed."
-                    : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
-                </p>
-              </div>
+            <Link
+              href="/services/valet-wash"
+              className="px-4 py-2.5 rounded-2xl border border-white/15 bg-white/5 hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10 text-white/80 hover:text-[#FAD293] text-xs font-semibold flex items-center justify-center gap-2 transition self-start md:self-auto cursor-pointer"
+            >
+              <Pencil size={13} />
+              <span>Edit Details</span>
+            </Link>
+          </div>
+
+          {/* Subheader: Provider Count & Sort/Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/8">
+            <div className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <span>{filteredProviders.length} providers available</span>
+              {loading && <Loader2 size={16} className="animate-spin text-[#FAD293]" />}
             </div>
 
-            {/* Pay Button */}
-            <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={executeValetBooking}
-                disabled={isBookingSubmitting}
-                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
+                onClick={() => setOnlyNearby(!onlyNearby)}
+                className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                  onlyNearby
+                    ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293]"
+                    : "border-white/10 bg-white/[0.02] text-white/70 hover:border-white/20"
+                }`}
               >
-                {isBookingSubmitting ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                    <span>Redirecting to Payment Gateway...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      {isPartialPayment
-                        ? `PAY DEPOSIT (£${depositAmount})`
-                        : `PAY FULL AMOUNT (£${totalAmountFormatted})`}
-                    </span>
-                    <ArrowRight className="w-5 h-5 text-zinc-950" />
-                  </>
-                )}
+                <Navigation size={12} />
+                <span>Nearby</span>
               </button>
+
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] text-xs text-white/70">
+                <Filter size={12} className="text-[#FAD293]" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="best" className="bg-[#120e0b]">Best Match</option>
+                  <option value="price_low" className="bg-[#120e0b]">Price: Low to High</option>
+                  <option value="price_high" className="bg-[#120e0b]">Price: High to Low</option>
+                  <option value="rating" className="bg-[#120e0b]">Highest Rated</option>
+                  <option value="distance" className="bg-[#120e0b]">Distance</option>
+                </select>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* Providers Grid matching Screenshot 2 */}
+          {loading ? (
+            <div className="py-24 text-center space-y-4">
+              <Loader2 size={36} className="animate-spin text-[#FAD293] mx-auto" />
+              <p className="text-sm text-white/60">Searching verified detailers near you...</p>
+            </div>
+          ) : filteredProviders.length === 0 ? (
+            <div className="py-20 text-center space-y-3">
+              <p className="text-base text-white/70 font-semibold">
+                No detailers match your current filters.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnlyNearby(false);
+                  setSortBy("best");
+                }}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 pt-6">
+              {filteredProviders.map((provider, idx) => {
+                const lowPrice = getProviderLowestPrice(provider);
+                const ratingVal = provider.avg_rating || 0;
+                const reviewsVal = provider.rating_count || 0;
+                const distanceMiles = provider.distance_miles || provider.distance || "4.5";
+
+                return (
+                  <div
+                    key={provider.id}
+                    className="p-6 rounded-3xl border border-white/10 bg-[#14100c]/80 hover:border-[#FAD293]/40 hover:bg-[#18130e] transition-all duration-300 shadow-xl flex flex-col justify-between gap-5 group"
+                  >
+                    <div className="space-y-4">
+                      {/* Provider Header: Logo + Name + Best Value Badge */}
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-14 h-14 rounded-2xl bg-black border border-white/15 flex items-center justify-center shrink-0 overflow-hidden relative shadow-md">
+                          {provider.logo_full_path || provider.logo ? (
+                            <Image
+                              src={provider.logo_full_path || provider.logo || ""}
+                              alt={provider.company_name}
+                              width={56}
+                              height={56}
+                              className="object-cover w-full h-full"
+                            />
+                          ) : (
+                            <span className="text-base font-black text-[#FAD293]">
+                              {provider.company_name.slice(0, 3).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-base sm:text-lg font-black text-white truncate capitalize group-hover:text-[#FAD293] transition-colors">
+                              {provider.company_name}
+                            </h3>
+                            {idx === 0 && (
+                              <span className="px-2 py-0.5 rounded-md bg-[#FAD293] text-black text-[10px] font-black tracking-wider flex items-center gap-1 shadow-sm">
+                                <Award size={11} strokeWidth={3} />
+                                Best Value
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Rating */}
+                          <div className="flex items-center gap-1.5 text-xs text-white/70">
+                            <Star size={13} className="text-[#FAD293] fill-[#FAD293]" />
+                            <span className="font-bold text-white">
+                              {ratingVal.toFixed(1)}
+                            </span>
+                            <span className="text-white/40">({reviewsVal} Reviews)</span>
+                          </div>
+
+                          {/* Address & My Work */}
+                          <div className="flex items-center gap-2 pt-1 flex-wrap">
+                            <div className="flex items-center gap-1 text-[11px] text-white/60 truncate max-w-[200px]">
+                              <MapPin size={12} className="shrink-0 text-white/40" />
+                              <span className="truncate">
+                                {provider.company_address || "London, United Kingdom"}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProviderForGallery(provider)}
+                              className="px-2.5 py-1 rounded-xl border border-white/15 bg-white/5 hover:border-[#FAD293]/40 hover:bg-[#FAD293]/10 text-white/80 hover:text-[#FAD293] text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <span>My work</span>
+                              <Eye size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Capabilities */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="px-3 py-1 rounded-xl border border-white/10 bg-white/[0.03] text-[11px] font-semibold text-white/70 flex items-center gap-1.5">
+                          <Navigation size={12} className="text-[#FAD293]" />
+                          <span>{distanceMiles} Miles</span>
+                        </span>
+
+                        <span className="px-3 py-1 rounded-xl border border-white/10 bg-white/[0.03] text-[11px] font-semibold text-white/70 flex items-center gap-1.5">
+                          <Smartphone size={12} className="text-[#FAD293]" />
+                          <span>Mobile & Workshop</span>
+                        </span>
+
+                        <span className="px-3 py-1 rounded-xl border border-white/10 bg-white/[0.03] text-[11px] font-semibold text-emerald-400/90 flex items-center gap-1.5">
+                          <Zap size={12} />
+                          <span>Self-Powered</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Price (Showing Lowest Price!) & Book Now Button */}
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-[10px] text-white/50 uppercase font-semibold">
+                          Starting from
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-white">
+                          £{lowPrice}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectProviderForBooking(provider)}
+                        className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#FAD293] via-[#CEA46B] to-[#FAD293] hover:brightness-110 text-black font-extrabold text-xs uppercase tracking-wider transition shadow-[0_0_20px_rgba(250,210,147,0.25)] flex items-center gap-2 group/btn cursor-pointer"
+                      >
+                        <span>Book Now</span>
+                        <ArrowRight
+                          size={15}
+                          className="group-hover/btn:translate-x-1 transition-transform"
+                        />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* ─── Provider Gallery / My Work Modal ─── */}
+      {selectedProviderForGallery && (
+        <ServiceOurWorkShowcase
+          providerId={selectedProviderForGallery.id}
+          providerName={selectedProviderForGallery.company_name}
+          onClose={() => setSelectedProviderForGallery(null)}
+        />
       )}
     </div>
   );
 }
 
-export default function ValetProvidersPage() {
+export default function ChooseDetailersPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4 text-white">
-          <Loader2 size={36} className="text-[#FAD293] animate-spin" />
-          <p className="text-xs text-white/50 tracking-wider uppercase">
-            Finding Matching Valet Providers...
-          </p>
+        <div className="min-h-screen bg-[#0c0a09] flex items-center justify-center">
+          <Loader2 size={32} className="animate-spin text-[#FAD293]" />
         </div>
       }
     >
-      <ProvidersContent />
+      <ChooseDetailersContent />
     </Suspense>
   );
 }

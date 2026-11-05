@@ -18,7 +18,13 @@ import {
   User,
 } from "lucide-react";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
+import {
+  saveBookingMeta,
+  saveConfirmedBooking,
+  getBookingMeta,
+  fetchBookingDetails,
+  isFakeDummyId,
+} from "@/lib/service/bookings.api";
 import { addCustomBookingNotification } from "@/lib/service/notifications.api";
 
 interface PendingBooking {
@@ -36,11 +42,18 @@ function BookingSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const flag = searchParams.get("flag");
+  // Extract flag with fallback for malformed URLs
+  let flag = searchParams.get("flag");
+  if (!flag && typeof window !== "undefined") {
+    const match = window.location.href.match(/[?&]flag=([^&?#]+)/);
+    if (match) flag = decodeURIComponent(match[1]);
+  }
   const isFailed = flag === "fail" || flag === "cancel" || flag === "cancelled";
+
+  // Extract token with fallback for malformed URLs
   let rawToken = searchParams.get("token");
   if (!rawToken && typeof window !== "undefined") {
-    const match = window.location.href.match(/[?&]token=([^&]+)/);
+    const match = window.location.href.match(/[?&]+token=([^&?#]+)/);
     if (match) rawToken = decodeURIComponent(match[1]);
   }
 
@@ -80,20 +93,38 @@ function BookingSuccessContent() {
     searchParams.get("payment_id");
 
   if (!urlBookingId && typeof window !== "undefined") {
-    const match = window.location.href.match(/[?&]booking_id=([^&]+)/);
+    const match = window.location.href.match(/[?&]booking_id=([^&?#]+)/);
     if (match) urlBookingId = decodeURIComponent(match[1]);
-    if (!urlBookingId) {
-      urlBookingId =
-        localStorage.getItem("last_valet_booking_id") ||
-        localStorage.getItem("last_tyre_booking_id") ||
-        localStorage.getItem("last_booking_id") ||
-        null;
-    }
+  }
+
+  // Clean if there was a trailing query separator (e.g. uuid?flag=success)
+  if (urlBookingId && typeof urlBookingId === "string") {
+    urlBookingId = urlBookingId.split("?")[0].split("&")[0];
+  }
+
+  if (!urlBookingId && typeof window !== "undefined") {
+    urlBookingId =
+      sessionStorage.getItem("mmc_last_paid_due_booking_id") ||
+      localStorage.getItem("last_valet_booking_id") ||
+      localStorage.getItem("last_tyre_booking_id") ||
+      localStorage.getItem("last_booking_id") ||
+      null;
   }
 
   const [bookingData, setBookingData] = useState<PendingBooking | null>(null);
   const [copied, setCopied] = useState(false);
   const [notificationSent, setNotificationSent] = useState(false);
+
+  // Stable detection of due payment that does not flip on re-renders
+  const [isDuePayment] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(
+      sessionStorage.getItem("mmc_last_paid_due_booking_id") ||
+      sessionStorage.getItem("mmc_is_due_payment") === "1" ||
+      new URLSearchParams(window.location.search).get("due_payment") === "true" ||
+      new URLSearchParams(window.location.search).get("is_partial") === "0"
+    );
+  });
 
   useEffect(() => {
     // 1. Retrieve cached pending booking data
@@ -113,6 +144,50 @@ function BookingSuccessContent() {
       cached?.booking_id ||
       cached?.readable_id ||
       (cached as any)?.temp_id;
+
+    if (!cached && effectiveBookingId) {
+      try {
+        const meta = getBookingMeta(effectiveBookingId);
+        if (meta) {
+          cached = {
+            booking_id: String(effectiveBookingId),
+            readable_id: meta.readableId || effectiveBookingId,
+            provider: { company_name: meta.providerName, company_phone: meta.providerPhone },
+            schedule: meta.scheduleDate ? `${meta.scheduleDate} ${meta.scheduleTime || ""}` : new Date().toISOString(),
+            price: meta.totalAmount || meta.price || 0,
+            is_partial: isDuePayment ? 0 : (meta.is_partial || 0),
+            deposit_amount: meta.totalAmount || meta.price || 0,
+            service_name: meta.serviceTitle || "Vehicle Service",
+          };
+          setBookingData(cached);
+        }
+      } catch (e) {
+        console.warn("Could not load booking metadata in success view:", e);
+      }
+    }
+
+    // Try fetching from API if details are still empty
+    if (!cached?.service_name && effectiveBookingId && !isFakeDummyId(effectiveBookingId)) {
+      fetchBookingDetails(effectiveBookingId)
+        .then((fresh) => {
+          if (fresh) {
+            setBookingData((prev) => ({
+              ...prev,
+              booking_id: String(fresh.id || effectiveBookingId),
+              readable_id: fresh.readableId || effectiveBookingId,
+              provider: { company_name: fresh.providerName, company_phone: fresh.providerPhone },
+              schedule: fresh.scheduleDate
+                ? `${fresh.scheduleDate} ${fresh.scheduleTime || ""}`
+                : (prev?.schedule || new Date().toISOString()),
+              price: fresh.totalAmount || prev?.price || 0,
+              is_partial: isDuePayment ? 0 : (fresh.isPartiallyPaid ? 1 : 0),
+              deposit_amount: fresh.totalAmount || prev?.price || 0,
+              service_name: fresh.serviceTitle || prev?.service_name || "Vehicle Service",
+            }));
+          }
+        })
+        .catch(() => {});
+    }
 
     if (!effectiveBookingId) {
       effectiveBookingId = "MMC-" + Math.floor(100000 + Math.random() * 900000);
@@ -151,10 +226,11 @@ function BookingSuccessContent() {
                       ? "mechanical"
                       : "bodywork";
 
-      const isPartial =
+      const isPartial = !isDuePayment && Boolean(
         cached?.is_partial === 1 ||
         cached?.is_partial === true ||
-        cached?.is_partial === "1";
+        cached?.is_partial === "1"
+      );
 
       const depositPaidAmount = isPartial
         ? Number(cached?.deposit_amount || (rawPrice * 0.25).toFixed(2))
@@ -250,7 +326,7 @@ function BookingSuccessContent() {
         }
       }
     }
-  }, [isFailed, urlBookingId, notificationSent]);
+  }, [isFailed, urlBookingId, notificationSent, isDuePayment]);
 
   const effectiveBookingRef =
     urlBookingId ||
@@ -258,9 +334,10 @@ function BookingSuccessContent() {
     bookingData?.booking_id ||
     "CONFIRMED";
 
-  const isPartial =
+  const isPartial = !isDuePayment && Boolean(
     bookingData?.is_partial === 1 ||
-    bookingData?.is_partial === true;
+    bookingData?.is_partial === true
+  );
 
   const rawPrice =
     typeof bookingData?.price === "number"
@@ -290,8 +367,9 @@ function BookingSuccessContent() {
         <div className="bg-[#141418] border border-zinc-800/90 rounded-3xl p-6 sm:p-9 shadow-2xl space-y-7 relative overflow-hidden text-center">
           {/* Ambient Glow */}
           <div
-            className={`absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none ${isFailed ? "bg-red-500/10" : "bg-gradient-to-b from-[#FAD293]/20 via-[#10B981]/15 to-transparent"
-              }`}
+            className={`absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
+              isFailed ? "bg-red-500/10" : "bg-gradient-to-b from-[#FAD293]/20 via-[#10B981]/15 to-transparent"
+            }`}
           />
 
           {/* Success / Failure Icon */}
@@ -317,10 +395,11 @@ function BookingSuccessContent() {
           {/* Title & Subtitle */}
           <div className="space-y-2 relative">
             <span
-              className={`text-[11px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full border inline-block ${isFailed
-                ? "bg-red-500/10 text-red-400 border-red-500/30"
-                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                }`}
+              className={`text-[11px] font-black uppercase tracking-wider px-3.5 py-1 rounded-full border inline-block ${
+                isFailed
+                  ? "bg-red-500/10 text-red-400 border-red-500/30"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+              }`}
             >
               {isFailed ? "Payment Incomplete" : "Booking Confirmed & Verified"}
             </span>
@@ -330,7 +409,7 @@ function BookingSuccessContent() {
             <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto">
               {isFailed
                 ? "Your payment could not be processed. Your booking is held in pending status and can be paid from My Bookings."
-                : "Thank you! Your appointment has been secured with the accredited specialist. Confirmation push notification has been sent."}
+                : "Thank you! Your payment has been received and your booking is confirmed."}
             </p>
           </div>
 
@@ -357,6 +436,16 @@ function BookingSuccessContent() {
                 </button>
               </div>
             </div>
+
+            {/* Service Name */}
+            {bookingData?.service_name && (
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 font-medium">Service</span>
+                <span className="font-bold text-white">
+                  {bookingData.service_name}
+                </span>
+              </div>
+            )}
 
             {/* Provider Name */}
             {bookingData?.provider?.company_name && (
@@ -421,7 +510,7 @@ function BookingSuccessContent() {
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
-              href="/account?tab=bookings"
+              href={`/account?tab=bookings&bookingId=${encodeURIComponent(String(effectiveBookingRef))}&payment_success=true`}
               className="w-full sm:w-auto flex-1 bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-black text-xs sm:text-sm px-6 py-3.5 rounded-2xl shadow-lg shadow-[#D5A054]/25 transition-all text-center flex items-center justify-center gap-2 uppercase tracking-wider hover:brightness-105 active:scale-95"
             >
               <span>View My Bookings</span>

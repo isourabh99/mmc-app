@@ -1,4 +1,6 @@
-  "use client";
+"use client";
+
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 
   import React, { useState, useEffect, useRef, useMemo } from "react";
   import Link from "next/link";
@@ -697,10 +699,9 @@
             </div>
 
             <div
-              className={`rounded-full bg-[#FAD293]/10 border border-[#FAD293]/30 flex items-center justify-center text-[#FAD293] shadow-[0_0_15px_rgba(250,210,147,0.15)] ${isSidebarMode ? "w-8 h-8" : "w-10 h-10"
-                }`}
+              className={`rounded-full bg-red-600/15 border border-red-500/40 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.35)] shrink-0 text-red-500 ${isSidebarMode ? "w-8 h-8" : "w-10 h-10"}`}
             >
-              <Siren className={`${isSidebarMode ? "w-4 h-4" : "w-5 h-5"} text-red-500 animate-pulse`} />
+              <Siren className={`${isSidebarMode ? "w-4 h-4" : "w-5 h-5"} text-red-500 animate-pulse stroke-[2.2]`} />
             </div>
           </div>
         </div>
@@ -1992,6 +1993,16 @@
             </div>
           </div>
         )}
+
+        {/* ─── OUR WORK SHOWCASE ─── */}
+        <div className="mt-16 pt-8 border-t border-zinc-800/80">
+          <ServiceOurWorkShowcase
+            categoryId="860791e7-ed6d-46ca-992c-1348dd4c42ad"
+            categoryName="Emergency Vehicle Assistance"
+            customSubtitle="Explore our verified 24/7 emergency rescues, vehicle recoveries, and roadside diagnostics."
+            viewAllUrl="/services/our-work"
+          />
+        </div>
 
         {/* ========================================================================= */}
         {/* 5. WORK GALLERY MODAL                                                     */}

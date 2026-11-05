@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { fetchZoneIdFromCoordinates } from "@/lib/service/zone.service";
 import {
   getAddressFromCoordinates,
   saveCustomerAddress,

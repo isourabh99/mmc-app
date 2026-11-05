@@ -11,7 +11,7 @@ export default function AppDownloadBanner() {
 
   // App URLs
   const APP_STORE_URL = "https://apps.apple.com/us/app/mmc-motor/id6794230851";
-  const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.mmc.app";
+  const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.mmc.motorapp";
 
   const handleStoreClick = (store: "apple" | "google", e: React.MouseEvent) => {
     e.preventDefault();
@@ -28,18 +28,12 @@ export default function AppDownloadBanner() {
       >
         {/* Dynamic ambient gold glow */}
         <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[650px] lg:w-[1000px] h-[200px] sm:h-[350px] rounded-full blur-[100px] sm:blur-[160px] pointer-events-none opacity-25"
-          style={{
-            background: "radial-gradient(circle, #FAD293 0%, #CEA46B 45%, transparent 70%)",
-          }}
+         
         />
 
         <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px]">
-          {/* Main Card Frame with Gold Sheen Border */}
-          <div className="relative w-full rounded-2xl sm:rounded-3xl border border-[#CEA46B]/35 bg-[#0a0705] shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden group">
-            {/* Top gold sheen line */}
-            <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#FAD293] to-transparent z-20" />
-
+          {/* Main Card Frame */}
+          <div className="relative w-full rounded-2xl sm:rounded-3xl bg-[#0a0705] shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden group">
             {/* Desktop Banner (Web view) */}
             <div className="hidden md:block relative w-full aspect-[1920/640] overflow-hidden">
               <Image

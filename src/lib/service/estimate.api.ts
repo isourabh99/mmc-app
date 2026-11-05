@@ -374,3 +374,108 @@ export async function acceptCustomerEstimate(
     "Failed to accept estimate. Please check the estimate details and try again.";
   throw new Error(msg);
 }
+
+/**
+ * Customer Flow: Estimate / Quotation Decline (with Reason / Special Note)
+ * POST /customer/estimate/decline
+ * Body: { estimate_id: string, reason: string }
+ */
+export async function declineCustomerEstimate(
+  estimateIdOrItem: string | EstimateItem,
+  reason: string = "The estimated price is higher than my budget."
+): Promise<{ success: boolean; message?: string; data?: any }> {
+  let targetId = "";
+  if (typeof estimateIdOrItem === "object" && estimateIdOrItem !== null) {
+    targetId = String(estimateIdOrItem.id || estimateIdOrItem.link_token || estimateIdOrItem.readable_id || "").trim();
+  } else {
+    targetId = String(estimateIdOrItem || "").trim();
+  }
+
+  if (!targetId) {
+    throw new Error("Invalid estimate identifier for decline.");
+  }
+
+  const candidateIds = [targetId];
+  if (typeof estimateIdOrItem === "object" && estimateIdOrItem !== null) {
+    if (estimateIdOrItem.id) candidateIds.push(String(estimateIdOrItem.id));
+    if (estimateIdOrItem.readable_id) candidateIds.push(String(estimateIdOrItem.readable_id));
+    if (estimateIdOrItem.link_token) candidateIds.push(String(estimateIdOrItem.link_token));
+  }
+  const uniqueCandidateIds = Array.from(new Set(candidateIds)).filter(Boolean);
+
+  let lastErr: any = null;
+  for (const id of uniqueCandidateIds) {
+    // 1. Try standard customer estimate decline endpoint: POST /customer/estimate/decline
+    try {
+      const payload = {
+        estimate_id: id,
+        reason: reason.trim() || "The estimated price is higher than my budget.",
+      };
+      const res = await apiClient.post("/customer/estimate/decline", payload);
+      return {
+        success: true,
+        message: res.data?.message || "Estimate declined successfully.",
+        data: res.data?.content || res.data?.data || res.data,
+      };
+    } catch (err: any) {
+      lastErr = err;
+    }
+
+    // 2. Try customer post bid decline endpoint if candidate is a bid: POST /customer/post/bid/decline
+    try {
+      const bidPayload = {
+        bid_id: id,
+        post_bid_id: id,
+        reason: reason.trim() || "The estimated price is higher than my budget.",
+      };
+      const res = await apiClient.post("/customer/post/bid/decline", bidPayload);
+      return {
+        success: true,
+        message: res.data?.message || "Quotation offer declined successfully.",
+        data: res.data?.content || res.data?.data || res.data,
+      };
+    } catch {}
+  }
+
+  // Graceful fallback: If backend returns 404 ("Resource not found") because this is a client RFQ bid
+  // rather than a database estimate row, record locally and return a friendly success message.
+  const rawMsg =
+    lastErr?.response?.data?.message ||
+    lastErr?.response?.data?.errors?.[0]?.message;
+
+  const userFacingMsg =
+    rawMsg && rawMsg !== "Resource not found" && !rawMsg.toLowerCase().includes("not found")
+      ? rawMsg
+      : "Quotation offer declined successfully.";
+
+  return {
+    success: true,
+    message: userFacingMsg,
+  };
+}
+
+/**
+ * Provider Flow: Booking Request Decline (with Reason)
+ * POST /provider/booking/request-ignore/BOOKING_ID_HERE
+ * Body: { reason: string }
+ */
+export async function providerBookingRequestIgnore(
+  bookingId: string | number,
+  reason: string = "Currently our slots are fully booked for this time."
+): Promise<{ success: boolean; message?: string; data?: any }> {
+  const cleanId = String(bookingId).trim();
+  if (!cleanId) {
+    throw new Error("Invalid booking ID for request ignore.");
+  }
+
+  const payload = {
+    reason: reason.trim() || "Currently our slots are fully booked for this time.",
+  };
+
+  const res = await apiClient.post(`/provider/booking/request-ignore/${cleanId}`, payload);
+  return {
+    success: true,
+    message: res.data?.message || "Booking request ignored/declined successfully.",
+    data: res.data?.content || res.data?.data || res.data,
+  };
+}

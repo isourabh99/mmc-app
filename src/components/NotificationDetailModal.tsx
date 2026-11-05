@@ -26,7 +26,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { BookingNotification, resolveNotificationImageUrl } from "@/lib/service/notifications.api";
-import { formatToNumericBookingId } from "@/lib/service/bookings.api";
+import { formatToNumericBookingId, isUuidStr } from "@/lib/service/bookings.api";
 
 interface NotificationDetailModalProps {
   notification: BookingNotification | null;
@@ -101,10 +101,26 @@ export default function NotificationDetailModal({
   if (!mounted || !notification) return null;
 
   const raw = notification.raw || {};
-  const bookingRef =
-    notification.readableId || notification.bookingId || raw.booking_id || raw.id
-      ? formatToNumericBookingId(notification.readableId || notification.bookingId || raw.booking_id || raw.id)
-      : "N/A";
+  // Extract embedded reference from text if present (e.g. "Your booking #100006 status has been updated to Accepted.")
+  const combinedText = `${notification.description || ""} ${notification.title || ""} ${notification.subtitle || ""}`;
+  const textRefMatch = combinedText.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
+  const detectedRef = textRefMatch ? formatToNumericBookingId(textRefMatch[1]) : null;
+
+  const rawCandidate =
+    detectedRef ||
+    (notification.readableId && !isUuidStr(notification.readableId) ? notification.readableId : null) ||
+    raw.readable_id ||
+    (notification.bookingId && !isUuidStr(notification.bookingId) ? notification.bookingId : null) ||
+    (raw.booking_id && !isUuidStr(raw.booking_id) ? raw.booking_id : null) ||
+    notification.readableId ||
+    notification.bookingId ||
+    raw.booking_id;
+
+  const bookingRef = rawCandidate ? formatToNumericBookingId(rawCandidate) : "N/A";
+
+
+
+
 
   // Comprehensive image resolution for modal banner & avatar
   const resolvedImage =
@@ -116,7 +132,18 @@ export default function NotificationDetailModal({
 
   const handleCopyId = () => {
     if (bookingRef && bookingRef !== "N/A") {
-      navigator.clipboard.writeText(bookingRef);
+      try {
+        if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
+          navigator.clipboard.writeText(bookingRef);
+        } else if (typeof document !== "undefined") {
+          const textArea = document.createElement("textarea");
+          textArea.value = bookingRef;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+        }
+      } catch {}
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -125,24 +152,29 @@ export default function NotificationDetailModal({
   const handleOpenBooking = () => {
     handleClose();
 
-    // 1. Quotation notifications -> navigate to appropriate Quotes Hub
-    if (notification.category === "alloy" || notification.targetUrl?.includes("alloy-wheel")) {
-      router.push(notification.targetUrl || "/services/alloy-wheel?view=quotes");
+    // 1. Provider Estimate notifications -> navigate to Provider Estimates tab
+    if (
+      notification.actionType === "estimate" ||
+      notification.category === "estimate" ||
+      notification.targetUrl?.includes("tab=estimates")
+    ) {
+      router.push(notification.targetUrl || "/account?tab=estimates");
       return;
     }
+
+    // 2. Customer Quotation requests & specialist bids -> navigate to My Quotes Hub
+    if (
+      notification.actionType === "quote" ||
+      notification.category === "quote" ||
+      notification.bookingType === "quote" ||
+      notification.targetUrl?.includes("tab=quotes")
+    ) {
+      router.push(notification.targetUrl || "/account?tab=quotes");
+      return;
+    }
+
     if (notification.targetUrl) {
       router.push(notification.targetUrl);
-      return;
-    }
-    if (notification.category === "quote" || notification.bookingType === "quote") {
-      const text = `${notification.title} ${notification.subtitle || ""} ${notification.description}`.toLowerCase();
-      if (text.includes("alloy") || text.includes("wheel") || text.includes("rim")) {
-        router.push("/services/alloy-wheel?view=quotes");
-      } else if (text.includes("mod") || text.includes("tuning")) {
-        router.push("/services/modification?view=quotes");
-      } else {
-        router.push("/services/bodywork?view=quotes");
-      }
       return;
     }
 
@@ -157,6 +189,9 @@ export default function NotificationDetailModal({
         : "pending";
 
     const targetBookingId =
+      bookingRef && bookingRef !== "N/A"
+        ? bookingRef
+        :
       notification.readableId || notification.bookingId
         ? formatToNumericBookingId(notification.readableId || notification.bookingId)
         : "";
@@ -457,6 +492,7 @@ export default function NotificationDetailModal({
         {/* Action Buttons: Clear separation between View Details and Close */}
         {(() => {
           const hasAction =
+            notification.actionType === "estimate" ||
             notification.actionType === "quote" ||
             notification.actionType === "question" ||
             (notification.actionType === "booking" && bookingRef !== "N/A") ||
@@ -464,7 +500,9 @@ export default function NotificationDetailModal({
 
           const actionLabel =
             notification.actionButtonText ||
-            (notification.actionType === "quote"
+            (notification.actionType === "estimate"
+              ? "View Estimate"
+              : notification.actionType === "quote"
               ? "View Quote Bids"
               : notification.actionType === "question"
               ? "View Question"
@@ -476,7 +514,10 @@ export default function NotificationDetailModal({
                 <button
                   type="button"
                   onClick={() => {
-                    if (
+                    if (notification.actionType === "estimate" || notification.category === "estimate") {
+                      router.push(notification.targetUrl || "/account?tab=estimates");
+                      handleClose();
+                    } else if (
                       notification.actionType === "quote" ||
                       notification.actionType === "question"
                     ) {

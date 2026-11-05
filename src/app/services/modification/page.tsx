@@ -98,6 +98,36 @@ import {
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
 import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
 
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+
+const getServiceImageUrl = (item: ModificationServiceItem): string => {
+    if (item.thumbnail_full_path && item.thumbnail_full_path.startsWith("http")) {
+        return item.thumbnail_full_path;
+    }
+    if (item.cover_image_full_path && item.cover_image_full_path.startsWith("http")) {
+        return item.cover_image_full_path;
+    }
+    if (item.thumbnail) {
+        if (item.thumbnail.startsWith("http")) return item.thumbnail;
+        return `https://mmcclub.co.uk/backend/storage/app/public/service/${item.thumbnail}`;
+    }
+    if (item.cover_image) {
+        if (item.cover_image.startsWith("http")) return item.cover_image;
+        return `https://mmcclub.co.uk/backend/storage/app/public/service/${item.cover_image}`;
+    }
+    const n = (item.name || "").toLowerCase();
+    if (n.includes("alloy") || n.includes("wheel") || n.includes("caliper")) {
+        return "/alloy.png";
+    }
+    if (n.includes("body") || n.includes("kit") || n.includes("respray")) {
+        return "/bodywork.png";
+    }
+    if (n.includes("remap") || n.includes("tuning") || n.includes("ecu")) {
+        return "/mechnical.png";
+    }
+    return "/modificatoin.jpeg";
+};
+
 export default function ModificationPage() {
     const router = useRouter();
     const { showToast } = useToast();
@@ -165,7 +195,7 @@ export default function ModificationPage() {
     const [carYear, setCarYear] = useState("");
     const [carModel, setCarModel] = useState("Custom Vehicle");
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
-    const [showServicesDropdown, setShowServicesDropdown] = useState(false);
+    const [showServicesDropdown, setShowServicesDropdown] = useState(true);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [damageDesc, setDamageDesc] = useState("");
     const [privacyAgreed, setPrivacyAgreed] = useState(false);
@@ -618,7 +648,7 @@ export default function ModificationPage() {
                 dropdownRef.current &&
                 !dropdownRef.current.contains(e.target as Node)
             ) {
-                setShowServicesDropdown(false);
+                // Keep open so user can fill form without cards closing
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -1347,12 +1377,12 @@ export default function ModificationPage() {
                             {/* Left Column: Heading, Badges, Video Card */}
                             <div className="lg:col-span-7 flex flex-col justify-between">
                                 <div>
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E8AF66]/10 border border-[#E8AF66]/20 text-[#E8AF66] text-xs font-bold uppercase tracking-wider mb-4">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E8AF66]/10 border border-[#E8AF66]/20 text-[#E8AF66] text-xs font-bold uppercase tracking-wider mb-2">
                                         <Flame className="w-3.5 h-3.5 text-[#E8AF66]" />
                                         <span>Bespoke Engineering &amp; Customization</span>
                                     </div>
 
-                                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.08] mb-5">
+                                    <h1 className="text-2xl sm:text-3xl lg:text-3.5xl font-black tracking-tight text-white leading-tight mb-2">
                                         Vehicle <br />
                                         <span
                                             style={{
@@ -1366,12 +1396,12 @@ export default function ModificationPage() {
                                         </span>
                                     </h1>
 
-                                    <p className="text-zinc-300 text-base sm:text-lg max-w-xl leading-relaxed mb-8">
+                                    <p className="text-zinc-400 text-xs sm:text-sm max-w-lg leading-relaxed mb-2.5">
                                         Transform your vehicle with verified performance remapping, custom exhaust systems, aerodynamic styling kits, and precision bespoke upgrades.
                                     </p>
 
                                     {/* 3 Badges */}
-                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-10">
+                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-3 gap-4 sm:gap-6">
                                         {/* Badge 1 */}
                                         <div className="flex items-center gap-3">
                                             <div className="w-11 h-11 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#E8AF66] shadow-[0_0_20px_rgba(232,175,102,0.15)]">
@@ -1407,39 +1437,20 @@ export default function ModificationPage() {
                                     </div>
                                 </div>
 
-                                {/* Feature Highlight Card */}
-                                <div className="relative group rounded-2xl border border-zinc-800/90 bg-[#121316]/90 p-5 sm:p-6 backdrop-blur-md overflow-hidden max-w-xl shadow-2xl transition-all duration-300 hover:border-zinc-700">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                                        <div className="z-10 flex-1">
-                                            <span className="inline-block text-xs font-bold tracking-widest text-[#E8AF66] uppercase mb-1">
-                                                Custom Category
-                                            </span>
-                                            <h3 className="text-lg sm:text-xl font-extrabold tracking-wide text-white uppercase leading-snug">
-                                                PERFORMANCE &amp; <br className="hidden sm:block" />
-                                                AESTHETIC UPGRADES
-                                            </h3>
-                                            <p className="text-[11px] tracking-widest text-zinc-400 font-medium mt-1.5 uppercase">
-                                                POWER &bull; SOUND &bull; STANCE &bull; STYLE
-                                            </p>
-                                            <p className="text-xs text-zinc-400 mt-2 font-normal">
-                                                Direct quotes from verified garages with dyno facilities and fabrication bays.
-                                            </p>
-                                        </div>
-
-                                        <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-black/60 border border-zinc-800 text-center shrink-0">
-                                            <Wrench className="w-8 h-8 text-[#E8AF66] mb-1" />
-                                            <span className="text-xs font-black text-white">Full Build</span>
-                                            <span className="text-[10px] text-zinc-400">Support</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                {/* OUR WORK SHOWCASE */}
+                                <ServiceOurWorkShowcase
+                                    categoryId={DEFAULT_MODIFICATION_CATEGORY_ID}
+                                    categoryName="Vehicle Modifications & Tuning"
+                                    customSubtitle="Explore a selection of our latest vehicle modifications, from subtle upgrades to full custom builds."
+                                    viewAllUrl="/services/our-work"
+                                />
                             </div>
 
                             {/* Right Column: Hero Quote Calculator Form */}
                             <div className="lg:col-span-5">
                                 <div className="rounded-3xl bg-[#141518] border border-zinc-800/90 p-6 sm:p-8 shadow-2xl relative">
                                     {/* Modification Hero Image Banner */}
-                                    <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden mb-6 border border-[#E8AF66]/30 shadow-lg group">
+                                    <div className="relative w-full aspect-[21/9] max-h-[140px] sm:max-h-[165px] rounded-2xl overflow-hidden mb-4 border border-[#E8AF66]/30 shadow-lg group">
                                         <Image
                                             src="/modificatoin.jpeg"
                                             alt="Motor Market Club Modifications - Worn Leather Restored Character"
@@ -1450,10 +1461,10 @@ export default function ModificationPage() {
                                         />
                                     </div>
 
-                                    <h3 className="text-xl sm:text-2xl font-black text-white">
+                                    <h3 className="text-lg sm:text-xl font-black text-white">
                                         Request Modification Quotes
                                     </h3>
-                                    <p className="text-xs text-zinc-400 mt-1 mb-6">
+                                    <p className="text-[11px] text-zinc-400 mt-0.5 mb-3">
                                         Select your required upgrades and receive competitive offers
                                     </p>
 
@@ -1533,8 +1544,9 @@ export default function ModificationPage() {
                                             </div>
                                         </div>
 
-                                        {/* Row 3: Multi-Select Modification Services */}
-                                        <div className="relative" ref={dropdownRef}>
+                                        {/* Row 3: Multi-Select Modification Services (1 row me 2 cards) */}
+                                        <div className="space-y-2.5" ref={dropdownRef}>
+                                            {/* Section Header & Toggle */}
                                             <div
                                                 onClick={() => {
                                                     setShowServicesDropdown((prev) => !prev);
@@ -1546,73 +1558,86 @@ export default function ModificationPage() {
                                                         });
                                                     }
                                                 }}
-                                                className={`w-full bg-[#1B1C20] border rounded-xl pl-10 pr-9 py-3 text-xs sm:text-sm text-white cursor-pointer transition-colors flex items-center justify-between min-h-[46px] ${showServicesDropdown
-                                                    ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
-                                                    : "border-zinc-800/90 hover:border-zinc-700"
-                                                    }`}
+                                                className={`w-full bg-[#1B1C20] border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white cursor-pointer transition-colors flex items-center justify-between ${
+                                                    showServicesDropdown
+                                                        ? "border-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.15)]"
+                                                        : "border-zinc-800/90 hover:border-zinc-700"
+                                                }`}
                                             >
-                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                                                    <Wrench className="w-4 h-4" />
-                                                </div>
-
-                                                <div className="flex-1 pr-2">
-                                                    {selectedServices.length === 0 ? (
-                                                        <span className="text-zinc-400 select-none">
-                                                            {loadingServices
-                                                                ? "Loading services..."
-                                                                : "Select Modification Services"}
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="w-8 h-8 rounded-lg bg-[#E8AF66]/15 border border-[#E8AF66]/30 flex items-center justify-center text-[#E8AF66] shrink-0">
+                                                        <Wrench className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="font-bold text-white block text-xs sm:text-sm truncate">
+                                                            Select Modification Services
                                                         </span>
-                                                    ) : (
-                                                        <div className="flex flex-wrap gap-1.5 py-0.5">
-                                                            {selectedServices.map((name) => (
-                                                                <span
-                                                                    key={name}
-                                                                    className="inline-flex items-center gap-1 bg-[#E8AF66]/20 border border-[#E8AF66]/40 text-[#E8AF66] text-xs px-2.5 py-0.5 rounded-lg font-medium shadow-sm"
-                                                                >
-                                                                    <span>{name}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => removeService(name, e)}
-                                                                        className="hover:text-white transition-colors"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                        <span className="text-[11px] text-zinc-400 block truncate">
+                                                            {selectedServices.length === 0
+                                                                ? "Choose one or multiple upgrades"
+                                                                : `${selectedServices.length} service${selectedServices.length > 1 ? "s" : ""} selected`}
+                                                        </span>
+                                                    </div>
                                                 </div>
 
-                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-zinc-400">
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {selectedServices.length > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedServices([]);
+                                                            }}
+                                                            className="text-[11px] text-[#E8AF66] hover:underline font-semibold px-2 py-0.5 rounded bg-[#E8AF66]/10 border border-[#E8AF66]/20"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
                                                     <ChevronDown
-                                                        className={`w-4 h-4 transition-transform duration-200 ${showServicesDropdown ? "rotate-180 text-[#E8AF66]" : ""
-                                                            }`}
+                                                        className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+                                                            showServicesDropdown ? "rotate-180 text-[#E8AF66]" : ""
+                                                        }`}
                                                     />
                                                 </div>
                                             </div>
 
-                                            {/* Dropdown Menu Popover */}
+                                            {/* Selected Service Badges */}
+                                            {selectedServices.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                                    {selectedServices.map((name) => (
+                                                        <span
+                                                            key={name}
+                                                            className="inline-flex items-center gap-1.5 bg-[#E8AF66]/15 border border-[#E8AF66]/35 text-[#E8AF66] text-xs px-2.5 py-1 rounded-lg font-medium shadow-sm"
+                                                        >
+                                                            <span className="truncate max-w-[150px]">{name}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => removeService(name, e)}
+                                                                className="hover:text-white transition-colors"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* 2-Column Cards Grid (1 row me 2 cards) */}
                                             {showServicesDropdown && (
-                                                <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-[#16171A] border border-zinc-700/80 rounded-xl shadow-2xl p-2 max-h-64 overflow-y-auto backdrop-blur-xl animate-fade-in space-y-1">
-                                                    <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-800 text-[11px] text-zinc-400">
+                                                <div className="bg-[#16171A] border border-zinc-800/90 rounded-2xl p-2.5 sm:p-3 shadow-2xl space-y-2 backdrop-blur-xl animate-fade-in">
+                                                    <div className="flex items-center justify-between px-1 pb-1 text-[11px] text-zinc-400 border-b border-zinc-800/80">
                                                         <span>
                                                             {selectedServices.length === 0
                                                                 ? "Select one or more modifications"
                                                                 : `${selectedServices.length} selected`}
                                                         </span>
-                                                        {selectedServices.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSelectedServices([])}
-                                                                className="text-[#E8AF66] hover:underline font-semibold"
-                                                            >
-                                                                Clear all
-                                                            </button>
-                                                        )}
+                                                        <span className="text-[10px] text-zinc-400">
+                                                            {services.length} upgrades available
+                                                        </span>
                                                     </div>
 
                                                     {loadingServices ? (
-                                                        <div className="py-6 flex flex-col items-center justify-center text-zinc-400 gap-2">
+                                                        <div className="py-8 flex flex-col items-center justify-center text-zinc-400 gap-2">
                                                             <RefreshCw className="w-5 h-5 animate-spin text-[#E8AF66]" />
                                                             <span className="text-xs">Loading modification services...</span>
                                                         </div>
@@ -1634,33 +1659,64 @@ export default function ModificationPage() {
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        services.map((item) => {
-                                                            const isSelected = selectedServices.includes(item.name);
-                                                            return (
-                                                                <div
-                                                                    key={item.id}
-                                                                    onClick={() => toggleService(item.name)}
-                                                                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm select-none ${isSelected
-                                                                        ? "bg-[#E8AF66]/15 text-[#E8AF66] font-semibold"
-                                                                        : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
+                                                        <div className="grid grid-cols-2 gap-2 sm:gap-2.5 max-h-[340px] overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                                            {services.map((item) => {
+                                                                const isSelected = selectedServices.includes(item.name);
+                                                                const imgUrl = getServiceImageUrl(item);
+                                                                return (
+                                                                    <div
+                                                                        key={item.id}
+                                                                        onClick={() => toggleService(item.name)}
+                                                                        className={`group relative flex flex-col rounded-xl border cursor-pointer transition-all duration-200 select-none overflow-hidden ${
+                                                                            isSelected
+                                                                                ? "border-[#E8AF66] bg-[#E8AF66]/15 ring-1 ring-[#E8AF66] shadow-[0_0_15px_rgba(232,175,102,0.18)]"
+                                                                                : "border-zinc-800/90 bg-[#141518] hover:border-zinc-700 hover:bg-[#1B1C20]"
                                                                         }`}
-                                                                >
-                                                                    <div className="flex items-center gap-2.5">
-                                                                        <div
-                                                                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected
-                                                                                ? "bg-[#E8AF66] border-[#E8AF66] text-black"
-                                                                                : "border-zinc-600 bg-zinc-900"
+                                                                    >
+                                                                        {/* Card Image Banner */}
+                                                                        <div className="relative w-full aspect-[16/10] bg-zinc-900 overflow-hidden border-b border-zinc-800/60">
+                                                                            <img
+                                                                                src={imgUrl}
+                                                                                alt={item.name}
+                                                                                onError={(e) => {
+                                                                                    const target = e.currentTarget;
+                                                                                    if (target.src !== "/modificatoin.jpeg") {
+                                                                                        target.src = "/modificatoin.jpeg";
+                                                                                    }
+                                                                                }}
+                                                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                                                loading="lazy"
+                                                                            />
+                                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+
+                                                                            {/* Checkbox badge in top-right */}
+                                                                            <div
+                                                                                className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                                                                                    isSelected
+                                                                                        ? "bg-[#E8AF66] text-black shadow-md font-bold"
+                                                                                        : "bg-black/60 backdrop-blur-sm border border-white/20 text-transparent"
                                                                                 }`}
-                                                                        >
-                                                                            {isSelected && (
-                                                                                <Check className="w-3 h-3 stroke-[3]" />
-                                                                            )}
+                                                                            >
+                                                                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                                                            </div>
                                                                         </div>
-                                                                        <span>{item.name}</span>
+
+                                                                        {/* Card Title & Info */}
+                                                                        <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between">
+                                                                            <h4
+                                                                                className={`text-xs font-bold leading-snug line-clamp-2 transition-colors ${
+                                                                                    isSelected
+                                                                                        ? "text-white"
+                                                                                        : "text-zinc-200 group-hover:text-white"
+                                                                                }`}
+                                                                            >
+                                                                                {item.name}
+                                                                            </h4>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            );
-                                                        })
+                                                                );
+                                                            })}
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}

@@ -115,16 +115,38 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
-      const isSuccess = urlParams.get("payment_success") === "true";
-      const paidBookingId = urlParams.get("bookingId") || urlParams.get("booking_id");
+      const flag = urlParams.get("flag");
+      const statusParam = urlParams.get("status");
+      const paymentStatusParam = urlParams.get("payment_status");
+      const isSuccess =
+        urlParams.get("payment_success") === "true" ||
+        flag === "success" ||
+        statusParam === "success" ||
+        paymentStatusParam === "paid" ||
+        paymentStatusParam === "success";
+      const lastPaidDueId = sessionStorage.getItem("mmc_last_paid_due_booking_id");
+      const paidBookingId =
+        urlParams.get("bookingId") ||
+        urlParams.get("booking_id") ||
+        urlParams.get("id") ||
+        lastPaidDueId;
       const targetBookingId = paidBookingId || urlParams.get("id");
 
       if (targetBookingId) {
         setPendingBookingIdToOpen(String(targetBookingId));
       }
 
-      if (isSuccess && paidBookingId) {
-        saveBookingMeta(paidBookingId, { isPaid: true, paymentStatus: "paid" });
+      if ((isSuccess || lastPaidDueId) && paidBookingId) {
+        saveBookingMeta(paidBookingId, {
+          isPaid: true,
+          isPartiallyPaid: false,
+          is_partial: 0,
+          dueAmount: 0,
+          paymentStatus: "paid",
+        });
+        if (lastPaidDueId) {
+          sessionStorage.removeItem("mmc_last_paid_due_booking_id");
+        }
         onRefresh();
         try {
           triggerDevicePushNotification(
@@ -865,7 +887,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                               (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
                               "Customer Location, United Kingdom"}
                           </span>
-                          {(item.house || item.floor || item.street || item.city || item.raw?.service_address?.house || item.raw?.service_address?.floor || item.raw?.service_address?.street || item.raw?.service_address?.city) && (
+                          {false && (
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               {(item.house || item.raw?.service_address?.house) && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-[10px] text-[#FAD293] font-bold">
@@ -894,7 +916,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                               )}
                             </div>
                           )}
-                          {(item.coordinates?.latitude || item.raw?.service_address?.lat) && Number(item.coordinates?.latitude || item.raw?.service_address?.lat) !== 0 && (
+                          {false && (item.coordinates?.latitude || item.raw?.service_address?.lat) && Number(item.coordinates?.latitude || item.raw?.service_address?.lat) !== 0 && (
                             <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">
                               📍 Coordinates: {Number(item.coordinates?.latitude || item.raw?.service_address?.lat).toFixed(4)}, {Number(item.coordinates?.longitude || item.raw?.service_address?.lon).toFixed(4)}
                             </span>
@@ -910,7 +932,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                             <span className="text-white font-medium break-words block">
                               {extractReadableAddress(item.destinationLocation)}
                             </span>
-                            {item.destinationCoordinates?.latitude && (
+                            {false && item.destinationCoordinates?.latitude && (
                               <span className="text-[10px] text-red-400 font-mono block mt-0.5">
                                 📍 Coordinates: {Number(item.destinationCoordinates.latitude).toFixed(4)}, {Number(item.destinationCoordinates.longitude).toFixed(4)}
                               </span>
@@ -1252,7 +1274,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
                           "Customer Location, United Kingdom"}
                       </p>
-                      {(selectedBookingForModal.house || selectedBookingForModal.floor || selectedBookingForModal.street || selectedBookingForModal.city || selectedBookingForModal.raw?.service_address?.house || selectedBookingForModal.raw?.service_address?.floor || selectedBookingForModal.raw?.service_address?.street || selectedBookingForModal.raw?.service_address?.city) && (
+                      {false && (
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           {(selectedBookingForModal.house || selectedBookingForModal.raw?.service_address?.house) && (
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-xs text-[#FAD293] font-semibold">
@@ -1276,7 +1298,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           )}
                         </div>
                       )}
-                      {(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) && Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) !== 0 && (
+                      {false && (selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) && (
                         <span className="text-[11px] text-emerald-400 font-mono block pt-1">
                           📍 Coordinates: {Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat).toFixed(5)}, {Number(selectedBookingForModal.coordinates?.longitude || selectedBookingForModal.raw?.service_address?.lon).toFixed(5)}
                         </span>
@@ -1578,22 +1600,45 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                     setPayingRemaining(true);
                     try {
                       const raw = bookingForPayment.raw || {};
-                      const candidateIds = [
-                        raw.booking_id,
-                        raw.bookingId,
-                        raw.id,
-                        raw.payment_id,
-                        raw.stripe_payment_id,
-                        bookingForPayment.rawId,
-                        bookingForPayment.id,
-                      ].filter(Boolean);
+                      const candidateIds = Array.from(
+                        new Set([
+  
+                          raw.booking_id,
+                          raw.car_booking_id,
+  
+  
+  
+  
+                          raw.bookingId,
+                          raw.id,
+                          bookingForPayment.rawId,
+                          bookingForPayment.id,
+                        ].filter(Boolean).map(String))
+                      );
+
+
+
+
+
+
+
+
+
 
                       let redirectUrl = "";
+                      let successfulId = candidateIds[0] || String(bookingForPayment.id);
                       for (const cid of candidateIds) {
                         try {
-                          const res = await switchBookingPaymentMethod(String(cid), "stripe");
+                          const res = await switchBookingPaymentMethod(
+                            String(cid),
+                            "stripe",
+                            `${typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk"}/booking-success`,
+                            0,
+                            "web"
+                          );
                           if (res.redirect_url) {
                             redirectUrl = res.redirect_url;
+                            successfulId = String(cid);
                             break;
                           }
                         } catch (e: any) {
@@ -1604,7 +1649,10 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                       if (!redirectUrl) {
                         const targetId = candidateIds[0] || bookingForPayment.id;
                         if (targetId) {
-                          redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
+                          const successCallback = `${typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk"}/booking-success`;
+                          redirectUrl = `${getBackendRootUrl() || "https://mmcclub.co.uk/backend"}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0&callback=${encodeURIComponent(successCallback)}`;
+
+                          successfulId = String(targetId);
                         }
                       }
 
@@ -1619,6 +1667,49 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           })
                         );
                         return;
+                      }
+
+                      if (typeof window !== "undefined") {
+                        const allIdsToUpdate = Array.from(
+                          new Set([
+                            String(bookingForPayment.id),
+                            String(bookingForPayment.rawId),
+                            successfulId,
+                            String(bookingForPayment.readableId || ""),
+                          ].filter(Boolean))
+                        );
+
+                        sessionStorage.setItem("mmc_last_paid_due_booking_id", successfulId);
+                        sessionStorage.setItem("mmc_is_due_payment", "1");
+                        sessionStorage.setItem(
+                          "mmc_pending_booking",
+                          JSON.stringify({
+                            booking_id: successfulId,
+                            readable_id: formatToNumericBookingId(bookingForPayment.readableId || bookingForPayment.id),
+                            service_name: bookingForPayment.serviceTitle,
+                            price: bookingForPayment.totalAmount,
+                            is_partial: 0,
+                            deposit_amount: bookingForPayment.totalAmount,
+                            provider: {
+                              company_name: bookingForPayment.providerName,
+                              company_phone: bookingForPayment.providerPhone,
+                            },
+                            schedule: bookingForPayment.scheduleTime
+                              ? `${bookingForPayment.scheduleDate} ${bookingForPayment.scheduleTime}`
+                              : bookingForPayment.scheduleDate,
+                          })
+                        );
+
+                        allIdsToUpdate.forEach((idToUpdate) => {
+                          saveBookingMeta(idToUpdate, {
+                            isPaid: true,
+                            isPartiallyPaid: false,
+                            is_partial: 0,
+                            dueAmount: 0,
+                            paidAmount: bookingForPayment.totalAmount,
+                            paymentStatus: "paid",
+                          });
+                        });
                       }
 
                       console.log("[Payment] Redirecting to Stripe:", redirectUrl);

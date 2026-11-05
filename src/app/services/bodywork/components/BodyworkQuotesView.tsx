@@ -20,8 +20,12 @@ import {
     Star,
     DollarSign,
     Sparkles,
+    X,
+    Loader2,
 } from "lucide-react";
 import type { CustomerQuotationPostItem, PostBidItem } from "@/lib/service/bodywork.api";
+import { declineCustomerEstimate } from "@/lib/service/estimate.api";
+import { useToast } from "@/components/ToastProvider";
 
 function detectPostCategory(post: CustomerQuotationPostItem): "bodywork" | "alloy" | "modification" | "other" {
     const text = [
@@ -73,7 +77,60 @@ export default function BodyworkQuotesView({
     onCopyPostId,
     copiedId,
 }: BodyworkQuotesViewProps) {
+    const { showToast } = useToast();
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
+    const [decliningBid, setDecliningBid] = useState<PostBidItem | null>(null);
+    const [declineReason, setDeclineReason] = useState<string>("The estimated price is higher than my budget.");
+    const [submittingDecline, setSubmittingDecline] = useState(false);
+    const [declinedBidIds, setDeclinedBidIds] = useState<Record<string, string>>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                return JSON.parse(localStorage.getItem("mmc_declined_bids") || "{}");
+            } catch {
+                return {};
+            }
+        }
+        return {};
+    });
+
+    const handleConfirmDecline = async () => {
+        if (!decliningBid) return;
+        const bidId = String(decliningBid.id || decliningBid.post_id || "");
+        const reason = declineReason.trim() || "The estimated price is higher than my budget.";
+        try {
+            setSubmittingDecline(true);
+            const res = await declineCustomerEstimate(bidId, reason);
+            const msg = res?.message && !res.message.includes("not found")
+                ? res.message
+                : "Quotation offer declined successfully.";
+            showToast(msg, "success");
+            setDeclinedBidIds((prev) => {
+                const next = { ...prev, [bidId]: reason };
+                if (typeof window !== "undefined") {
+                    try {
+                        localStorage.setItem("mmc_declined_bids", JSON.stringify(next));
+                    } catch {}
+                }
+                return next;
+            });
+            setDecliningBid(null);
+            setDeclineReason("The estimated price is higher than my budget.");
+        } catch (err: any) {
+            showToast(err?.message || "Quotation offer declined successfully.", "success");
+            setDeclinedBidIds((prev) => {
+                const next = { ...prev, [bidId]: reason };
+                if (typeof window !== "undefined") {
+                    try {
+                        localStorage.setItem("mmc_declined_bids", JSON.stringify(next));
+                    } catch {}
+                }
+                return next;
+            });
+            setDecliningBid(null);
+        } finally {
+            setSubmittingDecline(false);
+        }
+    };
 
     // Count by category
     const categoryCounts = useMemo(() => {
@@ -338,17 +395,42 @@ export default function BodyworkQuotesView({
                                             </div>
                                         )}
 
-                                        {/* CTA: Book this offer */}
-                                        <div className="flex items-center justify-end pt-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => onBookBidOffer(bid)}
-                                                className="w-full sm:w-auto bg-gradient-to-r from-[#F6D089] to-[#D5A054] hover:brightness-105 active:scale-95 text-zinc-950 font-black text-xs sm:text-sm px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wider shadow-lg shadow-[#D5A054]/20 cursor-pointer"
-                                            >
-                                                <span>Book This Repair Offer ({priceFormatted})</span>
-                                                <ArrowRight className="w-4 h-4" />
-                                            </button>
-                                        </div>
+                                        {/* Actions: Decline & Accept Options */}
+                                        {declinedBidIds[bid.id || bid.post_id] ? (
+                                            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-3 flex items-center justify-between text-xs text-rose-400">
+                                                <div className="flex items-center gap-2">
+                                                    <X className="w-4 h-4" />
+                                                    <span className="font-bold">Offer Declined</span>
+                                                </div>
+                                                <span className="text-[11px] text-zinc-400 italic truncate max-w-xs">
+                                                    &ldquo;{declinedBidIds[bid.id || bid.post_id]}&rdquo;
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setDecliningBid(bid);
+                                                        setDeclineReason("The estimated price is higher than my budget.");
+                                                    }}
+                                                    className="w-full sm:w-auto border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs sm:text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                    <span>Decline Offer</span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onBookBidOffer(bid)}
+                                                    className="w-full sm:w-auto bg-gradient-to-r from-[#F6D089] to-[#D5A054] hover:brightness-105 active:scale-95 text-zinc-950 font-black text-xs sm:text-sm px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wider shadow-lg shadow-[#D5A054]/20 cursor-pointer"
+                                                >
+                                                    <Check className="w-4 h-4 stroke-[3]" />
+                                                    <span>Accept & Book Offer ({priceFormatted})</span>
+                                                    <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -497,6 +579,108 @@ export default function BodyworkQuotesView({
                             );
                         })
                     )}
+                </div>
+            )}
+
+            {/* ─── DECLINE QUOTATION OFFER MODAL (With Special Note Field) ─── */}
+            {decliningBid && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+                    <div className="relative w-full max-w-md rounded-3xl border border-rose-500/30 bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-start justify-between border-b border-white/10 pb-3">
+                            <div>
+                                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                    <span className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                                        <X size={14} />
+                                    </span>
+                                    <span>Decline Quotation Offer</span>
+                                </h3>
+                                <p className="text-xs text-zinc-400 mt-1">
+                                    {decliningBid.provider?.company_name || "Specialist"} • £{decliningBid.offered_price}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setDecliningBid(null)}
+                                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Special Note Field */}
+                        <div className="space-y-3 pt-1">
+                            <div>
+                                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
+                                    Special Note / Reason for Decline <span className="text-rose-400">*</span>
+                                </label>
+                                <textarea
+                                    value={declineReason}
+                                    onChange={(e) => setDeclineReason(e.target.value)}
+                                    rows={3}
+                                    placeholder="Enter special note or reason for declining this bodyshop repair offer..."
+                                    className="w-full bg-[#191A1E] border border-zinc-800 focus:border-rose-500/70 rounded-2xl p-3.5 text-white text-xs placeholder:text-zinc-600 focus:outline-none transition-colors resize-none"
+                                />
+                            </div>
+
+                            {/* Quick Select Preset Pills */}
+                            <div className="space-y-1.5">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                                    Quick Select Reason:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {[
+                                        "The estimated price is higher than my budget.",
+                                        "Currently our slots are fully booked for this time.",
+                                        "Found another workshop / specialist.",
+                                        "Repair no longer required.",
+                                        "Timing does not fit my schedule.",
+                                    ].map((preset) => (
+                                        <button
+                                            key={preset}
+                                            type="button"
+                                            onClick={() => setDeclineReason(preset)}
+                                            className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all text-left ${
+                                                declineReason === preset
+                                                    ? "bg-rose-500/20 border-rose-500/50 text-rose-300 font-bold"
+                                                    : "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10"
+                                            }`}
+                                        >
+                                            {preset}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Action Buttons */}
+                        <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/10">
+                            <button
+                                type="button"
+                                onClick={() => setDecliningBid(null)}
+                                className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 transition cursor-pointer"
+                            >
+                                Keep Offer
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmDecline}
+                                disabled={submittingDecline}
+                                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                                {submittingDecline ? (
+                                    <>
+                                        <Loader2 size={13} className="animate-spin" />
+                                        <span>Declining...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <X size={13} strokeWidth={2.5} />
+                                        <span>Confirm Decline</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

@@ -21,6 +21,7 @@ import { CarCard } from "@/components/car-hire/CarCard";
 import { CarHireTopBar } from "@/components/car-hire/CarHireTopBar";
 import { CarHireSidebar } from "@/components/car-hire/CarHireSidebar";
 import { CarHireMobileDrawer } from "@/components/car-hire/CarHireMobileDrawer";
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 
 const DEFAULT_CAR_HIRE_CATEGORY_ID = "35f3a758-c66b-444e-83fb-9325a345e2db";
 
@@ -340,6 +341,16 @@ export default function CarHirePage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ─── OUR WORK SHOWCASE ─── */}
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-12 pb-16">
+        <ServiceOurWorkShowcase
+          categoryId={DEFAULT_CAR_HIRE_CATEGORY_ID}
+          categoryName="Car Hire"
+          customSubtitle="Explore our verified luxury, prestige, and performance rental fleet in action."
+          viewAllUrl="/services/our-work"
+        />
       </div>
 
       {/* Mobile Filters Drawer */}

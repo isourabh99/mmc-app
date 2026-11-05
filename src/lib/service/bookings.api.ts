@@ -171,6 +171,30 @@ export function saveBookingMeta(
       city: meta.city || prev.city,
     };
     localStorage.setItem("mmc_bookings_metadata", JSON.stringify(existing));
+
+    if (meta.isPaid) {
+      try {
+        const rawConfirmed = localStorage.getItem("mmc_confirmed_bookings");
+        if (rawConfirmed) {
+          const list: any[] = JSON.parse(rawConfirmed);
+          let modified = false;
+          list.forEach((item) => {
+            const itemKey = String(item.id || item.rawId || item.readableId || "").toLowerCase().trim();
+            if (itemKey === key || (key.length >= 6 && (itemKey.includes(key) || key.includes(itemKey)))) {
+              item.isPaid = true;
+              item.isPartiallyPaid = false;
+              item.is_partial = 0;
+              item.dueAmount = 0;
+              item.paymentStatus = "Paid";
+              modified = true;
+            }
+          });
+          if (modified) {
+            localStorage.setItem("mmc_confirmed_bookings", JSON.stringify(list));
+          }
+        }
+      } catch { }
+    }
   } catch (e) {
     console.warn("Could not save booking metadata:", e);
   }
@@ -937,6 +961,23 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     }
   }
 
+  // Determine if booking is fully paid
+  const isExplicitlyPaidBackend = Boolean(
+    (raw.payment_status === "paid" || raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true) &&
+    (raw.due_amount === undefined || raw.due_amount === null || Number(raw.due_amount) <= 0) &&
+    raw.payment_status !== "partially_paid" &&
+    raw.payment_status !== "partial"
+  );
+
+  const isExplicitlyPaidMeta = Boolean(
+    meta?.isPaid === true &&
+    meta?.isPartiallyPaid !== true &&
+    (meta?.dueAmount === undefined || meta?.dueAmount === null || Number(meta?.dueAmount) <= 0)
+  );
+
+  let isPaid = isExplicitlyPaidBackend || isExplicitlyPaidMeta;
+  let isPartiallyPaid = false;
+
   const isPartialFlag = Boolean(
     raw.is_partial === 1 ||
     raw.is_partial === "1" ||
@@ -954,20 +995,25 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   const hasDueRemaining = (rawDueAmount !== undefined && rawDueAmount > 0) || isPartialFlag;
 
   // Booking is ONLY fully paid if NOT partial and NO due remaining
-  const isPaid = !isPartialFlag && !hasDueRemaining && Boolean(
+  if (isPaid) {
+    rawDueAmount = 0;
+    isPartiallyPaid = false;
+  } else {
+    isPaid = !isPartialFlag && !hasDueRemaining && Boolean(
     (raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true || raw.payment_status === "paid") &&
     (rawDueAmount === undefined || rawDueAmount <= 0)
   );
 
   // Detect partial payment
-  const isPartiallyPaid = isPartialFlag || (!isPaid && Boolean(
+    isPartiallyPaid = isPartialFlag || (!isPaid && Boolean(
     hasDueRemaining && (
       (rawPaidAmount !== undefined && rawPaidAmount > 0) ||
       raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true ||
       localConfirmed?.isPartiallyPaid ||
       meta?.isPartiallyPaid
     )
-  ));
+    ));
+  }
 
   const paymentStatus = isPaid ? "Paid" : isPartiallyPaid ? "Partially Paid" : "Pending Payment";
   let paymentMethod = "Online (Stripe)";
@@ -1619,9 +1665,21 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
       paid_amount: computedPaidAmount,
       due_amount: computedDueAmount,
       payment_method: paymentMethod,
+
+
       created_at: raw.created_at || raw.createdAt,
     });
   }
+
+
+
+
+
+
+
+
+
+
 
   return {
     id: idStr,
@@ -2167,18 +2225,34 @@ export async function fetchAllCustomerBookings(
 export async function switchBookingPaymentMethod(
   bookingId: string,
   paymentMethod: string = "stripe",
-  callback?: string
+  callback?: string,
+  isPartial: number = 0,
+  paymentPlatform: string = "web"
 ): Promise<{ success: boolean; redirect_url?: string; message?: string; data?: any }> {
   const cleanId = String(bookingId || "").trim();
+  const liveApiBase = (getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1").replace(/\/+$/, "");
+  const frontendOrigin =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://mmcclub.co.uk";
   const callbackUrl =
     callback ||
-    (typeof window !== "undefined"
-      ? `${window.location.origin}/booking-success`
-      : `${getApiBaseUrl()}/digital-payment-booking-response`);
+    `${frontendOrigin}/booking-success`;
+
+
+
+
+
 
   const response = await apiClient.post("/customer/booking/switch-payment-method", {
     booking_id: cleanId,
-    payment_method: paymentMethod,
+    payment_method: paymentMethod || "stripe",
+
+    is_partial: isPartial,
+    payment_platform: paymentPlatform || "web",
+
+
+
     callback: callbackUrl,
   });
 
@@ -2199,13 +2273,33 @@ export async function switchBookingPaymentMethod(
     (sRaw?.payment_id || sRaw?.id || sRaw?.booking_id
       ? `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
         String(sRaw?.payment_id || sRaw?.id || sRaw?.booking_id)
-      )}&is_partial=0&callback=${encodeURIComponent(callbackUrl)}`
+      )}&is_partial=${isPartial}&callback=${encodeURIComponent(callbackUrl)}`
       : undefined);
+
+
+
+
+
+
+
+
+
+
 
   return {
     success: true,
     message: data?.message || "Payment initiated successfully",
-    redirect_url: redirectUrl,
+    redirect_url: (() => {
+      if (!redirectUrl) return undefined;
+      let u = redirectUrl
+        .replace(/^https?:\/\/localhost(?::\d+)?\/mmc/i, "https://mmcclub.co.uk/backend")
+        .replace(/^https?:\/\/localhost:8000/i, "https://mmcclub.co.uk/backend")
+        .replace(/^https?:\/\/127\.0\.0\.1(?::\d+)?\/mmc/i, "https://mmcclub.co.uk/backend");
+      if (u.startsWith("/")) {
+        u = `${getBackendRootUrl() || "https://mmcclub.co.uk/backend"}${u}`;
+      }
+      return u;
+    })(),
     data: data?.content || data,
   };
 }

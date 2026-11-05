@@ -31,11 +31,15 @@ import {
   Info,
   Check,
   X,
+  Search,
+  Share2,
+  MessageSquare,
 } from "lucide-react";
 import {
   getCustomerEstimates,
   getEstimateDetails,
   acceptCustomerEstimate,
+  declineCustomerEstimate,
   normalizeEstimateImageUrl,
   EstimateItem,
 } from "@/lib/service/estimate.api";
@@ -48,6 +52,10 @@ export const EstimatesTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Search & Status Filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted" | "canceled">("all");
+
   // Selected Estimate Detail Modal / View
   const [selectedEstimate, setSelectedEstimate] = useState<EstimateItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -58,6 +66,11 @@ export const EstimatesTab: React.FC = () => {
   const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
   const [paymentMethod, setPaymentMethod] = useState<string>("stripe");
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+
+  // Decline Modal State (with Special Note / Reason field)
+  const [decliningItem, setDecliningItem] = useState<EstimateItem | null>(null);
+  const [declineReason, setDeclineReason] = useState<string>("The estimated price is higher than my budget.");
+  const [declineSubmitting, setDeclineSubmitting] = useState(false);
 
   const fetchEstimates = useCallback(async () => {
     try {
@@ -80,6 +93,24 @@ export const EstimatesTab: React.FC = () => {
   useEffect(() => {
     fetchEstimates();
   }, [fetchEstimates]);
+
+  // Deep-link auto-open if estimateId is provided in URL
+  useEffect(() => {
+    if (typeof window === "undefined" || estimates.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const targetId = params.get("estimateId") || params.get("estimate_id") || params.get("id");
+    if (targetId) {
+      const match = estimates.find(
+        (e) =>
+          String(e.id) === targetId ||
+          String(e.readable_id) === targetId ||
+          e.link_token === targetId
+      );
+      if (match) {
+        handleOpenDetail(match);
+      }
+    }
+  }, [estimates]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -173,8 +204,69 @@ export const EstimatesTab: React.FC = () => {
     }
   };
 
+  const handleConfirmDecline = async () => {
+    if (!decliningItem) return;
+    const itemKey = decliningItem.link_token || decliningItem.id || String(decliningItem.readable_id || "");
+    const reasonText = declineReason.trim() || "The estimated price is higher than my budget.";
+    try {
+      setDeclineSubmitting(true);
+      const res = await declineCustomerEstimate(decliningItem, reasonText);
+      showToast(res.message || "Estimate declined successfully", "success");
+
+      // Update state locally
+      setEstimates((prev) =>
+        prev.map((est) =>
+          (est.link_token === itemKey || est.id === itemKey || String(est.readable_id) === itemKey)
+            ? { ...est, status: "declined", notes: reasonText }
+            : est
+        )
+      );
+
+      if (selectedEstimate && (selectedEstimate.link_token === itemKey || selectedEstimate.id === itemKey)) {
+        setSelectedEstimate((prev) => (prev ? { ...prev, status: "declined", notes: reasonText } : null));
+      }
+
+      setDecliningItem(null);
+      setDeclineReason("The estimated price is higher than my budget.");
+    } catch (err: any) {
+      showToast(err.message || "Failed to decline estimate", "error");
+    } finally {
+      setDeclineSubmitting(false);
+    }
+  };
+
+  const allCount = estimates.length;
   const pendingCount = estimates.filter((e) => (e.status || "pending").toLowerCase() === "pending").length;
   const acceptedCount = estimates.filter((e) => (e.status || "").toLowerCase() === "accepted").length;
+  const canceledCount = estimates.filter((e) =>
+    ["canceled", "cancelled", "declined", "rejected"].includes((e.status || "").toLowerCase())
+  ).length;
+
+  const filteredEstimates = estimates.filter((item) => {
+    const s = (item.status || "pending").toLowerCase();
+    if (statusFilter === "pending" && s !== "pending") return false;
+    if (statusFilter === "accepted" && s !== "accepted") return false;
+    if (statusFilter === "canceled" && !["canceled", "cancelled", "declined", "rejected"].includes(s)) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const searchable = [
+        item.readable_id,
+        item.estimate_number,
+        item.provider?.company_name,
+        item.car_model,
+        item.car?.model,
+        item.car_registration_number,
+        item.category?.name,
+        item.service_description,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!searchable.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -240,6 +332,65 @@ export const EstimatesTab: React.FC = () => {
               <span>My Quotes</span>
             </Link>
           </div>
+        </div>
+      </div>
+
+      {/* Search Bar & Filter Tabs (Matches Reference Screen) */}
+      <div className="space-y-3">
+        {/* Search Input */}
+        <div className="relative">
+          <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search quote #, provider, car model..."
+            className="w-full bg-[#16120e] border border-[#3a2a17] focus:border-[#f2cb87] rounded-2xl pl-11 pr-4 py-3 text-white text-xs placeholder:text-white/35 focus:outline-none transition-all shadow-md"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white p-1"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Status Filter Tabs (All, Pending, Accepted, Canceled) */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+          {[
+            { key: "all", label: "All", count: allCount },
+            { key: "pending", label: "Pending", count: pendingCount },
+            { key: "accepted", label: "Accepted", count: acceptedCount },
+            { key: "canceled", label: "Canceled", count: canceledCount },
+          ].map((tab) => {
+            const isActive = statusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatusFilter(tab.key as any)}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                  isActive
+                    ? "bg-[#f2cb87] text-black shadow-md shadow-[#f2cb87]/20"
+                    : "bg-[#18130f] border border-[#3a2a17] text-white/70 hover:text-white hover:border-[#f2cb87]/40"
+                }`}
+              >
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                      isActive ? "bg-black/20 text-black" : "bg-white/10 text-white/70"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -516,15 +667,35 @@ export const EstimatesTab: React.FC = () => {
               </div>
 
               {(selectedEstimate.status || "pending").toLowerCase() === "pending" ? (
-                <button
-                  type="button"
-                  onClick={() => setAcceptingItem(selectedEstimate)}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] px-6 py-3 text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-lg shadow-[#d09a50]/20 cursor-pointer"
-                >
-                  <CheckCircle2 size={14} />
-                  <span>Accept & Confirm Estimate</span>
-                  <ArrowRight size={14} />
-                </button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDecliningItem(selectedEstimate);
+                      setDeclineReason("The estimated price is higher than my budget.");
+                    }}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-5 py-3 text-xs font-bold text-rose-400 transition cursor-pointer"
+                  >
+                    <X size={14} />
+                    <span>Decline Estimate</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAcceptingItem(selectedEstimate)}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] px-6 py-3 text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-lg shadow-[#d09a50]/20 cursor-pointer"
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Accept & Confirm</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              ) : ["canceled", "cancelled", "declined", "rejected"].includes(
+                  (selectedEstimate.status || "").toLowerCase()
+                ) ? (
+                <div className="flex items-center gap-2 text-xs font-bold text-rose-400 bg-rose-500/10 px-4 py-2 rounded-xl border border-rose-500/20">
+                  <X size={14} />
+                  <span>Estimate Declined</span>
+                </div>
               ) : (
                 <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20">
                   <CheckCircle2 size={14} />
@@ -534,7 +705,7 @@ export const EstimatesTab: React.FC = () => {
             </div>
           </div>
         </div>
-      ) : estimates.length === 0 ? (
+      ) : filteredEstimates.length === 0 ? (
         /* ─── Empty State ─── */
         <div className="relative overflow-hidden p-12 text-center rounded-3xl border border-[#33271d] bg-gradient-to-br from-[#1c1409] to-[#120d07] space-y-5">
           <div className="absolute top-0 right-0 w-48 h-48 bg-[#f2cb87]/5 rounded-full blur-3xl pointer-events-none" />
@@ -542,9 +713,11 @@ export const EstimatesTab: React.FC = () => {
             <Receipt size={28} />
           </div>
           <div>
-            <h3 className="text-base font-black text-white">No Provider Estimates Yet</h3>
+            <h3 className="text-base font-black text-white">No Provider Estimates Found</h3>
             <p className="text-xs text-white/45 mt-2 max-w-sm mx-auto leading-relaxed">
-              When a verified workshop or technician prepares an itemized quotation for your vehicle, it will appear here for your review and one-click acceptance.
+              {searchQuery || statusFilter !== "all"
+                ? "No estimates match your current search or status filter."
+                : "When a verified workshop prepares an itemized quotation for your vehicle, it will appear here."}
             </p>
           </div>
           <Link
@@ -557,11 +730,14 @@ export const EstimatesTab: React.FC = () => {
           </Link>
         </div>
       ) : (
-        /* ─── Estimates List ─── */
-        <div className="space-y-3">
-          {estimates.map((item) => {
-            const isPending = (item.status || "pending").toLowerCase() === "pending";
-            const isAccepted = (item.status || "").toLowerCase() === "accepted";
+        /* ─── Estimates Cards List (Matches Reference Design) ─── */
+        <div className="space-y-4">
+          {filteredEstimates.map((item) => {
+            const statusLower = (item.status || "pending").toLowerCase();
+            const isPending = statusLower === "pending";
+            const isAccepted = statusLower === "accepted";
+            const isDeclined = ["canceled", "cancelled", "declined", "rejected"].includes(statusLower);
+
             const grandTotal = Number(
               item.total_amount ??
               item.grand_total ??
@@ -570,123 +746,278 @@ export const EstimatesTab: React.FC = () => {
               0
             );
 
+            const displayRef = item.readable_id
+              ? `#${item.readable_id}`
+              : (item.estimate_number || `#${String(item.id || "").slice(0, 6)}`);
+
+            const categoryName = item.category?.name || item.service_description || "Repair Service";
+
             return (
               <div
                 key={item.id || item.link_token || item.readable_id}
                 onClick={() => handleOpenDetail(item)}
-                className="group relative overflow-hidden rounded-2xl border border-[#2e2012] bg-gradient-to-br from-[#1a1208] via-[#161009] to-[#100c06] hover:border-[#f2cb87]/45 hover:shadow-[0_8px_30px_rgba(242,203,135,0.08)] transition-all duration-300 cursor-pointer"
+                className="group relative overflow-hidden rounded-3xl border border-[#2e2012] bg-[#14100c] hover:border-[#f2cb87]/45 hover:shadow-[0_8px_30px_rgba(242,203,135,0.08)] transition-all duration-300 cursor-pointer p-4 sm:p-5 space-y-4"
               >
-                {/* Gold top edge glow on hover */}
-                <div className="absolute -top-px inset-x-8 h-[1px] bg-gradient-to-r from-transparent via-[#f2cb87]/0 group-hover:via-[#f2cb87]/30 to-transparent transition-all duration-300" />
-
-                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  {/* Left Info */}
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                        isAccepted
-                          ? "bg-emerald-500/15 border border-emerald-500/25"
-                          : "bg-[#f2cb87]/10 border border-[#f2cb87]/20"
-                      }`}
-                    >
-                      {isAccepted ? (
-                        <CheckCircle2 size={16} className="text-emerald-400" />
-                      ) : (
-                        <Receipt size={16} className="text-[#f2cb87]" />
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5 min-w-0">
-                      {/* Ref + Date */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-black text-[#f2cb87]/80 uppercase tracking-widest bg-[#f2cb87]/8 px-2 py-0.5 rounded-md border border-[#f2cb87]/12">
-                          {item.readable_id ? `EST-${item.readable_id}` : (item.estimate_number || `EST-${String(item.id || "").slice(0, 8)}`)}
-                        </span>
-                        {item.created_at && (
-                          <span className="flex items-center gap-1 text-[11px] text-white/35">
-                            <CalendarDays size={10} />
-                            {new Date(item.created_at).toLocaleDateString("en-GB", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title */}
-                      <h3 className="text-sm font-bold text-white group-hover:text-[#f2cb87] transition-colors truncate max-w-xs sm:max-w-none">
-                        {item.category?.name || item.service_description || "Repair & Service Estimate"}
-                      </h3>
-
-                      {/* Vehicle & Garage */}
-                      <div className="flex items-center gap-3 text-xs text-white/50 flex-wrap">
-                        {(item.car_model || item.car?.model) && (
-                          <div className="flex items-center gap-1.5">
-                            <Car size={12} className="text-[#f2cb87]/70 shrink-0" />
-                            <span className="truncate">{item.car_model || item.car?.model}</span>
-                          </div>
-                        )}
-                        {item.provider?.company_name && (
-                          <div className="flex items-center gap-1 text-white/60">
-                            <BadgeCheck size={11} className="text-emerald-400 shrink-0" />
-                            <span className="truncate">{item.provider.company_name}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                {/* Header Row: #10001, Category, Status Badge */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-[#f2cb87] bg-[#f2cb87]/10 px-3 py-1 rounded-xl border border-[#f2cb87]/20">
+                      {displayRef}
+                    </span>
+                    <span className="text-xs font-bold text-white/70 bg-white/5 px-2.5 py-1 rounded-xl border border-white/10">
+                      {categoryName}
+                    </span>
                   </div>
 
-                  {/* Right Actions & Amount */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pl-13 sm:pl-0">
-                    <div className="text-right">
-                      <div className="text-base sm:text-lg font-black text-emerald-400">
-                        £{grandTotal.toFixed(2)}
-                      </div>
-                      <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${
-                          isAccepted ? "text-emerald-400" : "text-amber-400"
-                        }`}
-                      >
-                        {isAccepted ? "Accepted" : "Pending Action"}
-                      </span>
+                  <span
+                    className={`text-[10px] font-black px-2.5 py-1 rounded-xl border uppercase tracking-wider ${
+                      isAccepted
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                        : isDeclined
+                        ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                        : "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                    }`}
+                  >
+                    {isAccepted ? "ACCEPTED" : isDeclined ? "DECLINED" : "PENDING"}
+                  </span>
+                </div>
+
+                {/* Provider Row: Logo, Name, Rating, Location */}
+                <div className="flex items-center gap-3">
+                  {item.provider?.logo_full_path ? (
+                    <img
+                      src={normalizeEstimateImageUrl(item.provider.logo_full_path)}
+                      alt={item.provider.company_name}
+                      className="w-12 h-12 rounded-2xl object-contain bg-black/40 border border-white/10 p-1 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-[#f2cb87]/15 border border-[#f2cb87]/30 flex items-center justify-center font-black text-base text-[#f2cb87] shrink-0">
+                      {(item.provider?.company_name || "MMC")[0]}
                     </div>
+                  )}
 
-                    <div className="flex items-center gap-1.5">
-                      {isPending && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAcceptingItem(item);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] text-[11px] font-black text-zinc-950 transition hover:brightness-110 shadow-sm cursor-pointer"
-                        >
-                          Accept
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleCopyLink(item, e)}
-                        title="Copy Share Link"
-                        className="w-8 h-8 rounded-xl bg-white/5 hover:bg-[#f2cb87]/20 border border-white/8 hover:border-[#f2cb87]/40 flex items-center justify-center text-white/60 hover:text-[#f2cb87] transition cursor-pointer"
-                      >
-                        <Copy size={13} />
-                      </button>
-
-                      <div className="w-8 h-8 rounded-xl bg-white/5 group-hover:bg-[#f2cb87]/15 border border-white/8 group-hover:border-[#f2cb87]/30 flex items-center justify-center transition-all">
-                        <ChevronRight
-                          size={14}
-                          className="text-white/30 group-hover:text-[#f2cb87] transition-colors"
-                        />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base font-black text-white group-hover:text-[#f2cb87] transition-colors truncate">
+                      {item.provider?.company_name || "Verified MMC Workshop"}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs text-white/50 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-1 text-[#f2cb87] font-bold">
+                        <Star size={12} className="fill-[#f2cb87]" />
+                        <span>{item.provider?.avg_rating ? Number(item.provider.avg_rating).toFixed(1) : "5.0"}</span>
+                        <span className="text-white/40">({item.provider?.rating_count || 2})</span>
                       </div>
+                      {item.provider?.company_address && (
+                        <>
+                          <span className="text-white/20">•</span>
+                          <span className="truncate max-w-[200px] text-white/40">
+                            {item.provider.company_address}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
+
+                {/* Vehicle Details Box (Dark Card) */}
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-[#1b1510] border border-[#2f2214] space-y-2">
+                  <div className="text-xs sm:text-sm font-bold text-white">
+                    {item.car_model || item.car?.model || "Vehicle Service & Repair"}
+                  </div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {(item.car_registration_number || item.car?.registration_number) && (
+                      <span className="px-2.5 py-0.5 rounded-md bg-[#F8D053] text-black font-black text-[11px] tracking-wider border border-black/20 shadow-sm">
+                        {item.car_registration_number || item.car?.registration_number}
+                      </span>
+                    )}
+                    <span className="text-xs text-white/50 flex items-center gap-1">
+                      <Clock size={11} className="text-[#f2cb87]/70" />
+                      <span>
+                        {item.service_schedule
+                          ? `Pickup / Service: ${item.service_schedule}`
+                          : item.created_at
+                          ? `Requested: ${new Date(item.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}`
+                          : "Scheduled on confirmation"}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quoted Price & Share */}
+                <div className="flex items-center justify-between gap-4 pt-1">
+                  <div>
+                    <span className="text-[11px] text-white/50 block font-medium">Quoted Price:</span>
+                    <div className="text-xl sm:text-2xl font-black text-[#f2cb87]">
+                      £{grandTotal.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleCopyLink(item, e)}
+                    title="Share Estimate"
+                    className="w-10 h-10 rounded-2xl bg-white/5 hover:bg-[#f2cb87]/20 border border-white/10 hover:border-[#f2cb87]/40 flex items-center justify-center text-white/70 hover:text-[#f2cb87] transition cursor-pointer"
+                  >
+                    <Share2 size={16} />
+                  </button>
+                </div>
+
+                {/* Actions: Decline & Accept Buttons */}
+                {isPending ? (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDecliningItem(item);
+                        setDeclineReason("The estimated price is higher than my budget.");
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 py-3 px-4 text-xs sm:text-sm font-bold transition-all cursor-pointer active:scale-[0.99]"
+                    >
+                      <X size={15} strokeWidth={2.5} />
+                      <span>Decline</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAcceptingItem(item);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#f2cb87] hover:bg-[#f5d79e] active:scale-[0.99] text-black py-3 px-4 text-xs sm:text-sm font-black transition-all cursor-pointer shadow-lg shadow-[#f2cb87]/15"
+                    >
+                      <Check size={16} strokeWidth={3} />
+                      <span>Accept</span>
+                    </button>
+                  </div>
+                ) : isAccepted ? (
+                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/20">
+                    <CheckCircle2 size={14} />
+                    <span>Estimate Accepted & Booking Authorized</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-xs font-bold text-rose-400 bg-rose-500/10 p-3 rounded-2xl border border-rose-500/20">
+                    <div className="flex items-center gap-2">
+                      <X size={14} />
+                      <span>Estimate Declined</span>
+                    </div>
+                    {item.notes && (
+                      <span className="text-[11px] font-normal text-white/50 truncate max-w-[200px]">
+                        &ldquo;{item.notes}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── DECLINE ESTIMATE MODAL (With Special Note / Reason field) ─── */}
+      {decliningItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl border border-rose-500/30 bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                    <X size={14} />
+                  </span>
+                  <span>Decline Estimate</span>
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {decliningItem.readable_id
+                    ? `EST-${decliningItem.readable_id}`
+                    : (decliningItem.estimate_number || "This estimate")} • {decliningItem.provider?.company_name || "Specialist"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDecliningItem(null)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Special Note / Reason Field */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
+                  Special Note / Reason for Declining <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  rows={3}
+                  placeholder="Enter special note or reason for declining (e.g. price is higher than budget, slots unavailable)..."
+                  className="w-full bg-[#191A1E] border border-zinc-800 focus:border-rose-500/70 rounded-2xl p-3.5 text-white text-xs placeholder:text-zinc-600 focus:outline-none transition-colors resize-none"
+                />
+              </div>
+
+              {/* Quick Preset Reason Pills */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Quick Select Reason:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "The estimated price is higher than my budget.",
+                    "Currently our slots are fully booked for this time.",
+                    "Found another workshop / specialist.",
+                    "Repair no longer required.",
+                    "Timing does not fit my schedule.",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setDeclineReason(preset)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all text-left ${
+                        declineReason === preset
+                          ? "bg-rose-500/20 border-rose-500/50 text-rose-300 font-bold"
+                          : "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setDecliningItem(null)}
+                className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 transition cursor-pointer"
+              >
+                Keep Estimate
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDecline}
+                disabled={declineSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {declineSubmitting ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Declining...</span>
+                  </>
+                ) : (
+                  <>
+                    <X size={13} strokeWidth={2.5} />
+                    <span>Confirm Decline</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

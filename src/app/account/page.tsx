@@ -24,6 +24,8 @@ import { AddressesTab } from "@/components/account/AddressesTab";
 import { SecurityTab } from "@/components/account/SecurityTab";
 import { QuotesTab } from "@/components/account/QuotesTab";
 import { EstimatesTab } from "@/components/account/EstimatesTab";
+import { VehiclesTab } from "@/components/account/VehiclesTab";
+import { DocumentsTab } from "@/components/account/DocumentsTab";
 
 function AccountContent() {
   const searchParams = useSearchParams();

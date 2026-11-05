@@ -73,6 +73,8 @@ import { extractPostcode, type SelectedLocationData } from "@/lib/service/addres
 
 type ActiveView = "hero" | "providers" | "booking" | "payment" | "success";
 
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+
 export default function MechanicalPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -849,33 +851,16 @@ export default function MechanicalPage() {
                   </div>
                 </div>
 
-                {/* Feature Highlight Card */}
-                <div className="relative group rounded-2xl border border-zinc-800/90 bg-[#121316]/90 p-5 sm:p-6 backdrop-blur-md overflow-hidden max-w-xl shadow-2xl transition-all duration-300 hover:border-zinc-700">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                    <div className="z-10 flex-1">
-                      <span className="inline-block text-xs font-bold tracking-widest text-[#E8AF66] uppercase mb-1">
-                        Featured Service
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-extrabold tracking-wide text-white uppercase leading-snug">
-                        ENGINE &amp; MECHANICAL <br className="hidden sm:block" />
-                        OVERHAUL
-                      </h3>
-                      <p className="text-[11px] tracking-widest text-zinc-400 font-medium mt-1.5 uppercase">
-                        DIAGNOSE &bull; REPAIR &bull; CERTIFY
-                      </p>
-                      <p className="text-xs text-zinc-400 mt-2 font-normal">
-                        Full computer OBD diagnostics, OEM sensor checks, and component testing.
-                      </p>
-                    </div>
+                {/* OUR WORK SHOWCASE */}
+            <ServiceOurWorkShowcase
+              categoryId={FALLBACK_MECHANICAL_CATEGORY_ID}
+              categoryName="Mechanical Repairs & Diagnostics"
+              customSubtitle="Explore our verified mechanical diagnostics, engine servicing, and performance repairs."
+              viewAllUrl="/services/our-work"
+            />
+          </div>
 
-                    <div className="relative w-full sm:w-48 h-32 rounded-xl overflow-hidden shrink-0 border border-zinc-700/60 shadow-inner bg-zinc-900 flex items-center justify-center">
-                      <Wrench className="w-12 h-12 text-[#E8AF66]/60 group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Get Mechanic Provider Form Card (Exact Replica of Screenshots 1 & 2) */}
+          {/* Right Column: Get Mechanic Provider Form Card (Exact Replica of Screenshots 1 & 2) */}
               <div className="lg:col-span-5">
                 <div className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl">
                   {/* Mechanical Showcase Banner */}

@@ -14,9 +14,11 @@ import {
 import {
   getCustomerProfile,
   updateCustomerProfile,
-  saveCustomerAddress,
 } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
+import { VehiclesTab } from "@/components/account/VehiclesTab";
+import { DocumentsTab } from "@/components/account/DocumentsTab";
+import { FileCheck, Sparkles, Clock, ChevronRight } from "lucide-react";
 
 interface ProfileTabProps {
   initialUser?: any;
@@ -31,7 +33,14 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [savingAddress, setSavingAddress] = useState(false);
+  const [profileSubTab, setProfileSubTab] = useState<"vehicles" | "documents" | "details">("vehicles");
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Morning";
+    if (hour < 17) return "Afternoon";
+    return "Evening";
+  };
 
   // Files & Previews
   const [profileImage, setProfileImage] = useState<File | null>(null);
@@ -53,16 +62,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     car_image_full_path: "",
   });
 
-  // Address Form State
-  const [address, setAddress] = useState({
-    lat: "",
-    lon: "",
-    address: "",
-    address_type: "service",
-    contact_person_name: "",
-    contact_person_number: "",
-    address_label: "Home",
-  });
+
 
   // Load profile data
   const loadProfile = async () => {
@@ -89,23 +89,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             data.car?.car_image_full_path || data.car_image_full_path || "",
         });
 
-        const storedUser = localStorage.getItem("user");
-        const userObj = storedUser ? JSON.parse(storedUser) : null;
-
-        setAddress({
-          lat: data.lat || "",
-          lon: data.lon || "",
-          address: data.address || "",
-          address_type: data.address_type || "service",
-          contact_person_name:
-            data.contact_person_name ||
-            (userObj
-              ? `${userObj.first_name || ""} ${userObj.last_name || ""}`.trim()
-              : ""),
-          contact_person_number:
-            data.contact_person_number || userObj?.phone || "",
-          address_label: data.address_label || "Home",
-        });
       }
     } catch (err: any) {
       console.error("Profile load error:", err);
@@ -179,16 +162,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     }));
   };
 
-  // Handle Address inputs
-  const handleAddressChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setAddress((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+
 
   // Profile Submit
   const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -270,40 +244,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     }
   };
 
-  // Address Submit
-  const handleAddressSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingAddress(true);
-    try {
-      const response = await saveCustomerAddress(address);
-      if (
-        response?.response_code &&
-        response?.response_code !== "default_200" &&
-        response?.response_code !== "default_update_200"
-      ) {
-        showToast(response?.message || "Failed to save address", "error");
-        return;
-      }
-      showToast(response?.message || "Address saved successfully!", "success");
-      await loadProfile();
-      if (onProfileUpdated) onProfileUpdated();
-    } catch (err: any) {
-      console.error("Address Error:", err);
-      const errors = err?.response?.data?.errors;
-      if (Array.isArray(errors) && errors.length > 0) {
-        showToast(errors[0]?.message || "Address validation failed.", "error");
-      } else {
-        showToast(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Failed to save address.",
-          "error"
-        );
-      }
-    } finally {
-      setSavingAddress(false);
-    }
-  };
+
 
   if (loading) {
     return (
@@ -320,26 +261,96 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#14100c] border border-[#33271d] rounded-2xl px-5 py-4 shadow-xl">
-        <div>
-          <h2 className="text-xl font-serif font-bold text-white tracking-tight flex items-center gap-2">
-            <span>My Profile</span>
-          </h2>
-          <p className="text-xs text-white/50 mt-0.5">
-            Manage your personal, vehicle and address information.
-          </p>
+{/* Welcome Greeting Header matching mobile app */}
+      <div className="bg-gradient-to-br from-[#1b1510] via-[#14100c] to-[#0d0a08] border border-[#33271d] rounded-3xl p-6 sm:p-7 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FAD293] to-[#CEA46B] p-[2px] shadow-lg shadow-black/60 shrink-0">
+              <div className="w-full h-full rounded-2xl bg-[#111] flex items-center justify-center overflow-hidden">
+                {profileImagePreview ? (
+                  <img src={profileImagePreview} alt="Profile" className="w-full h-full object-cover" />
+                ) : profile.profile_image_full_path ? (
+                  <img src={profile.profile_image_full_path} alt={fullName} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xl font-bold text-[#FAD293]">{userInitials}</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
+                {`${getGreeting()}, ${profile.first_name || "Member"}`}
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+                Let's keep your car ready for tomorrow.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Reminders Pill */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-inner">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>MOT: Valid</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 border border-[#FAD293]/30 text-[#FAD293] text-xs font-semibold shadow-inner">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Garage Active</span>
+            </div>
+          </div>
         </div>
 
-        <div className="inline-flex items-center gap-2 self-start sm:self-auto px-3 py-1.5 rounded-full bg-[#1b1510] border border-[#d9a85f]/30">
-          <span className="w-2 h-2 rounded-full bg-[#FAD293] animate-pulse" />
-          <span className="text-[11px] font-medium text-[#FAD293]">
-            Account Active
-          </span>
+        {/* Profile Section Navigation Switcher */}
+        <div className="flex items-center gap-2 pt-2 border-t border-white/5 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setProfileSubTab("vehicles")}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+              profileSubTab === "vehicles"
+                ? "bg-[#FAD293] text-black shadow-lg shadow-[#FAD293]/20"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
+            }`}
+          >
+            <Car className="w-4 h-4" />
+            <span>Your Vehicles</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfileSubTab("documents")}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+              profileSubTab === "documents"
+                ? "bg-[#FAD293] text-black shadow-lg shadow-[#FAD293]/20"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
+            }`}
+          >
+            <FileCheck className="w-4 h-4" />
+            <span>My Documents</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfileSubTab("details")}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+              profileSubTab === "details"
+                ? "bg-[#FAD293] text-black shadow-lg shadow-[#FAD293]/20"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span>Personal Info &amp; Address</span>
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleProfileSubmit} className="space-y-6">
+      {/* SubTab Views */}
+      {profileSubTab === "vehicles" && <VehiclesTab />}
+
+      {profileSubTab === "documents" && <DocumentsTab />}
+
+      {profileSubTab === "details" && (
+        <div className="space-y-6">
+          <form onSubmit={handleProfileSubmit} className="space-y-6">
         {/* 2-Column Grid: Personal Info & Vehicle Info */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Card 1: Personal Information */}
@@ -651,159 +662,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
       </form>
 
-      {/* Card 3: Saved Address Management */}
-      <div className="rounded-2xl border border-[#33271d] bg-[#14100c] overflow-hidden shadow-xl">
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
-          <div>
-            <h3 className="font-semibold text-sm text-white">Address</h3>
-            <p className="text-[11px] text-white/40 mt-0.5">
-              Your saved service address & GPS coordinates
-            </p>
-          </div>
-          <div className="w-8 h-8 rounded-lg bg-[#FAD293]/10 border border-[#FAD293]/20 flex items-center justify-center text-[#FAD293]">
-            <MapPin size={16} />
-          </div>
         </div>
-
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Full Street Address
-              </label>
-              <input
-                type="text"
-                name="address"
-                value={address.address}
-                onChange={handleAddressChange}
-                placeholder="123, Vijay Nagar, Indore"
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition placeholder:text-white/20"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Label
-              </label>
-              <select
-                name="address_label"
-                value={address.address_label}
-                onChange={handleAddressChange}
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition"
-              >
-                <option value="Home" className="bg-[#14100c] text-white">
-                  Home
-                </option>
-                <option value="Work" className="bg-[#14100c] text-white">
-                  Work
-                </option>
-                <option value="Other" className="bg-[#14100c] text-white">
-                  Other
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Type
-              </label>
-              <select
-                name="address_type"
-                value={address.address_type}
-                onChange={handleAddressChange}
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition"
-              >
-                <option value="service" className="bg-[#14100c] text-white">
-                  Service
-                </option>
-                <option value="home" className="bg-[#14100c] text-white">
-                  Home
-                </option>
-                <option value="work" className="bg-[#14100c] text-white">
-                  Work
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Contact Name
-              </label>
-              <input
-                type="text"
-                name="contact_person_name"
-                value={address.contact_person_name}
-                onChange={handleAddressChange}
-                placeholder="e.g. John Doe"
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition placeholder:text-white/20"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Contact Number
-              </label>
-              <input
-                type="text"
-                name="contact_person_number"
-                value={address.contact_person_number}
-                onChange={handleAddressChange}
-                placeholder="e.g. 9009775909"
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition placeholder:text-white/20"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Latitude
-              </label>
-              <input
-                type="text"
-                name="lat"
-                value={address.lat}
-                onChange={handleAddressChange}
-                placeholder="22.7196"
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition placeholder:text-white/20"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1.5 uppercase tracking-wider">
-                Longitude
-              </label>
-              <input
-                type="text"
-                name="lon"
-                value={address.lon}
-                onChange={handleAddressChange}
-                placeholder="75.8577"
-                className="h-10 w-full rounded-xl border border-[#33271d] bg-[#0c0a08] px-3 text-xs text-white outline-none focus:border-[#FAD293] transition placeholder:text-white/20"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="button"
-              onClick={handleAddressSubmit}
-              disabled={savingAddress}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] to-[#d09a50] px-6 py-2.5 text-xs font-bold text-[#140e0a] shadow-md transition hover:brightness-105 disabled:opacity-60 cursor-pointer"
-            >
-              {savingAddress ? (
-                <>
-                  <Loader2 size={15} className="animate-spin" />
-                  <span>Saving Address...</span>
-                </>
-              ) : (
-                <>
-                  <MapPin size={15} />
-                  <span>Save Address</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

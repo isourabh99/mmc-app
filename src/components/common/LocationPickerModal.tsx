@@ -731,6 +731,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         localStorage.setItem("user_address", formattedLabel);
         localStorage.setItem("user_lat", String(lat));
         localStorage.setItem("user_lon", String(lon));
+        // Dynamically fetch and sync zone ID for newly selected coordinates
+        fetchZoneIdFromCoordinates(lat, lon).catch(() => {});
         localStorage.setItem("user_house", effectiveHouse);
         localStorage.setItem("house", effectiveHouse);
         localStorage.setItem("user_floor", effectiveFloor);

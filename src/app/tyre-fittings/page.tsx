@@ -1,3 +1,4 @@
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -1009,6 +1010,15 @@ export default function TyreAssistancePage() {
           </div>
         </div>
       )}
+      {/* ─── OUR WORK SHOWCASE ─── */}
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pb-16 relative z-10 border-t border-white/5 mt-12 pt-8">
+        <ServiceOurWorkShowcase
+          categoryId={TYRE_CATEGORY_ID}
+          categoryName="Tyre Fittings"
+          customSubtitle="Explore our verified mobile tyre fittings, roadside replacements, and high-performance tyre balancing."
+          viewAllUrl="/services/our-work"
+        />
+      </div>
     </main>
   );
 }

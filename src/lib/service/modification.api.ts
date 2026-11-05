@@ -1,3 +1,4 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import {
   ensureServiceAddressJson,
@@ -160,7 +161,7 @@ export interface BookingQuestionItem {
 export const getModificationCategories = async (): Promise<
   ModificationCategoryItem[]
 > => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const response = await apiClient.get<ModificationCategoriesResponse>(
     "/customer/category",
     {
@@ -277,7 +278,7 @@ export const getModificationServices = async (): Promise<
   ModificationServiceItem[]
 > => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
     const categoryId = await getModificationCategoryId();
 
     // 1. Try /customer/service/category/${categoryId}
@@ -373,7 +374,7 @@ export const searchModificationProviders = async (
   userLon?: string
 ): Promise<ProviderItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
     let effectiveServiceIds: string[] = [];
     let effectiveLat = "51.5074";
     let effectiveLon = "-0.1278";
@@ -459,7 +460,7 @@ export const getModificationProviders = searchModificationProviders;
 export const getModificationProviderDetails = async (
   providerId: string
 ): Promise<ProviderDetailsContent | null> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const response = await apiClient.get<ProviderDetailsResponse>(
     `/customer/provider/details/${providerId}`,
     {
@@ -576,7 +577,7 @@ export const sendModificationQuotationRequest = async (params: {
   car_image?: File | null;
   car_images?: File[];
 }): Promise<any> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const formData = new FormData();
 
   const primaryServiceId =
@@ -662,7 +663,7 @@ export const getCustomerQuotationPosts = async (
   limit: number = 100,
   offset: number = 0
 ): Promise<CustomerQuotationPostItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const response = await apiClient.get("/customer/post", {
     headers: {
       zoneid: zoneId,
@@ -695,7 +696,7 @@ export const getPostBidsList = async (
   }
 
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
     const response = await apiClient.get(`/customer/post/bid`, {
       headers: {
         zoneid: zoneId,
@@ -727,7 +728,7 @@ export const getProviderBookingSlots = async (
   providerIdOrParams: string | { provider_id: string; date?: string },
   dateOverride?: string
 ): Promise<BookingSlotItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const providerId =
     typeof providerIdOrParams === "string" ? providerIdOrParams : providerIdOrParams.provider_id;
   const effectiveDate =
@@ -757,7 +758,7 @@ export const getProviderBookingQuestions = async (
   providerId?: string,
   categoryId: string = BOOKING_QUESTIONS_CATEGORY_ID
 ): Promise<BookingQuestionItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const params: Record<string, string> = { category_id: categoryId };
   if (providerId) params.provider_id = providerId;
 

@@ -35,6 +35,7 @@ import {
 import {
   getEstimateDetails,
   acceptCustomerEstimate,
+  declineCustomerEstimate,
   normalizeEstimateImageUrl,
   EstimateItem,
 } from "@/lib/service/estimate.api";
@@ -59,6 +60,29 @@ function EstimateDetailInner() {
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [acceptedSuccess, setAcceptedSuccess] = useState(false);
+
+  // Decline Flow (with Special Note / Reason field)
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [declineReason, setDeclineReason] = useState("The estimated price is higher than my budget.");
+  const [declineSubmitting, setDeclineSubmitting] = useState(false);
+  const [declinedSuccess, setDeclinedSuccess] = useState(false);
+
+  const handleDeclineConfirm = async () => {
+    const tokenParam = getToken();
+    const idToUse = estimate?.id || estimate?.link_token || estimate?.readable_id || tokenParam;
+    try {
+      setDeclineSubmitting(true);
+      const res = await declineCustomerEstimate(idToUse, declineReason);
+      showToast(res.message || "Estimate declined successfully", "success");
+      setDeclinedSuccess(true);
+      setShowDeclineModal(false);
+      setEstimate((prev) => (prev ? { ...prev, status: "declined", notes: declineReason } : null));
+    } catch (err: any) {
+      showToast(err.message || "Failed to decline estimate", "error");
+    } finally {
+      setDeclineSubmitting(false);
+    }
+  };
 
   // Robust token extractor
   const getToken = useCallback((): string => {
@@ -276,6 +300,11 @@ function EstimateDetailInner() {
   const taxAmount = Number(estimate.tax_amount ?? estimate.vat_amount ?? 0);
   const discountAmount = Number(estimate.discount_amount ?? 0);
   const isAccepted = acceptedSuccess || (estimate.status || "").toLowerCase() === "accepted";
+  const isDeclined =
+    declinedSuccess ||
+    ["canceled", "cancelled", "declined", "rejected"].includes(
+      (estimate.status || "").toLowerCase()
+    );
 
   const carImages = estimate.car_images_full_path || (estimate.car_image_full_path ? [estimate.car_image_full_path] : []);
 
@@ -648,6 +677,25 @@ function EstimateDetailInner() {
                   </Link>
                 </div>
               </div>
+            ) : isDeclined ? (
+              <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+                  <X size={24} />
+                </div>
+                <h3 className="text-base font-bold text-white">Quotation Declined</h3>
+                <p className="text-xs text-white/60 max-w-md mx-auto">
+                  {estimate.notes ? `Reason: "${estimate.notes}"` : "You have declined this quotation estimate."}
+                </p>
+                <div className="pt-2">
+                  <Link
+                    href="/estimate"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white transition"
+                  >
+                    <span>Back to Provider Estimates</span>
+                    <ArrowRight size={13} />
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div className="space-y-4">
                 {/* Total Quote Box with 25% Deposit Eligible Badge */}
@@ -681,17 +729,28 @@ function EstimateDetailInner() {
                     </span>
                   </label>
 
-                  {/* Confirm Booking CTA */}
-                  <button
-                    type="button"
-                    disabled={!termsAccepted}
-                    onClick={() => setShowPaymentModal(true)}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base transition-all shadow-xl shadow-[#D5A054]/25 flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Sparkles size={16} />
-                    <span>Confirm Booking</span>
-                    <ArrowRight size={16} />
-                  </button>
+                  {/* Actions: Decline & Accept Buttons */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeclineModal(true)}
+                      className="w-full sm:w-1/3 py-4 rounded-2xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                    >
+                      <X size={16} />
+                      <span>Decline Estimate</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!termsAccepted}
+                      onClick={() => setShowPaymentModal(true)}
+                      className="w-full sm:w-2/3 py-4 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base transition-all shadow-xl shadow-[#D5A054]/25 flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles size={16} />
+                      <span>Accept & Confirm Booking</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-center gap-2 text-xs text-white/50 pt-1">
@@ -878,6 +937,108 @@ function EstimateDetailInner() {
                         : `PAY FULL AMOUNT (£${grandTotal.toFixed(2)})`}
                     </span>
                     <ArrowRight className="w-4 h-4 text-zinc-950" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── DECLINE ESTIMATE MODAL (With Special Note Field) ─── */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl border border-rose-500/30 bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                    <X size={14} />
+                  </span>
+                  <span>Decline Estimate</span>
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {estimateRef} • {estimate.provider?.company_name || "Specialist"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeclineModal(false)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Special Note Field */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
+                  Special Note / Reason for Decline <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  rows={3}
+                  placeholder="Enter special note or reason for declining this estimate..."
+                  className="w-full bg-[#191A1E] border border-zinc-800 focus:border-rose-500/70 rounded-2xl p-3.5 text-white text-xs placeholder:text-zinc-600 focus:outline-none transition-colors resize-none"
+                />
+              </div>
+
+              {/* Quick Select Reason Pills */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Quick Select Reason:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "The estimated price is higher than my budget.",
+                    "Currently our slots are fully booked for this time.",
+                    "Found another workshop / specialist.",
+                    "Repair no longer required.",
+                    "Timing does not fit my schedule.",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setDeclineReason(preset)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all text-left ${
+                        declineReason === preset
+                          ? "bg-rose-500/20 border-rose-500/50 text-rose-300 font-bold"
+                          : "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowDeclineModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 transition cursor-pointer"
+              >
+                Keep Estimate
+              </button>
+              <button
+                type="button"
+                onClick={handleDeclineConfirm}
+                disabled={declineSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {declineSubmitting ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Declining...</span>
+                  </>
+                ) : (
+                  <>
+                    <X size={13} strokeWidth={2.5} />
+                    <span>Confirm Decline</span>
                   </>
                 )}
               </button>
