@@ -70,21 +70,25 @@ export default function EmergencyCTA() {
               </div>
             </div>
 
-            {/* Right: Emergency Image Banner (7 cols on lg/desktop) */}
-            <div className="lg:col-span-7 relative min-h-[260px] sm:min-h-[320px] lg:min-h-full overflow-hidden rounded-b-3xl lg:rounded-b-none lg:rounded-r-3xl bg-black/60 border-t lg:border-t-0 lg:border-l border-white/5">
-              <Image
-                src="/Home-emeregency.jpeg"
-                alt="Motor Market Club Emergency Roadside Assistance"
-                fill
-                priority
-                sizes="(max-width: 1024px) 100vw, (max-width: 1600px) 60vw, 950px"
-                className="object-cover object-center"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-black/60 lg:from-black/30 via-transparent to-transparent pointer-events-none" />
-            </div>
+      
+<div className="lg:col-span-7 relative w-full min-h-[260px] sm:min-h-[340px] lg:min-h-[440px] overflow-hidden rounded-b-3xl lg:rounded-b-none lg:rounded-r-3xl bg-[#080706] border-t lg:border-t-0 lg:border-l border-[#CEA46B]/20">
+
+  <Image
+    src="/Home-emeregency.jpeg"
+    alt="Motor Market Club Emergency Roadside Assistance"
+    fill
+    priority
+    sizes="(max-width: 1024px) 100vw, 60vw"
+    className="object-cover object-center lg:object-[center_10%]"
+  />
+
+  <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-transparent pointer-events-none" />
+
+</div>
+
           </div>
         </div>
-      </div>  
+      </div>
     </section>
   );
 }

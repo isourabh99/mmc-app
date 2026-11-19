@@ -31,7 +31,9 @@ import {
   Building2,
   CheckCircle2,
   Printer,
+  Wallet,
 } from "lucide-react";
+import { getCustomerWalletInfo, buildAddFundPaymentUrl } from "@/lib/service/wallet.api";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import {
@@ -97,6 +99,68 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
   const [bookingForPayment, setBookingForPayment] = useState<UnifiedBookingItem | null>(null);
   const [payingRemaining, setPayingRemaining] = useState<boolean>(false);
   const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
+  const [paymentMethodForDue, setPaymentMethodForDue] = useState<"wallet_payment" | "stripe">("wallet_payment");
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [loadingWallet, setLoadingWallet] = useState<boolean>(false);
+  const [topUpAmount, setTopUpAmount] = useState<string>("50");
+  const [isTopUpLoading, setIsTopUpLoading] = useState<boolean>(false);
+
+  // Fetch wallet balance whenever due modal opens
+  useEffect(() => {
+    if (!bookingForPayment) return;
+    let isMounted = true;
+    setLoadingWallet(true);
+    getCustomerWalletInfo()
+      .then((info) => {
+        if (isMounted && info && info.wallet_balance !== undefined) {
+          setWalletBalance(Number(info.wallet_balance));
+        }
+      })
+      .catch((err) => console.warn("Failed to load wallet balance for due payment:", err))
+      .finally(() => {
+        if (isMounted) setLoadingWallet(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [bookingForPayment]);
+
+  // Restore due modal after wallet top-up return
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_due_payment=")) {
+      getCustomerWalletInfo().then((info) => {
+        if (info && info.wallet_balance !== undefined) {
+          setWalletBalance(Number(info.wallet_balance));
+        }
+      });
+      try {
+        const savedDueId = sessionStorage.getItem("mmc_due_payment_booking_id");
+        if (savedDueId && bookings && bookings.length > 0) {
+          const match = bookings.find(
+            (b) =>
+              String(b.id) === String(savedDueId) ||
+              String(b.rawId) === String(savedDueId) ||
+              String(b.readableId) === String(savedDueId)
+          );
+          if (match) {
+            setBookingForPayment(match);
+            setPaymentMethodForDue("wallet_payment");
+          }
+        }
+      } catch {}
+    }
+  }, [bookings]);
+
+  const handleOpenDuePayment = (item: UnifiedBookingItem) => {
+    setBookingForPayment(item);
+    setPaymentMethodForDue("wallet_payment");
+    setPaymentSuccess(false);
+    try {
+      sessionStorage.setItem("mmc_due_payment_booking_id", String(item.id || item.rawId));
+    } catch {}
+  };
   const [pendingBookingIdToOpen, setPendingBookingIdToOpen] = useState<string | null>(
     initialBookingId ? String(initialBookingId) : null
   );
@@ -115,16 +179,38 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
-      const isSuccess = urlParams.get("payment_success") === "true";
-      const paidBookingId = urlParams.get("bookingId") || urlParams.get("booking_id");
+      const flag = urlParams.get("flag");
+      const statusParam = urlParams.get("status");
+      const paymentStatusParam = urlParams.get("payment_status");
+      const isSuccess =
+        urlParams.get("payment_success") === "true" ||
+        flag === "success" ||
+        statusParam === "success" ||
+        paymentStatusParam === "paid" ||
+        paymentStatusParam === "success";
+      const lastPaidDueId = sessionStorage.getItem("mmc_last_paid_due_booking_id");
+      const paidBookingId =
+        urlParams.get("bookingId") ||
+        urlParams.get("booking_id") ||
+        urlParams.get("id") ||
+        lastPaidDueId;
       const targetBookingId = paidBookingId || urlParams.get("id");
 
       if (targetBookingId) {
         setPendingBookingIdToOpen(String(targetBookingId));
       }
 
-      if (isSuccess && paidBookingId) {
-        saveBookingMeta(paidBookingId, { isPaid: true, paymentStatus: "paid" });
+      if ((isSuccess || lastPaidDueId) && paidBookingId) {
+        saveBookingMeta(paidBookingId, {
+          isPaid: true,
+          isPartiallyPaid: false,
+          is_partial: 0,
+          dueAmount: 0,
+          paymentStatus: "paid",
+        });
+        if (lastPaidDueId) {
+          sessionStorage.removeItem("mmc_last_paid_due_booking_id");
+        }
         onRefresh();
         try {
           triggerDevicePushNotification(
@@ -406,6 +492,8 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
     switch (type) {
       case "chauffeur":
         return <Car className="w-4 h-4 text-[#FAD293]" />;
+      case "car":
+        return <Car className="w-4 h-4 text-blue-400" />;
       case "tyre":
         return <Disc className="w-4 h-4 text-[#FAD293]" />;
       case "emergency":
@@ -413,7 +501,9 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
       case "valet":
         return <Sparkles className="w-4 h-4 text-sky-400" />;
       case "bodywork":
-        return <Wrench className="w-4 h-4 text-amber-400" />;
+        return <Wrench className="w-4 h-4 text-orange-400" />;
+      case "mechanical":
+        return <Wrench className="w-4 h-4 text-emerald-400" />;
       case "modification":
       case "alloy":
         return <SlidersHorizontal className="w-4 h-4 text-purple-400" />;
@@ -426,6 +516,8 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
     switch (type) {
       case "chauffeur":
         return "bg-amber-500/10 text-[#FAD293] border-amber-500/30";
+      case "car":
+        return "bg-blue-500/10 text-blue-300 border-blue-500/30";
       case "tyre":
         return "bg-yellow-500/10 text-yellow-300 border-yellow-500/30";
       case "emergency":
@@ -434,6 +526,8 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
         return "bg-sky-500/10 text-sky-400 border-sky-500/30";
       case "bodywork":
         return "bg-orange-500/10 text-orange-400 border-orange-500/30";
+      case "mechanical":
+        return "bg-emerald-500/10 text-emerald-300 border-emerald-500/30";
       case "modification":
       case "alloy":
         return "bg-purple-500/10 text-purple-300 border-purple-500/30";
@@ -865,7 +959,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                               (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
                               "Customer Location, United Kingdom"}
                           </span>
-                          {(item.house || item.floor || item.street || item.city || item.raw?.service_address?.house || item.raw?.service_address?.floor || item.raw?.service_address?.street || item.raw?.service_address?.city) && (
+                          {false && (
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               {(item.house || item.raw?.service_address?.house) && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-[10px] text-[#FAD293] font-bold">
@@ -894,7 +988,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                               )}
                             </div>
                           )}
-                          {(item.coordinates?.latitude || item.raw?.service_address?.lat) && Number(item.coordinates?.latitude || item.raw?.service_address?.lat) !== 0 && (
+                          {false && (item.coordinates?.latitude || item.raw?.service_address?.lat) && Number(item.coordinates?.latitude || item.raw?.service_address?.lat) !== 0 && (
                             <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">
                               📍 Coordinates: {Number(item.coordinates?.latitude || item.raw?.service_address?.lat).toFixed(4)}, {Number(item.coordinates?.longitude || item.raw?.service_address?.lon).toFixed(4)}
                             </span>
@@ -910,7 +1004,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                             <span className="text-white font-medium break-words block">
                               {extractReadableAddress(item.destinationLocation)}
                             </span>
-                            {item.destinationCoordinates?.latitude && (
+                            {false && item.destinationCoordinates?.latitude && (
                               <span className="text-[10px] text-red-400 font-mono block mt-0.5">
                                 📍 Coordinates: {Number(item.destinationCoordinates.latitude).toFixed(4)}, {Number(item.destinationCoordinates.longitude).toFixed(4)}
                               </span>
@@ -1026,7 +1120,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                     {canPayDue && (
                       <button
                         type="button"
-                        onClick={() => setBookingForPayment(item)}
+                        onClick={() => handleOpenDuePayment(item)}
                         className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md shadow-[#D5A054]/20 cursor-pointer active:scale-95"
                       >
                         <CreditCard size={13} className="text-zinc-950" />
@@ -1221,10 +1315,19 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                         <span className="text-xs font-bold uppercase tracking-wider">Service Delivery</span>
                       </div>
                       <p className="text-sm font-bold text-white capitalize">
-                        {selectedBookingForModal.serviceNature || "Mobile repair"}
+                        {selectedBookingForModal.serviceNature ||
+                          (selectedBookingForModal.serviceType === "mechanical" ? "Mobile Mechanical Repair" : "Mobile Service")}
                       </p>
                       <span className="text-[11px] text-zinc-400 block">
-                        Provided At Customer Destination
+                        {selectedBookingForModal.serviceType === "chauffeur"
+                          ? "Professional Chauffeur Fleet Service"
+                          : selectedBookingForModal.serviceType === "car"
+                            ? "Vehicle Collection and Return"
+                            : selectedBookingForModal.serviceType === "emergency"
+                              ? "Rapid Emergency Roadside Dispatch"
+                              : selectedBookingForModal.serviceType === "valet"
+                                ? "Provided At Customer Destination"
+                                : "Certified Specialist Dispatched to Destination"}
                       </span>
                     </div>
                   </div>
@@ -1252,7 +1355,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           (typeof window !== "undefined" ? localStorage.getItem("user_address") : null) ||
                           "Customer Location, United Kingdom"}
                       </p>
-                      {(selectedBookingForModal.house || selectedBookingForModal.floor || selectedBookingForModal.street || selectedBookingForModal.city || selectedBookingForModal.raw?.service_address?.house || selectedBookingForModal.raw?.service_address?.floor || selectedBookingForModal.raw?.service_address?.street || selectedBookingForModal.raw?.service_address?.city) && (
+                      {false && selectedBookingForModal && (
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           {(selectedBookingForModal.house || selectedBookingForModal.raw?.service_address?.house) && (
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-[#251d16] border border-[#FAD293]/30 text-xs text-[#FAD293] font-semibold">
@@ -1276,7 +1379,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                           )}
                         </div>
                       )}
-                      {(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) && Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) !== 0 && (
+                      {false && selectedBookingForModal && (selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat) && (
                         <span className="text-[11px] text-emerald-400 font-mono block pt-1">
                           📍 Coordinates: {Number(selectedBookingForModal.coordinates?.latitude || selectedBookingForModal.raw?.service_address?.lat).toFixed(5)}, {Number(selectedBookingForModal.coordinates?.longitude || selectedBookingForModal.raw?.service_address?.lon).toFixed(5)}
                         </span>
@@ -1460,7 +1563,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                   {selectedBookingForModal.dueAmount > 0 && !selectedBookingForModal.isPaid && (
                     <button
                       type="button"
-                      onClick={() => setBookingForPayment(selectedBookingForModal)}
+                      onClick={() => selectedBookingForModal && handleOpenDuePayment(selectedBookingForModal)}
                       className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-110 text-zinc-950 font-black text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-[#D5A054]/25 cursor-pointer active:scale-95"
                     >
                       <CreditCard size={16} />
@@ -1502,10 +1605,245 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
         const totalAgreed = bookingForPayment.totalAmount;
         const dueToPay = bookingForPayment.dueAmount;
         const paidAlready = bookingForPayment.paidAmount;
+        const deficit = Math.max(0, dueToPay - walletBalance);
+
+        const suggestedAmounts = (() => {
+          const list: number[] = [];
+          const minNeeded = Math.max(5, Math.ceil(deficit));
+          if (minNeeded > 0) list.push(minNeeded);
+          [25, 50, 100, 250].forEach((amt) => {
+            if (!list.includes(amt) && amt >= minNeeded) {
+              list.push(amt);
+            }
+          });
+          return list.slice(0, 4);
+        })();
+
+        const handleDirectTopUpForDue = async () => {
+          const num = parseFloat(topUpAmount);
+          if (isNaN(num) || num < 5) {
+            window.dispatchEvent(
+              new CustomEvent("mmc-toast", {
+                detail: { message: "Minimum top-up amount is £5.00", type: "error" },
+              })
+            );
+            return;
+          }
+          setIsTopUpLoading(true);
+          try {
+            const customCallback = `${window.location.origin}/account?tab=bookings&wallet_topup=success&open_due_payment=${bookingForPayment?.id}&amount=${num.toFixed(2)}`;
+            const checkoutUrl = await buildAddFundPaymentUrl(num, customCallback);
+            if (checkoutUrl) {
+              window.location.href = checkoutUrl;
+            }
+          } catch (err: any) {
+            setIsTopUpLoading(false);
+            window.dispatchEvent(
+              new CustomEvent("mmc-toast", {
+                detail: { message: err?.message || "Failed to start wallet top-up", type: "error" },
+              })
+            );
+          }
+        };
+
+        const handleExecuteDuePayment = async () => {
+          if (payingRemaining || !bookingForPayment) return;
+          setPayingRemaining(true);
+
+          try {
+            const raw = bookingForPayment.raw || {};
+            const candidateIds = Array.from(
+              new Set([
+                raw.booking_id,
+                raw.car_booking_id,
+                raw.bookingId,
+                raw.id,
+                bookingForPayment.rawId,
+                bookingForPayment.id,
+              ].filter(Boolean).map(String))
+            );
+
+            const isWallet = paymentMethodForDue === "wallet_payment";
+
+            if (isWallet) {
+              if (walletBalance < dueToPay) {
+                window.dispatchEvent(
+                  new CustomEvent("mmc-toast", {
+                    detail: { message: "Insufficient wallet balance. Please top-up above.", type: "error" },
+                  })
+                );
+                setPayingRemaining(false);
+                return;
+              }
+
+              let successfulId = candidateIds[0] || String(bookingForPayment.id);
+
+              for (const cid of candidateIds) {
+                try {
+                  const res = await switchBookingPaymentMethod(
+                    String(cid),
+                    "wallet_payment",
+                    `${typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk"}/booking-success`,
+                    0,
+                    "web"
+                  );
+                  if (res.success) {
+                    successfulId = String(cid);
+                    break;
+                  }
+                } catch (e: any) {
+                  console.warn("[BookingsTab] wallet switch retry for ID:", cid, e?.message);
+                }
+              }
+
+              // Update meta & confirmed records
+              const allIdsToUpdate = Array.from(
+                new Set([
+                  String(bookingForPayment.id),
+                  String(bookingForPayment.rawId),
+                  successfulId,
+                  String(bookingForPayment.readableId || ""),
+                ].filter(Boolean))
+              );
+
+              allIdsToUpdate.forEach((idToUpdate) => {
+                saveBookingMeta(idToUpdate, {
+                  isPaid: true,
+                  isPartiallyPaid: false,
+                  is_partial: 0,
+                  dueAmount: 0,
+                  paidAmount: bookingForPayment.totalAmount,
+                  paymentStatus: "paid",
+                });
+              });
+
+              setPaymentSuccess(true);
+              window.dispatchEvent(
+                new CustomEvent("mmc-toast", {
+                  detail: {
+                    message: `£${dueToPay.toFixed(2)} deducted from Wallet! Remaining balance paid in full.`,
+                    type: "success",
+                  },
+                })
+              );
+
+              // Refresh wallet balance
+              getCustomerWalletInfo().then((info) => {
+                if (info && info.wallet_balance !== undefined) {
+                  setWalletBalance(Number(info.wallet_balance));
+                }
+              });
+
+              // Refresh bookings
+              onRefresh();
+
+              setTimeout(() => {
+                setBookingForPayment(null);
+                setPaymentSuccess(false);
+                setPayingRemaining(false);
+              }, 1200);
+
+              return;
+            }
+
+            // Stripe Flow
+            let redirectUrl = "";
+            let successfulId = candidateIds[0] || String(bookingForPayment.id);
+            for (const cid of candidateIds) {
+              try {
+                const res = await switchBookingPaymentMethod(
+                  String(cid),
+                  "stripe",
+                  `${typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk"}/booking-success`,
+                  0,
+                  "web"
+                );
+                if (res.redirect_url) {
+                  redirectUrl = res.redirect_url;
+                  successfulId = String(cid);
+                  break;
+                }
+              } catch (e: any) {
+                console.warn("[BookingsTab] switch-payment-method retry for ID:", cid, e?.message);
+              }
+            }
+
+            if (!redirectUrl) {
+              const targetId = candidateIds[0] || bookingForPayment.id;
+              if (targetId) {
+                const successCallback = `${typeof window !== "undefined" ? window.location.origin : "https://mmcclub.co.uk"}/booking-success`;
+                redirectUrl = `${getBackendRootUrl() || "https://mmcclub.co.uk/backend"}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0&callback=${encodeURIComponent(successCallback)}`;
+                successfulId = String(targetId);
+              }
+            }
+
+            if (!redirectUrl) {
+              setPayingRemaining(false);
+              window.dispatchEvent(
+                new CustomEvent("mmc-toast", {
+                  detail: {
+                    message: "Unable to initiate payment gateway. Please try again.",
+                    type: "error",
+                  },
+                })
+              );
+              return;
+            }
+
+            if (typeof window !== "undefined") {
+              const allIdsToUpdate = Array.from(
+                new Set([
+                  String(bookingForPayment.id),
+                  String(bookingForPayment.rawId),
+                  successfulId,
+                  String(bookingForPayment.readableId || ""),
+                ].filter(Boolean))
+              );
+
+              sessionStorage.setItem("mmc_last_paid_due_booking_id", successfulId);
+              sessionStorage.setItem("mmc_is_due_payment", "1");
+              sessionStorage.setItem(
+                "mmc_pending_booking",
+                JSON.stringify({
+                  booking_id: successfulId,
+                  readable_id: formatToNumericBookingId(bookingForPayment.readableId || bookingForPayment.id),
+                  service_name: bookingForPayment.serviceTitle,
+                  price: bookingForPayment.totalAmount,
+                  is_partial: 0,
+                  deposit_amount: bookingForPayment.totalAmount,
+                  provider: {
+                    company_name: bookingForPayment.providerName,
+                    company_phone: bookingForPayment.providerPhone,
+                  },
+                  schedule: bookingForPayment.scheduleTime
+                    ? `${bookingForPayment.scheduleDate} ${bookingForPayment.scheduleTime}`
+                    : bookingForPayment.scheduleDate,
+                })
+              );
+
+              allIdsToUpdate.forEach((idToUpdate) => {
+                saveBookingMeta(idToUpdate, {
+                  isPaid: true,
+                  isPartiallyPaid: false,
+                  is_partial: 0,
+                  dueAmount: 0,
+                  paidAmount: bookingForPayment.totalAmount,
+                  paymentStatus: "paid",
+                });
+              });
+            }
+
+            console.log("[Payment] Redirecting to Stripe:", redirectUrl);
+            window.location.href = redirectUrl;
+          } catch (err: any) {
+            console.error("Payment initiation failed:", err);
+            setPayingRemaining(false);
+          }
+        };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-            <div className="relative w-full max-w-md bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl animate-scale-up text-left">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in text-white">
+            <div className="relative w-full max-w-md bg-[#141518] border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl animate-scale-up text-left max-h-[90vh] overflow-y-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -1551,18 +1889,164 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
                 </div>
               </div>
 
-              {/* Payment method selector - Online Only (No Cash Allowed) */}
-              <div className="p-4 rounded-2xl border border-[#D5A054]/40 bg-[#1C1A16] flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#FAD293]/20 border border-[#FAD293]/40 flex items-center justify-center text-[#FAD293]">
-                    <CreditCard size={18} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-white block">Online Payment (Stripe)</span>
-                    <span className="text-[11px] text-zinc-400">Debit / Credit Card, Apple Pay, Google Pay</span>
+              {/* Payment Method Selector */}
+              <div className="space-y-3 pt-1">
+                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Select Payment Method
+                </span>
+
+                {/* Option 1: MMC Digital Wallet */}
+                <div
+                  onClick={() => setPaymentMethodForDue("wallet_payment")}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-2 ${
+                    paymentMethodForDue === "wallet_payment"
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                        <Wallet size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-white">
+                            MMC Digital Wallet
+                          </span>
+                          <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[9px] font-black px-1.5 py-0.5 rounded border border-[#D5A054]/40 uppercase tracking-wider">
+                            INSTANT 1-CLICK
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          Available Balance:{" "}
+                          <span className="font-extrabold text-[#E8AF66]">
+                            £{walletBalance.toFixed(2)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                        paymentMethodForDue === "wallet_payment"
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
+                      }`}
+                    >
+                      {paymentMethodForDue === "wallet_payment" && (
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      )}
+                    </div>
                   </div>
                 </div>
-                <Check className="w-4 h-4 text-[#FAD293]" />
+
+                {/* In-Modal Wallet Top-Up Card if Insufficient Balance */}
+                {paymentMethodForDue === "wallet_payment" && walletBalance < dueToPay && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-[#E8AF66] shrink-0" />
+                        <span className="font-black text-[#E8AF66] uppercase text-[10px] tracking-wider">
+                          Insufficient Wallet Balance
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-400">
+                        Need +£{(dueToPay - walletBalance).toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      Your wallet has <span className="font-bold text-white">£{walletBalance.toFixed(2)}</span>, but <span className="font-bold text-white">£{dueToPay.toFixed(2)}</span> is due. Add funds below to complete payment instantly on this screen.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {suggestedAmounts.map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setTopUpAmount(String(amt))}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              topUpAmount === String(amt)
+                                ? "bg-[#D5A054] text-zinc-950"
+                                : "bg-black/50 border border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                            }`}
+                          >
+                            £{amt}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">
+                            £
+                          </span>
+                          <input
+                            type="number"
+                            min="5"
+                            step="1"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value)}
+                            className="w-full pl-7 pr-3 py-2 bg-black/60 border border-zinc-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-[#D5A054]"
+                            placeholder="Amount"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDirectTopUpForDue}
+                          disabled={isTopUpLoading}
+                          className="px-4 py-2 bg-[#D5A054] hover:brightness-105 active:scale-95 text-zinc-950 text-xs font-black uppercase rounded-xl transition flex items-center gap-1.5 shrink-0 disabled:opacity-50 cursor-pointer"
+                        >
+                          {isTopUpLoading ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          )}
+                          <span>Top-Up £{topUpAmount}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Option 2: Online Payment (Stripe) */}
+                <div
+                  onClick={() => setPaymentMethodForDue("stripe")}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-2 ${
+                    paymentMethodForDue === "stripe"
+                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
+                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 shrink-0">
+                        <CreditCard size={18} className="text-[#E8AF66]" />
+                      </div>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold text-white block">
+                          Online Card Payment (Stripe)
+                        </span>
+                        <span className="text-[11px] text-zinc-400">
+                          Debit / Credit Card, Apple Pay, Google Pay
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
+                        paymentMethodForDue === "stripe"
+                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
+                          : "border-zinc-700 bg-zinc-900"
+                      }`}
+                    >
+                      {paymentMethodForDue === "stripe" && (
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {paymentSuccess ? (
@@ -1574,72 +2058,27 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
               ) : (
                 <button
                   type="button"
-                  onClick={async () => {
-                    setPayingRemaining(true);
-                    try {
-                      const raw = bookingForPayment.raw || {};
-                      const candidateIds = [
-                        raw.booking_id,
-                        raw.bookingId,
-                        raw.id,
-                        raw.payment_id,
-                        raw.stripe_payment_id,
-                        bookingForPayment.rawId,
-                        bookingForPayment.id,
-                      ].filter(Boolean);
-
-                      let redirectUrl = "";
-                      for (const cid of candidateIds) {
-                        try {
-                          const res = await switchBookingPaymentMethod(String(cid), "stripe");
-                          if (res.redirect_url) {
-                            redirectUrl = res.redirect_url;
-                            break;
-                          }
-                        } catch (e: any) {
-                          console.warn("[BookingsTab] switch-payment-method retry for ID:", cid, e?.message);
-                        }
-                      }
-
-                      if (!redirectUrl) {
-                        const targetId = candidateIds[0] || bookingForPayment.id;
-                        if (targetId) {
-                          redirectUrl = `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(String(targetId))}&is_partial=0`;
-                        }
-                      }
-
-                      if (!redirectUrl) {
-                        setPayingRemaining(false);
-                        window.dispatchEvent(
-                          new CustomEvent("mmc-toast", {
-                            detail: {
-                              message: "Unable to initiate payment gateway. Please try again.",
-                              type: "error",
-                            },
-                          })
-                        );
-                        return;
-                      }
-
-                      console.log("[Payment] Redirecting to Stripe:", redirectUrl);
-                      window.location.href = redirectUrl;
-                    } catch (err: any) {
-                      console.error("Payment initiation failed:", err);
-                      setPayingRemaining(false);
-                    }
-                  }}
-                  disabled={payingRemaining}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
+                  onClick={handleExecuteDuePayment}
+                  disabled={payingRemaining || (paymentMethodForDue === "wallet_payment" && walletBalance < dueToPay)}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-xl shadow-[#D5A054]/20 cursor-pointer disabled:opacity-50"
                 >
                   {payingRemaining ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
-                      <span>Connecting to Stripe Gateway...</span>
+                      <span>
+                        {paymentMethodForDue === "wallet_payment"
+                          ? "Deducting from Wallet & Confirming..."
+                          : "Connecting to Stripe Gateway..."}
+                      </span>
                     </>
+                  ) : paymentMethodForDue === "wallet_payment" && walletBalance < dueToPay ? (
+                    <span>Top-Up Wallet Above to Pay Due</span>
                   ) : (
                     <>
                       <span>
-                        Pay Due £{dueToPay.toFixed(2)} Online Now
+                        {paymentMethodForDue === "wallet_payment"
+                          ? `Pay Due £${dueToPay.toFixed(2)} from Wallet`
+                          : `Pay Due £${dueToPay.toFixed(2)} Online Now`}
                       </span>
                       <ArrowRight size={14} />
                     </>
@@ -1648,8 +2087,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({
               )}
             </div>
           </div>
-        );
-      })()}
+        );      })()}
     </div>
   );
 };

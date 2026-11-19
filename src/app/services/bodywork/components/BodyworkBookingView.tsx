@@ -33,6 +33,7 @@ import type {
     BookingQuestionItem,
     CustomerQuotationPostItem,
 } from "@/lib/service/bodywork.api";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 
 interface BodyworkBookingViewProps {
     provider: ProviderItem;
@@ -115,6 +116,20 @@ export default function BodyworkBookingView({
 }: BodyworkBookingViewProps) {
     const router = useRouter();
     const [showPaymentModal, setShowPaymentModal] = React.useState(false);
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return;
+        const search = window.location.search || window.location.href;
+        if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+            setShowPaymentModal(true);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (bookingConfirmed) {
+            setShowPaymentModal(false);
+        }
+    }, [bookingConfirmed]);
 
     const numericPrice = React.useMemo(() => {
         if (bidOffer?.offered_price) {
@@ -525,187 +540,23 @@ export default function BodyworkBookingView({
                 </div>
             </div>
 
-            {/* Select Payment Method Modal / Bottom Sheet (Matches UI Screen 2) */}
-            {showPaymentModal && (
-                <div 
-                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-                    onClick={() => setShowPaymentModal(false)}
-                >
-                    <div
-                        className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Drag Handle for Mobile */}
-                        <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
-
-                        {/* Modal Header */}
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <h3 className="text-xl sm:text-2xl font-black text-white">
-                                    Select Payment Method
-                                </h3>
-                                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                                    Choose how you want to pay for this service
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowPaymentModal(false)}
-                                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        {/* Payment Options (Matches UI Screen 2) */}
-                        <div className="space-y-3.5 pt-1">
-                            {/* Option 1: Deposit (25% Advance) */}
-                            <div
-                                onClick={() => {
-                                    onPaymentMethodChange("stripe");
-                                    if (onPartialPaymentChange) onPartialPaymentChange(true);
-                                }}
-                                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                                    bookingPaymentMethod === "stripe" && isPartialPayment
-                                        ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                                        : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                                }`}
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3.5">
-                                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                                            <Banknote className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
-                                                <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                                                    25% Advance
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-zinc-400 mt-0.5">
-                                                Pay 25% deposit now to confirm booking
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                                            bookingPaymentMethod === "stripe" && isPartialPayment
-                                                ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                                                : "border-zinc-700 bg-zinc-900"
-                                        }`}
-                                    >
-                                        {bookingPaymentMethod === "stripe" && isPartialPayment && (
-                                            <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                                    <div className="flex items-center justify-between font-bold">
-                                        <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                                        <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                                        <span>Due after service (75%):</span>
-                                        <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Option 2: Online Payment (Full 100%) */}
-                            <div
-                                onClick={() => {
-                                    onPaymentMethodChange("stripe");
-                                    if (onPartialPaymentChange) onPartialPaymentChange(false);
-                                }}
-                                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                                    bookingPaymentMethod === "stripe" && !isPartialPayment
-                                        ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                                        : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                                }`}
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3.5">
-                                        <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                                            <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                                        </div>
-                                        <div>
-                                            <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
-                                            <p className="text-xs text-zinc-400 mt-0.5">
-                                                Pay full amount now online
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                                            bookingPaymentMethod === "stripe" && !isPartialPayment
-                                                ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                                                : "border-zinc-700 bg-zinc-900"
-                                        }`}
-                                    >
-                                        {bookingPaymentMethod === "stripe" && !isPartialPayment && (
-                                            <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                                    <span className="text-zinc-300">Amount Due Now:</span>
-                                    <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Informational Callout Box */}
-                        <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
-                            <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
-                            <div className="space-y-1">
-                                <span className="text-xs font-bold text-[#E8AF66] block">
-                                    {isPartialPayment
-                                        ? "25% Advance Payment Required"
-                                        : "100% Online Secure Payment"}
-                                </span>
-                                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                                    {isPartialPayment
-                                        ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the repair service is completed."
-                                        : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Pay Button */}
-                        <div className="pt-2">
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    await onSubmitBooking();
-                                }}
-                                disabled={submittingBooking}
-                                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
-                            >
-                                {submittingBooking ? (
-                                    <>
-                                        <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                                        <span>Redirecting to Payment Gateway...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>
-                                            {isPartialPayment
-                                                ? `Pay Deposit (£${depositAmount})`
-                                                : `Pay Full Amount (£${totalAmountFormatted})`}
-                                        </span>
-                                        <ArrowRight className="w-5 h-5 text-zinc-950" />
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Select Payment Method Modal (Wallet vs Stripe • 25% Deposit vs Full 100%) */}
+            <PaymentSelectionModal
+                isOpen={showPaymentModal}
+                onClose={() => setShowPaymentModal(false)}
+                totalAmount={numericPrice}
+                selectedMethod={bookingPaymentMethod as any}
+                onMethodChange={(m) => onPaymentMethodChange(m)}
+                isPartial={isPartialPayment}
+                onPartialChange={(p) => onPartialPaymentChange && onPartialPaymentChange(p)}
+                onConfirm={async () => {
+                    await onSubmitBooking();
+                    setShowPaymentModal(false);
+                }}
+                loading={submittingBooking}
+                serviceTitle="Bodywork & Paint Repair"
+                allowCash={false}
+            />
         </div>
     );
 }

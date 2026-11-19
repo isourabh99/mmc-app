@@ -28,23 +28,50 @@ apiClient.interceptors.request.use(
 
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("token");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+      const skipAuth =
+        (config.headers as any)?.skipAuth ||
+        (config.headers as any)?.noAuth ||
+        (config as any)?.skipAuth;
+
+      if (skipAuth) {
+        if (config.headers?.delete) {
+          config.headers.delete("Authorization");
+          config.headers.delete("authorization");
+          config.headers.delete("skipAuth");
+          config.headers.delete("noAuth");
+        } else {
+          delete (config.headers as any).Authorization;
+          delete (config.headers as any).authorization;
+          delete (config.headers as any).skipAuth;
+          delete (config.headers as any).noAuth;
+        }
+      } else {
+        if (token && !(config.headers as any)?.Authorization) {
+          if (config.headers?.set) {
+            config.headers.set("Authorization", `Bearer ${token}`);
+          } else {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        }
       }
 
-      let storedZone =
-        localStorage.getItem("zone_id") ||
-        localStorage.getItem("zoneid") ||
-        localStorage.getItem("zoneId");
+      // Clean up duplicate legacy keys from localStorage
+      if (localStorage.getItem("zoneid")) localStorage.removeItem("zoneid");
+      if (localStorage.getItem("zoneId")) localStorage.removeItem("zoneId");
+      if (localStorage.getItem("zone-id")) localStorage.removeItem("zone-id");
+
+      let storedZone = localStorage.getItem("zone_id");
 
       if (
         !storedZone ||
         storedZone === "undefined" ||
         storedZone === "null" ||
         storedZone === "[object Object]" ||
+        storedZone === "a1614dbe-4732-11ee-9702-dee6e8d77be4" ||
         storedZone.trim().length === 0
       ) {
-        storedZone = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+        storedZone = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+        localStorage.setItem("zone_id", storedZone);
       }
 
       const hasZoneHeader =
@@ -58,13 +85,11 @@ apiClient.interceptors.request.use(
 
       if (!hasZoneHeader) {
         if (config.headers?.set) {
-          config.headers.set("zoneid", storedZone);
-          config.headers.set("ZoneId", storedZone);
           config.headers.set("zone-id", storedZone);
+          config.headers.set("zoneid", storedZone);
         } else {
-          config.headers.zoneid = storedZone;
-          config.headers.ZoneId = storedZone;
           config.headers["zone-id"] = storedZone;
+          config.headers.zoneid = storedZone;
         }
       }
 

@@ -14,6 +14,7 @@ import {
   Calendar,
   Clock,
   CreditCard,
+  Wallet,
   ShieldCheck,
   Fuel,
   Users,
@@ -38,7 +39,9 @@ import {
 import apiClient from "@/lib/http/apiClient";
 import { LocationSearchInput } from "@/components/chauffeur/LocationSearchInput";
 import { isAuthenticated } from "@/lib/auth.api";
-import { saveBookingMeta } from "@/lib/service/bookings.api";
+import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { useToast } from "@/components/ToastProvider";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 
 interface ChauffeurBookingModalProps {
   bookingChauffeur: Chauffeur | null;
@@ -56,6 +59,15 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
   onProceedFromDetailsToBooking,
 }) => {
   const router = useRouter();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      setShowPaymentModal(true);
+    }
+  }, []);
 
   // Booking Form Inputs
   const [pickupLocation, setPickupLocation] = useState("");
@@ -86,7 +98,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
   );
   const [pickupTime, setPickupTime] = useState("10:00 AM");
   const [dropTime, setDropTime] = useState("10:00 PM");
-  const [paymentMethod, setPaymentMethod] = useState("stripe");
+  const [paymentMethod, setPaymentMethod] = useState("wallet_payment");
   const [bookingNote, setBookingNote] = useState("");
 
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -233,7 +245,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         drop_coordinates: finalDropCoords,
         street: pickupStreet.trim() || undefined,
         city: pickupCity.trim() || undefined,
-        payment_method: "stripe",
+        payment_method: paymentMethod === "wallet_payment" ? "wallet_payment" : "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
         callback: callbackUrl,
@@ -251,6 +263,44 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         res.content?.id ||
         "MMC-CHF-" + Date.now().toString().slice(-6)
       );
+
+
+      if (paymentMethod === "wallet_payment") {
+        saveConfirmedBooking({
+          id: bookingRef,
+          rawId: bookingRef,
+          readableId: bookingRef,
+          serviceType: "chauffeur",
+          serviceCategoryName: "Chauffeur Services",
+          serviceTitle: `Executive Chauffeur: ${bookingChauffeur.brand} ${bookingChauffeur.model || ""}`,
+          providerName: (bookingChauffeur as any).company_name || bookingChauffeur.brand || "Motor Market Club Chauffeur",
+          pickupLocation: pickupLocation,
+          locationAddress: pickupLocation,
+          totalAmount: numericPrice,
+          paidAmount: isPartialPayment ? Number(depositAmount) : numericPrice,
+          dueAmount: isPartialPayment ? Number(remainingAmount) : 0,
+          isPaid: true,
+          isPartiallyPaid: isPartialPayment,
+          paymentStatus: isPartialPayment ? "Deposit Paid via Wallet (25%)" : "Paid via Wallet",
+          paymentMethod: "MMC Wallet",
+          status: "accepted",
+          scheduleDate: startDate,
+          scheduleTime: pickupTime,
+          createdAt: new Date().toISOString(),
+        });
+
+        showToast(`Payment of £${isPartialPayment ? depositAmount : totalAmountFormatted} deducted from Wallet! Chauffeur confirmed!`, "success");
+        setBookingSuccessModal({
+          open: true,
+          reference: bookingRef,
+          message: `Your chauffeur booking #${bookingRef} is confirmed!`,
+          totalAmount: isPartialPayment ? Number(depositAmount) : numericPrice,
+          carName: `${bookingChauffeur.brand} ${bookingChauffeur.model || ""}`,
+        });
+        setShowPaymentModal(false);
+        setBookingLoading(false);
+        return;
+      }
 
       let redirectLink =
         (res as any)?.content?.url ||
@@ -326,8 +376,7 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         vehicleModel: `${bookingChauffeur.brand} ${bookingChauffeur.model}`,
         providerName: bookingChauffeur.provider?.company_name || "Motor Market Club Chauffeur Fleet",
         price: numericPrice,
-        pickup_location: pickupLocation,
-        drop_location: dropLocation,
+        pickupLocation: pickupLocation,
         street: pickupStreet.trim() || undefined,
         city: pickupCity.trim() || undefined,
         scheduleDate: startDate,
@@ -490,17 +539,9 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
                     setPickupCoordinates(coords);
                     if (details?.street) {
                       setPickupStreet(details.street);
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_street", details.street);
-                        localStorage.setItem("street", details.street);
-                      }
                     }
                     if (details?.city) {
                       setPickupCity(details.city);
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_city", details.city);
-                        localStorage.setItem("city", details.city);
-                      }
                     }
                   }}
                   required
@@ -596,11 +637,10 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
                   Payment Method
                 </span>
 
-                <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2 pt-1">
                   {[
+                    { id: "wallet_payment", label: "MMC Wallet", icon: Wallet },
                     { id: "stripe", label: "Stripe Checkout", icon: CreditCard },
-                    { id: "digital", label: "Digital Pay", icon: ShieldCheck },
-                    { id: "cash", label: "Pay On Trip", icon: Star },
                   ].map((method) => {
                     const isSelected = paymentMethod === method.id;
                     const Icon = method.icon;
@@ -684,168 +724,19 @@ export const ChauffeurBookingModal: React.FC<ChauffeurBookingModalProps> = ({
         </div>
       )}
 
-      {/* =========================================================================
-          1.5. SELECT PAYMENT METHOD MODAL (DEPOSIT 25% VS 100% ONLINE)
-      ========================================================================== */}
-      {showPaymentModal && bookingChauffeur && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-          onClick={() => setShowPaymentModal(false)}
-        >
-          <div
-            className="bg-[#141518] border border-[#FAD293]/30 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  Select Payment Method
-                </h3>
-                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                  Choose how you want to pay for this chauffeur service
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Payment Options (Deposit 25% vs Full 100%) */}
-            <div className="space-y-3.5 pt-1">
-              {/* Option 1: Deposit (25% Advance) */}
-              <div
-                onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                      <Banknote className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
-                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                          25% ADVANCE
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay 25% deposit now to confirm booking
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold">
-                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                    <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                    <span>Due after service (75%):</span>
-                    <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Option 2: Online Payment (Full 100%) */}
-              <div
-                onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                    </div>
-                    <div>
-                      <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay full amount now online
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                  <span className="text-zinc-300">Amount Due Now:</span>
-                  <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Informational Callout Box */}
-            <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
-              <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-[#E8AF66] block">
-                  {isPartialPayment ? "25% Advance Payment Required" : "100% Online Secure Payment"}
-                </span>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  {isPartialPayment
-                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the service is completed."
-                    : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
-                </p>
-              </div>
-            </div>
-
-            {/* Pay Button */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={executeChauffeurBooking}
-                disabled={bookingLoading}
-                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
-              >
-                {bookingLoading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                    <span>Redirecting to Stripe Gateway...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      {isPartialPayment
-                        ? `PAY DEPOSIT (£${depositAmount})`
-                        : `PAY FULL AMOUNT (£${totalAmountFormatted})`}
-                    </span>
-                    <ArrowRight className="w-5 h-5 text-zinc-950" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Unified Payment Selection Modal */}
+      <PaymentSelectionModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        totalAmount={numericPrice}
+        selectedMethod={paymentMethod as any}
+        onMethodChange={(m) => setPaymentMethod(m as any)}
+        isPartial={isPartialPayment}
+        onPartialChange={setIsPartialPayment}
+        onConfirm={executeChauffeurBooking}
+        loading={bookingLoading}
+        serviceTitle={bookingChauffeur ? `Executive Chauffeur: ${bookingChauffeur.brand} ${bookingChauffeur.model || ""}` : "Chauffeur Service"}
+      />
 
       {/* =========================================================================
           2. LUXURY VEHICLE DETAILS MODAL

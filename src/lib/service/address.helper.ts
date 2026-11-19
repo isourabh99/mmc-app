@@ -282,25 +282,7 @@ export async function saveCustomerAddressToBackend(
 
     if (typeof window !== "undefined") {
       localStorage.setItem("service_address", serviceAddressJson);
-      localStorage.setItem("service_address_json", serviceAddressJson);
-      localStorage.setItem("customer_service_address", serviceAddressJson);
-      localStorage.setItem("postcode", payload.zip_code);
-      localStorage.setItem("user_postcode", payload.zip_code);
       localStorage.setItem("service_address_id", String(addressId));
-      localStorage.setItem("address_id", String(addressId));
-      localStorage.setItem("user_lat", String(payload.lat));
-      localStorage.setItem("user_lon", String(payload.lon));
-      localStorage.setItem("user_address", payload.address);
-      localStorage.setItem("user_city", payload.city);
-      localStorage.setItem("user_street", payload.street);
-      if (payload.house) {
-        localStorage.setItem("user_house", payload.house);
-        localStorage.setItem("house", payload.house);
-      }
-      if (payload.floor) {
-        localStorage.setItem("user_floor", payload.floor);
-        localStorage.setItem("floor", payload.floor);
-      }
     }
 
     return {

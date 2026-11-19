@@ -68,10 +68,13 @@ import {
   getServiceFormDraft,
   clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
 import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
 
 type ActiveView = "hero" | "providers" | "booking" | "payment" | "success";
+
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
 
 export default function MechanicalPage() {
   const router = useRouter();
@@ -136,10 +139,10 @@ export default function MechanicalPage() {
   const [loadingCart, setLoadingCart] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
-  // Payment Modal & Method State (Matches Bodywork / Alloy UI)
+  // Payment Modal & Method State (Wallet vs Stripe • 25% Deposit vs Full 100%)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPartialPayment, setIsPartialPayment] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+  const [paymentMethod, setPaymentMethod] = useState<"cash_after_service" | "stripe" | "wallet_payment">("wallet_payment");
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingSuccessData, setBookingSuccessData] = useState<any>(null);
 
@@ -147,7 +150,33 @@ export default function MechanicalPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      const searchStr = window.location.search || window.location.href;
       const searchParams = new URLSearchParams(window.location.search);
+      const isWalletTopUp = searchStr.includes("wallet_topup=success") || searchParams.get("wallet_topup") === "success";
+      if (isWalletTopUp) {
+        const savedProvider = sessionStorage.getItem("mmc_current_mechanical_provider");
+        if (savedProvider) {
+          try {
+            setSelectedProvider(JSON.parse(savedProvider));
+            setView("booking");
+          } catch { }
+        }
+        setShowPaymentModal(true);
+        const topUpAmt = searchParams.get("topup_amount") || searchParams.get("amount");
+        showToast(`Wallet topped up with £${topUpAmt || ""} successfully! Balance updated.`, "success");
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("wallet_topup");
+        cleanUrl.searchParams.delete("topup_amount");
+        cleanUrl.searchParams.delete("open_payment");
+        cleanUrl.searchParams.delete("reopen_payment");
+        cleanUrl.searchParams.delete("status");
+        cleanUrl.searchParams.delete("payment_status");
+        cleanUrl.searchParams.delete("payment");
+        cleanUrl.searchParams.delete("flag");
+        window.history.replaceState({}, document.title, cleanUrl.toString());
+        return;
+      }
+
       const status = searchParams.get("status") || searchParams.get("payment_status") || searchParams.get("payment") || searchParams.get("flag");
       const bookingId = searchParams.get("booking_id") || searchParams.get("readable_id");
 
@@ -184,7 +213,6 @@ export default function MechanicalPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
-    localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
     const storedLat = localStorage.getItem("user_lat");
     const storedLon = localStorage.getItem("user_lon");
@@ -441,6 +469,11 @@ export default function MechanicalPage() {
 
   const handleOpenBooking = (provider: MechanicalProviderItem) => {
     setSelectedProvider(provider);
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("mmc_current_mechanical_provider", JSON.stringify(provider));
+      } catch { }
+    }
     setBookingError(null);
     setBookingTermsAgreed(false);
     setView("booking");
@@ -660,9 +693,19 @@ export default function MechanicalPage() {
         street: street || "",
         city: city || "",
         totalAmount: numericPrice,
-        isPaid: false,
-        paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
-        paymentMethod: "Stripe (Online)",
+        isPaid: paymentMethod === "wallet_payment",
+        paymentStatus:
+          paymentMethod === "wallet_payment"
+            ? isPartialPayment
+              ? "Partial Deposit Paid (Wallet)"
+              : "Paid in Full (Wallet)"
+            : isPartialPayment
+            ? "Partial Deposit"
+            : "Pending Payment",
+        paymentMethod:
+          paymentMethod === "wallet_payment"
+            ? "MMC Digital Wallet"
+            : "Stripe (Online)",
         status: "pending",
         statusDisplay: "Pending",
         scheduleDate: bookingDate,
@@ -672,6 +715,17 @@ export default function MechanicalPage() {
         vehicleReg: regNo.trim() || "AB24 MMC",
         createdAt: new Date().toISOString(),
       });
+
+      if (paymentMethod === "wallet_payment") {
+        setShowPaymentModal(false);
+        setBookingSuccessData({ readable_id: confirmedMecId, booking_id: confirmedMecId });
+        setView("success");
+        showToast(
+          `Payment of £${isPartialPayment ? depositAmount : numericPrice} deducted from Wallet! Booking confirmed!`,
+          "success"
+        );
+        return;
+      }
 
       if (
         redirectUrl &&
@@ -709,11 +763,6 @@ export default function MechanicalPage() {
         floor: floor || "",
         street: street || "",
         city: city || "",
-        pickupLocation: locationAddress || resolvedMecAddr,
-        locationAddress: locationAddress || resolvedMecAddr,
-        postcode: postcode || "",
-        house: house || "",
-        floor: floor || "",
       });
       if (bId && String(bId) !== confirmedMecId) {
         saveBookingMeta(String(bId), {
@@ -849,33 +898,16 @@ export default function MechanicalPage() {
                   </div>
                 </div>
 
-                {/* Feature Highlight Card */}
-                <div className="relative group rounded-2xl border border-zinc-800/90 bg-[#121316]/90 p-5 sm:p-6 backdrop-blur-md overflow-hidden max-w-xl shadow-2xl transition-all duration-300 hover:border-zinc-700">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                    <div className="z-10 flex-1">
-                      <span className="inline-block text-xs font-bold tracking-widest text-[#E8AF66] uppercase mb-1">
-                        Featured Service
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-extrabold tracking-wide text-white uppercase leading-snug">
-                        ENGINE &amp; MECHANICAL <br className="hidden sm:block" />
-                        OVERHAUL
-                      </h3>
-                      <p className="text-[11px] tracking-widest text-zinc-400 font-medium mt-1.5 uppercase">
-                        DIAGNOSE &bull; REPAIR &bull; CERTIFY
-                      </p>
-                      <p className="text-xs text-zinc-400 mt-2 font-normal">
-                        Full computer OBD diagnostics, OEM sensor checks, and component testing.
-                      </p>
-                    </div>
+                {/* OUR WORK SHOWCASE */}
+            <ServiceOurWorkShowcase
+              categoryId={FALLBACK_MECHANICAL_CATEGORY_ID}
+              categoryName="Mechanical Repairs & Diagnostics"
+              customSubtitle="Explore our verified mechanical diagnostics, engine servicing, and performance repairs."
+              viewAllUrl="/services/our-work"
+            />
+          </div>
 
-                    <div className="relative w-full sm:w-48 h-32 rounded-xl overflow-hidden shrink-0 border border-zinc-700/60 shadow-inner bg-zinc-900 flex items-center justify-center">
-                      <Wrench className="w-12 h-12 text-[#E8AF66]/60 group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Get Mechanic Provider Form Card (Exact Replica of Screenshots 1 & 2) */}
+          {/* Right Column: Get Mechanic Provider Form Card (Exact Replica of Screenshots 1 & 2) */}
               <div className="lg:col-span-5">
                 <div className="relative rounded-2xl bg-[#131417]/95 border border-zinc-800/80 p-6 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl">
                   {/* Mechanical Showcase Banner */}
@@ -1844,175 +1876,20 @@ export default function MechanicalPage() {
             </div>
           </form>
 
-          {/* Select Payment Method Modal / Bottom Sheet (Matches Bodywork Image 3) */}
-          {showPaymentModal && (
-            <div
-              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-              onClick={() => setShowPaymentModal(false)}
-            >
-              <div
-                className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Drag Handle for Mobile */}
-                <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
-
-                {/* Modal Header */}
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-white">
-                      Select Payment Method
-                    </h3>
-                    <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                      Choose how you want to pay for this service
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPaymentModal(false)}
-                    className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Payment Options (Matches UI Screen 3) */}
-                <div className="space-y-3.5 pt-1">
-                  {/* Option 1: Deposit (25% Advance) */}
-                  <div
-                    onClick={() => setIsPartialPayment(true)}
-                    className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                          <Banknote className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
-                            <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                              25% ADVANCE
-                            </span>
-                          </div>
-                          <p className="text-xs text-zinc-400 mt-0.5">
-                            Pay 25% deposit now to confirm booking
-                          </p>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                          : "border-zinc-700 bg-zinc-900"
-                          }`}
-                      >
-                        {isPartialPayment && (
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                        <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                        <span>Due after service (75%):</span>
-                        <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Option 2: Online Payment (Full 100%) */}
-                  <div
-                    onClick={() => setIsPartialPayment(false)}
-                    className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                          <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                        </div>
-                        <div>
-                          <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
-                          <p className="text-xs text-zinc-400 mt-0.5">
-                            Pay full amount now online
-                          </p>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                          : "border-zinc-700 bg-zinc-900"
-                          }`}
-                      >
-                        {!isPartialPayment && (
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                      <span className="text-zinc-300">Amount Due Now:</span>
-                      <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Informational Callout Box */}
-                <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
-                  <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <span className="text-xs font-bold text-[#E8AF66] block">
-                      {isPartialPayment
-                        ? "25% Advance Payment Required"
-                        : "100% Online Secure Payment"}
-                    </span>
-                    <p className="text-[11px] text-zinc-300 leading-relaxed">
-                      {isPartialPayment
-                        ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the repair service is completed."
-                        : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Pay Button */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleFinalBookingSubmit}
-                    disabled={submittingBooking}
-                    className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
-                  >
-                    {submittingBooking ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                        <span>Redirecting to Payment Gateway...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>
-                          {isPartialPayment
-                            ? `PAY DEPOSIT (£${depositAmount})`
-                            : `PAY FULL AMOUNT (£${totalAmountFormatted})`}
-                        </span>
-                        <ArrowRight className="w-5 h-5 text-zinc-950" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Unified Payment Selection Modal (Supports Wallet Payment, Stripe, Cash, Partial 25% / Full 100%) */}
+          <PaymentSelectionModal
+            isOpen={showPaymentModal}
+            onClose={() => setShowPaymentModal(false)}
+            totalAmount={numericPrice}
+            selectedMethod={paymentMethod as any}
+            onMethodChange={(m) => setPaymentMethod(m as any)}
+            isPartial={isPartialPayment}
+            onPartialChange={setIsPartialPayment}
+            onConfirm={handleFinalBookingSubmit}
+            loading={submittingBooking}
+            serviceTitle="Mechanical Diagnostic and Repair"
+            allowCash={true}
+          />
         </section>
       )}
 
@@ -2096,81 +1973,87 @@ export default function MechanicalPage() {
 
             {/* Payment Choice Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Option 1: Cash After Service */}
+              {/* Option 1: MMC Digital Wallet */}
               <div
-                onClick={() => setPaymentMethod("cash_after_service")}
-                className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${paymentMethod === "cash_after_service"
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
+                onClick={() => setPaymentMethod("wallet_payment")}
+                className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${
+                  paymentMethod === "wallet_payment"
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${paymentMethod === "cash_after_service"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
-                        : "bg-zinc-900 border border-zinc-800 text-zinc-400"
-                        }`}
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        paymentMethod === "wallet_payment"
+                          ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
+                          : "bg-zinc-900 border border-zinc-800 text-zinc-400"
+                      }`}
                     >
-                      <Banknote className="w-6 h-6" />
+                      <Wallet className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-extrabold text-white">Cash After Service</h4>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">Pay the technician once job is complete</p>
+                      <h4 className="text-sm font-extrabold text-white">MMC Digital Wallet</h4>
+                      <p className="text-[11px] text-[#E8AF66] mt-0.5">Instant 1-Click Pay</p>
                     </div>
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === "cash_after_service"
-                      ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
-                      : "border-zinc-700"
-                      }`}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      paymentMethod === "wallet_payment"
+                        ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
+                        : "border-zinc-700"
+                    }`}
                   >
-                    {paymentMethod === "cash_after_service" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    {paymentMethod === "wallet_payment" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 <div className="text-[11px] text-zinc-400 bg-black/40 p-2.5 rounded-xl border border-zinc-800/80">
-                  No upfront charge. Pay via cash or on-site card terminal when the mechanic completes your repair.
+                  Instant balance deduction. Fast and secure checkout with zero processing delay.
                 </div>
               </div>
 
               {/* Option 2: Online Payment Stripe */}
               <div
                 onClick={() => setPaymentMethod("stripe")}
-                className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${paymentMethod === "stripe"
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
+                className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${
+                  paymentMethod === "stripe"
+                    ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/15 ring-2 ring-[#D5A054]"
+                    : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${paymentMethod === "stripe"
-                        ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
-                        : "bg-zinc-900 border border-zinc-800 text-zinc-400"
-                        }`}
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        paymentMethod === "stripe"
+                          ? "bg-gradient-to-r from-[#F6D089] to-[#D5A054] text-zinc-950 font-bold"
+                          : "bg-zinc-900 border border-zinc-800 text-zinc-400"
+                      }`}
                     >
                       <CreditCard className="w-6 h-6" />
                     </div>
                     <div>
                       <h4 className="text-sm font-extrabold text-white">Online Payment (Stripe)</h4>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">Instant checkout with Card or Apple/Google Pay</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">Card, Apple Pay, Google Pay</p>
                     </div>
                   </div>
 
                   <div
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentMethod === "stripe"
-                      ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
-                      : "border-zinc-700"
-                      }`}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      paymentMethod === "stripe"
+                        ? "border-[#D5A054] bg-[#D5A054] text-zinc-950"
+                        : "border-zinc-700"
+                    }`}
                   >
                     {paymentMethod === "stripe" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 <div className="text-[11px] text-zinc-400 bg-black/40 p-2.5 rounded-xl border border-zinc-800/80">
-                  Encrypted 256-bit secure gateway. Funds are held safely under Motor Market Club Customer Protection Guarantee.
+                  Encrypted 256-bit secure gateway. Funds held safely under MMC Customer Protection.
                 </div>
               </div>
             </div>
@@ -2231,7 +2114,9 @@ export default function MechanicalPage() {
                 ) : (
                   <>
                     <span>
-                      {paymentMethod === "stripe"
+                      {paymentMethod === "wallet_payment"
+                        ? `Pay via MMC Wallet • ${calculatedPrice}`
+                        : paymentMethod === "stripe"
                         ? `Proceed to Online Payment • ${calculatedPrice}`
                         : `Confirm Booking (Cash on Service) • ${calculatedPrice}`}
                     </span>

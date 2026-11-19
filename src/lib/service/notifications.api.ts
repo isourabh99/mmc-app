@@ -1,13 +1,13 @@
 import apiClient from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import { isFakeDummyId, getBookingMeta, formatToNumericBookingId } from "@/lib/service/bookings.api";
+import { isFakeDummyId, getBookingMeta, formatToNumericBookingId, isUuidStr } from "@/lib/service/bookings.api";
 
 export interface BookingNotification {
   id: string;
   bookingId: string | number;
   readableId?: number | string;
-  bookingType: "car" | "regular" | "quote";
-  category: "car_hire" | "chauffeur" | "tyre" | "emergency" | "mechanical" | "bodywork" | "alloy" | "service" | "quote";
+  bookingType: "car" | "regular" | "quote" | "estimate";
+  category: "car_hire" | "chauffeur" | "tyre" | "emergency" | "mechanical" | "bodywork" | "alloy" | "service" | "quote" | "estimate";
   title: string;
   subtitle?: string;
   description: string;
@@ -24,7 +24,7 @@ export interface BookingNotification {
   read: boolean;
   targetUrl?: string;
   image?: string | null;
-  actionType?: "quote" | "question" | "close" | "booking";
+  actionType?: "quote" | "estimate" | "question" | "close" | "booking";
   actionButtonText?: string;
   fareBreakdown?: { label: string; amount: string }[];
   totalFare?: string;
@@ -793,7 +793,7 @@ export function extractFareBreakdown(item: any): {
  * Resolves notification action type, button text, and redirection target
  */
 export function resolveNotificationActionType(item: any): {
-  actionType: "quote" | "question" | "close" | "booking";
+  actionType: "quote" | "estimate" | "question" | "close" | "booking";
   actionButtonText: string;
   targetUrl: string;
 } {
@@ -801,12 +801,36 @@ export function resolveNotificationActionType(item: any): {
   const desc = String(item.description || "").toLowerCase();
   const combined = `${title} ${desc}`;
 
-  // 1. Provider quote / bid offer
+  // 1. Provider estimate / quotation offer sent directly by a provider
+  // e.g. "Provider TATA ROHIT has sent you a new quotation of £8,000.00." or title "New Quotation Received"
+  if (
+    item.data?.type === "estimate" ||
+    item.type === "estimate" ||
+    item.data?.estimate_id ||
+    item.estimate_id ||
+    combined.includes("has sent you a new quotation") ||
+    combined.includes("sent you a new quotation") ||
+    combined.includes("sent you an estimate") ||
+    (combined.includes("provider") && (combined.includes("quotation") || combined.includes("estimate"))) ||
+    title.includes("new quotation received") ||
+    combined.includes("quotation of £") ||
+    combined.includes("quotation of")
+  ) {
+    const estId = item.data?.estimate_id || item.data?.id || item.estimate_id;
+    return {
+      actionType: "estimate",
+      actionButtonText: "View Estimate",
+      targetUrl: estId ? `/account?tab=estimates&estimateId=${encodeURIComponent(String(estId))}` : "/account?tab=estimates",
+    };
+  }
+
+  // 2. Customer quotation post / received specialist bid offers
   if (
     combined.includes("provider bid") ||
     combined.includes("bid offer") ||
-    combined.includes("quotation") ||
     combined.includes("submitted a price") ||
+    combined.includes("specialist bid") ||
+    combined.includes("quote request") ||
     combined.includes("quote") ||
     combined.includes("bids")
   ) {
@@ -834,8 +858,14 @@ export function resolveNotificationActionType(item: any): {
 
   // 3. Specific Booking reference
   const refMatch = combined.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
-  if (refMatch || item.booking_id || item.data?.booking_id) {
-    const bookingId = item.booking_id || item.data?.booking_id || (refMatch ? refMatch[1] : null);
+  if (refMatch || item.readable_id || item.booking_id || item.data?.booking_id) {
+    const rawRef =
+      (refMatch ? refMatch[1] : null) ||
+      item.readable_id ||
+      (!isUuidStr(item.booking_id) ? item.booking_id : null) ||
+      item.data?.booking_id ||
+      item.booking_id;
+    const bookingId = formatToNumericBookingId(rawRef);
     return {
       actionType: "booking",
       actionButtonText: "View Booking",
@@ -867,11 +897,16 @@ function normalizeBackendCustomerNotification(
 
   // Extract booking reference if embedded
   const refMatch = combinedText.match(/(?:#|ref[:\s]*#?|bookingId=|booking_id=)([a-zA-Z0-9_-]{4,})/i);
-  const detectedRef = refMatch ? refMatch[1] : undefined;
+  const detectedRef = refMatch ? formatToNumericBookingId(refMatch[1]) : undefined;
 
-  const rawCandidate = item.readable_id || item.booking_id || item.data?.booking_id || detectedRef;
-  const readableId = rawCandidate ? formatToNumericBookingId(rawCandidate) : formatToNumericBookingId(notifId);
-  const bookingId = rawCandidate ? formatToNumericBookingId(rawCandidate) : notifId;
+  const rawCandidate =
+    detectedRef ||
+    item.readable_id ||
+    (!isUuidStr(item.booking_id) ? item.booking_id : null) ||
+    item.data?.booking_id ||
+    item.booking_id;
+  const readableId = detectedRef || (rawCandidate ? formatToNumericBookingId(rawCandidate) : formatToNumericBookingId(notifId));
+  const bookingId = detectedRef || (!isUuidStr(item.booking_id) ? item.booking_id : null) || readableId;
 
   const { actionType, actionButtonText, targetUrl } = resolveNotificationActionType(item);
   const imageUrl = resolveNotificationImageUrl(item);
@@ -880,7 +915,9 @@ function normalizeBackendCustomerNotification(
   // Detect category from text
   const textLower = combinedText.toLowerCase();
   let category: BookingNotification["category"] = "service";
-  if (actionType === "quote") {
+  if (actionType === "estimate") {
+    category = "estimate";
+  } else if (actionType === "quote") {
     category = "quote";
   } else if (textLower.includes("hire") || textLower.includes("rental") || textLower.includes("rent")) {
     category = "car_hire";

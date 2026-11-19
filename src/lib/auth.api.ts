@@ -23,6 +23,30 @@ export const isAuthenticated = (): boolean => {
   return Boolean(localStorage.getItem("token"));
 };
 
+/**
+ * Customer Profile Info API (GET /customer/info)
+ */
+export const getCustomerInfo = async () => {
+  try {
+    const response = await apiClient.get("/customer/info");
+    const data = response.data?.content || response.data?.data || response.data;
+    if (data && typeof window !== "undefined") {
+      try {
+        localStorage.setItem("user", JSON.stringify(data));
+      } catch {}
+    }
+    return response.data;
+  } catch (err: any) {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("user");
+        if (stored) return { content: JSON.parse(stored) };
+      } catch {}
+    }
+    return null;
+  }
+};
+
 // Backwards-compatible alias for existing imports
 export type loginData = VerifyOtpData;
 

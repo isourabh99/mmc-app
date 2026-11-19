@@ -2,7 +2,7 @@
 
 export default function ProviderCTA() {
   return (
-    <section id="become-provider" className="py-6 sm:py-12 lg:py-16 relative overflow-hidden">
+    <section id="become-provider" className="pt-1 pb-6 sm:pt-2 sm:pb-10 lg:pt-3 lg:pb-12 relative overflow-hidden">
       <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px]">
         <div
           className="relative rounded-3xl overflow-hidden"
@@ -90,22 +90,40 @@ export default function ProviderCTA() {
                 ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <a
-                  href="https://mmcclub.co.uk/backend/provider/auth/sign-up"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  id="provider-signup-btn"
-                  className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full font-bold text-black text-sm transition-all duration-300 hover:shadow-[0_0_35px_rgba(250,210,147,0.4)] hover:scale-105"
-                  style={{ background: "linear-gradient(135deg, #FAD293, #CEA46B)" }}
-                >
-                  Apply as a Provider
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </a>
-            
-              </div>
+         
+<div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+  <a
+    href="https://mmcclub.co.uk/backend/provider/auth/sign-up"
+    target="_blank"
+    rel="noopener noreferrer"
+    id="provider-signup-btn"
+    className="group inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full
+      font-bold text-black text-sm sm:text-base
+      bg-gradient-to-r from-[#FAD293] via-[#EBC080] to-[#CEA46B]
+      border border-[#FAD293]/60
+      shadow-[0_6px_22px_rgba(250,210,147,0.18)]
+      hover:shadow-[0_0_35px_rgba(250,210,147,0.4)]
+      hover:scale-[1.04] active:scale-[0.98]
+      transition-all duration-300"
+  >
+    <span>Join as a Provider or Partner</span>
+
+    <svg
+      className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 7l5 5m0 0l-5 5m5-5H6"
+      />
+    </svg>
+  </a>
+</div>
+
             </div>
 
             {/* Right stats */}

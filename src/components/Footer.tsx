@@ -2,7 +2,10 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { ShieldCheck, LogIn, Sparkles, ArrowUpRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { getCategories, Category } from "@/lib/service/categories.api";
+import { subscribeNewsletter } from "@/lib/service/newsletter.api";
+import { useToast } from "@/components/ToastProvider";
 
 const mapCategoryToHref = (name: string): string => {
   const lower = name.toLowerCase();
@@ -47,6 +50,8 @@ const defaultServices = [
 const companyLinks = [
   { label: "About Us", href: "/about" },
   { label: "How It Works", href: "/how-it-works" },
+  { label: "Become a Partner", href: "https://mmcclub.co.uk/backend/provider/auth/sign-up", external: true },
+  { label: "Provider Login", href: "https://mmcclub.co.uk/backend/provider/auth/login", external: true },
   // { label: "Careers", href: "/about" },
   // { label: "Press", href: "/about" },
   // { label: "Blog", href: "/how-it-works" },
@@ -105,7 +110,64 @@ const socials = [
 ];
 
 export default function Footer() {
+  const { showToast } = useToast();
   const [services, setServices] = useState<{ label: string; href: string }[]>(defaultServices);
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [newsletterStatus, setNewsletterStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const handleSubscribeNewsletter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = newsletterEmail.trim();
+    if (!email) {
+      setNewsletterStatus({
+        type: "error",
+        message: "Please enter your email address.",
+      });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setNewsletterStatus({
+        type: "error",
+        message: "Please enter a valid email address.",
+      });
+      return;
+    }
+
+    try {
+      setNewsletterLoading(true);
+      setNewsletterStatus(null);
+      const res = await subscribeNewsletter(email);
+      if (res.success) {
+        setNewsletterEmail("");
+        setNewsletterStatus({
+          type: "success",
+          message: res.message || "Thank you for subscribing!",
+        });
+        showToast(res.message || "Subscribed to newsletter successfully!", "success");
+      } else {
+        setNewsletterStatus({
+          type: "error",
+          message: res.message,
+        });
+        showToast(res.message, "error");
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || "An unexpected error occurred.";
+      setNewsletterStatus({
+        type: "error",
+        message: errMsg,
+      });
+      showToast(errMsg, "error");
+    } finally {
+      setNewsletterLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -182,23 +244,57 @@ export default function Footer() {
                 <p className="text-xs text-white/60 mb-2.5 tracking-wide font-medium">
                   Stay updated with Motor Market Club
                 </p>
-                <div className="flex gap-2">
-                  <input
-                    id="footer-email"
-                    type="email"
-                    placeholder="Your email address"
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#FAD293]/60 transition-all shadow-inner"
-                  />
-                  <button
-                    id="footer-subscribe-btn"
-                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-black shrink-0 hover:shadow-[0_0_20px_rgba(250,210,147,0.4)] transition-all cursor-pointer"
-                    style={{
-                      background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                    }}
-                  >
-                    Subscribe
-                  </button>
-                </div>
+                <form onSubmit={handleSubscribeNewsletter} className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      id="footer-email"
+                      type="email"
+                      value={newsletterEmail}
+                      onChange={(e) => {
+                        setNewsletterEmail(e.target.value);
+                        if (newsletterStatus) setNewsletterStatus(null);
+                      }}
+                      placeholder="Your email address"
+                      disabled={newsletterLoading}
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#FAD293]/60 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      id="footer-subscribe-btn"
+                      type="submit"
+                      disabled={newsletterLoading}
+                      className="px-4 py-2.5 rounded-xl text-sm font-semibold text-black shrink-0 hover:shadow-[0_0_20px_rgba(250,210,147,0.4)] transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5"
+                      style={{
+                        background: "linear-gradient(135deg, #FAD293, #CEA46B)",
+                      }}
+                    >
+                      {newsletterLoading ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-black" />
+                          <span>Subscribing...</span>
+                        </>
+                      ) : (
+                        <span>Subscribe</span>
+                      )}
+                    </button>
+                  </div>
+
+                  {newsletterStatus && (
+                    <div
+                      className={`flex items-start gap-2 text-xs px-3 py-2 rounded-xl border animate-fade-in ${
+                        newsletterStatus.type === "success"
+                          ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                          : "bg-red-500/15 border-red-500/30 text-red-300"
+                      }`}
+                    >
+                      {newsletterStatus.type === "success" ? (
+                        <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                      ) : (
+                        <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-400" />
+                      )}
+                      <span className="leading-tight">{newsletterStatus.message}</span>
+                    </div>
+                  )}
+                </form>
               </div>
             </div>
 
@@ -234,18 +330,82 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {section.links.map((link) => (
                   <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-white/50 hover:text-[#FAD293] transition-colors duration-200 block py-0.5"
-                    >
-                      {link.label}
-                    </Link>
+                    {(link as any).external ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-white/50 hover:text-[#FAD293] transition-colors duration-200 inline-flex items-center gap-1 py-0.5 group"
+                      >
+                        <span>{link.label}</span>
+                        <ArrowUpRight size={12} className="opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-sm text-white/50 hover:text-[#FAD293] transition-colors duration-200 block py-0.5"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
             </div>
           ))}
 
+        </div>
+
+        {/* Partner & Provider Portal Card */}
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-[#FAD293]/25 bg-gradient-to-br from-[#1c150c]/90 via-[#140f09]/85 to-[#0b0804]/90 p-6 sm:p-8 mb-12 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+          {/* Subtle gold gradient glow in top right */}
+          <div className="absolute top-0 right-0 w-80 h-40 bg-[#FAD293]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-px inset-x-12 h-px bg-gradient-to-r from-transparent via-[#FAD293]/50 to-transparent pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+            {/* Left Content */}
+            <div className="space-y-2 text-center lg:text-left max-w-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FAD293]/10 border border-[#FAD293]/25 text-[#FAD293] text-xs font-bold tracking-wider uppercase">
+                <ShieldCheck size={14} className="text-[#FAD293]" />
+                <span>MMC Partner Network</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Are You an Automotive Specialist or Garage?
+              </h3>
+              <p className="text-sm text-white/60 leading-relaxed">
+                Connect with thousands of vehicle owners across the UK. Get direct bookings, quotation requests, and scale your workshop with guaranteed secure payouts.
+              </p>
+            </div>
+
+            {/* Right Buttons: Login as Provider & Become a Partner */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto shrink-0">
+              {/* Button 1: Partner / Provider Login */}
+              <a
+                href="https://mmcclub.co.uk/backend/provider/auth/login"
+                target="_blank"
+                rel="noopener noreferrer"
+                id="footer-provider-login-btn"
+                className="w-full sm:w-auto group inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl text-sm font-bold text-[#FAD293] bg-[#22180e] hover:bg-[#2d2013] border border-[#FAD293]/40 hover:border-[#FAD293] transition-all duration-300 shadow-sm hover:shadow-[0_0_20px_rgba(250,210,147,0.2)] active:scale-[0.98] cursor-pointer"
+              >
+                <LogIn size={16} className="text-[#FAD293] transition-transform group-hover:scale-110" />
+                <span>Provider Login</span>
+                <ArrowUpRight size={14} className="text-[#FAD293]/60 group-hover:text-[#FAD293] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </a>
+
+              {/* Button 2: Become a Partner / Join as Provider */}
+              <a
+                href="https://mmcclub.co.uk/backend/provider/auth/sign-up"
+                target="_blank"
+                rel="noopener noreferrer"
+                id="footer-become-partner-btn"
+                className="w-full sm:w-auto group inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl text-sm font-black text-black bg-gradient-to-r from-[#FAD293] via-[#EBC080] to-[#CEA46B] hover:brightness-110 border border-[#FAD293]/60 transition-all duration-300 shadow-[0_4px_20px_rgba(250,210,147,0.25)] hover:shadow-[0_0_30px_rgba(250,210,147,0.45)] active:scale-[0.98] cursor-pointer"
+              >
+                <Sparkles size={16} className="text-black transition-transform group-hover:rotate-12" />
+                <span>Become a Partner</span>
+                <ArrowUpRight size={14} className="text-black/80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Divider */}

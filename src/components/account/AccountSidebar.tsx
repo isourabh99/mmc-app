@@ -9,6 +9,7 @@ import {
   FileText,
   LogOut,
   Sparkles,
+  Wallet,
 } from "lucide-react";
 
 interface AccountSidebarProps {
@@ -65,6 +66,16 @@ export const AccountSidebar: React.FC<AccountSidebarProps> = ({
       label: "Provider Estimates",
       icon: Sparkles,
       href: "/estimate",
+    },
+    {
+      id: "wallet",
+      label: "Wallet & Points",
+      icon: Wallet,
+      href: "/account?tab=wallet",
+      badge:
+        user?.wallet_balance !== undefined && Number(user.wallet_balance) > 0
+          ? `£${Number(user.wallet_balance).toFixed(0)}`
+          : undefined,
     },
   ];
 

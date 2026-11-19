@@ -1,3 +1,5 @@
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
+import { saveConfirmedBooking } from "@/lib/service/bookings.api";
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -82,7 +84,7 @@ export default function CarHireBookingClient() {
   const [street, setStreet] = useState<string>("");
   const [city, setCity] = useState<string>("");
 
-  const [paymentMethod, setPaymentMethod] = useState("cash_after_service");
+  const [paymentMethod, setPaymentMethod] = useState<"wallet_payment" | "stripe">("wallet_payment");
   const [description, setDescription] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
 
@@ -129,6 +131,14 @@ export default function CarHireBookingClient() {
 
   // Payment Modal State (Matches Bodywork / Chauffeur / Mechanical)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      setShowPaymentModal(true);
+    }
+  }, []);
   const [isPartialPayment, setIsPartialPayment] = useState(true);
 
   const [submitting, setSubmitting] = useState(false);
@@ -234,11 +244,11 @@ export default function CarHireBookingClient() {
       ? effectiveHourlyRate * hoursCount
       : effectiveDailyRate * diffDays;
 
-  // Total hire package: Rent + Delivery + Security Deposit (Matches backend total_amount 100%)
-  const estimatedTotal = basePrice + deliveryFee + securityDeposit;
+  // Total hire package: Rent + Delivery Fee (Security Deposit is held separately on vehicle handover)
+  const estimatedTotal = basePrice + deliveryFee;
 
-  // 25% Advance Deposit & 75% on Arrival (Matches backend content.amount 100%)
-  const numericPrice = estimatedTotal > 0 ? estimatedTotal : basePrice > 0 ? basePrice : 150;
+  // 25% Advance Deposit & 75% on Arrival
+  const numericPrice = estimatedTotal > 0 ? estimatedTotal : basePrice > 0 ? basePrice : 100;
   const depositAmount = (numericPrice * 0.25).toFixed(2);
   const remainingAmount = (numericPrice * 0.75).toFixed(2);
   const totalAmountFormatted = numericPrice.toFixed(2);
@@ -255,17 +265,9 @@ export default function CarHireBookingClient() {
     }
     if (details?.street) {
       setStreet(details.street);
-      try {
-        localStorage.setItem("user_street", details.street);
-        localStorage.setItem("street", details.street);
-      } catch {}
     }
     if (details?.city) {
       setCity(details.city);
-      try {
-        localStorage.setItem("user_city", details.city);
-        localStorage.setItem("city", details.city);
-      } catch {}
     }
   };
 
@@ -332,7 +334,7 @@ export default function CarHireBookingClient() {
             city: city.trim() || undefined,
           }
           : {}),
-        payment_method: "stripe",
+        payment_method: paymentMethod === "wallet_payment" ? "wallet_payment" : "stripe",
         is_partial: isPartialPayment ? 1 : 0,
         payment_platform: "app",
         callback: callbackUrl,
@@ -420,6 +422,52 @@ export default function CarHireBookingClient() {
           })
         );
       } catch { }
+
+      if (paymentMethod === "wallet_payment") {
+        setShowPaymentModal(false);
+        setIsSuccess(true);
+        setBookingDetails(res?.content);
+        const carTitle = `Car Hire: ${car?.brand || "Vehicle"} ${car?.model || ""}`.trim();
+        saveConfirmedBooking({
+          id: bookingRef,
+          rawId: bookingRef,
+          readableId: (res as any)?.content?.booking?.booking?.readable_id ? String((res as any).content.booking.booking.readable_id) : bookingRef,
+          serviceType: "car",
+          serviceTitle: carTitle,
+          serviceCategoryName: "Car Hire & Rental",
+          providerName: car?.provider?.company_name || "MMC Car Rental",
+          providerPhone: car?.provider?.company_phone,
+          totalAmount: respTotalAmount,
+          paidAmount: isPartialPayment ? respDepositAmount : respTotalAmount,
+          dueAmount: isPartialPayment ? respTotalAmount - respDepositAmount : 0,
+          isPaid: !isPartialPayment,
+          isPartiallyPaid: isPartialPayment,
+          paymentStatus: isPartialPayment ? "Partial Deposit" : "Full Online Payment",
+          paymentMethod: "MMC Digital Wallet",
+          status: "accepted",
+          statusDisplay: "Confirmed",
+          scheduleDate: startDate,
+          scheduleTime: `${formatTimeTo12Hour(pickupTime)} - ${formatTimeTo12Hour(dropTime)}`,
+          fullScheduleDisplay: `${startDate} (${formatTimeTo12Hour(pickupTime)} - ${formatTimeTo12Hour(dropTime)})`,
+          vehicleModel: `${car?.brand || ""} ${car?.model || ""}`.trim(),
+          createdAt: new Date().toISOString(),
+        });
+        saveBookingMeta(bookingRef, {
+          serviceTitle: carTitle,
+          serviceCategoryName: "Car Hire & Rental",
+          serviceType: "car",
+          vehicleModel: `${car?.brand || ""} ${car?.model || ""}`.trim(),
+          providerName: car?.provider?.company_name,
+          price: respTotalAmount,
+          paidAmount: isPartialPayment ? respDepositAmount : respTotalAmount,
+          dueAmount: isPartialPayment ? respTotalAmount - respDepositAmount : 0,
+          isPaid: !isPartialPayment,
+          isPartiallyPaid: isPartialPayment,
+          paymentStatus: isPartialPayment ? "Partial Deposit" : "Full Online Payment",
+        });
+        showToast(`Payment of £${(isPartialPayment ? respDepositAmount : respTotalAmount).toFixed(2)} deducted from Wallet! Reservation Confirmed!`, "success");
+        return;
+      }
 
       if (redirectLink && redirectLink.startsWith("http") && !redirectLink.includes("payment_id=MMC-")) {
         showToast("Redirecting to Stripe secure checkout...", "info");
@@ -953,11 +1001,16 @@ export default function CarHireBookingClient() {
                   </div>
 
                   {securityDeposit > 0 && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center py-1">
                       <span>Refundable Security Deposit:</span>
-                      <span className="font-semibold text-white font-mono">
-                        {formatCurrency(securityDeposit)}
-                      </span>
+                      <div className="text-right">
+                        <span className="font-semibold text-white font-mono">
+                          {formatCurrency(securityDeposit)}
+                        </span>
+                        <span className="block text-[10px] text-amber-400 font-medium">
+                          (Refundable • Paid on handover)
+                        </span>
+                      </div>
                     </div>
                   )}
 
@@ -1197,167 +1250,19 @@ export default function CarHireBookingClient() {
         </div>
       )}
 
-      {showPaymentModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-          onClick={() => setShowPaymentModal(false)}
-        >
-          <div
-            className="bg-[#141518] border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-6 sm:p-7 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-1 sm:hidden" />
-
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  Select Payment Method
-                </h3>
-                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                  Choose how you want to pay for this car hire reservation
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 pt-1">
-              <div
-                onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                      <Banknote className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm sm:text-base font-bold text-white">Deposit</span>
-                        <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                          25% ADVANCE
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay 25% deposit now to secure reservation
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {isPartialPayment && (
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold">
-                    <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                    <span className="text-sm font-extrabold text-[#E8AF66]">£{depositAmount}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                    <span>Due on vehicle arrival (75%):</span>
-                    <span className="font-semibold text-zinc-300">£{remainingAmount}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                  ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                  : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                    </div>
-                    <div>
-                      <span className="text-sm sm:text-base font-bold text-white block">Online Payment</span>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Pay full amount now online
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                      ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                      : "border-zinc-700 bg-zinc-900"
-                      }`}
-                  >
-                    {!isPartialPayment && (
-                      <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                  <span className="text-zinc-300">Amount Due Now:</span>
-                  <span className="text-sm font-extrabold text-white">£{totalAmountFormatted}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-4 flex items-start gap-3">
-              <Info className="w-5 h-5 text-[#E8AF66] shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-[#E8AF66] block">
-                  {isPartialPayment
-                    ? "25% Advance Payment Required"
-                    : "100% Online Secure Payment"}
-                </span>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  {isPartialPayment
-                    ? "You must pay a 25% deposit upfront to confirm your reservation. The remaining 75% will be paid once the vehicle is delivered or handed over."
-                    : "You will pay the full amount upfront securely via Stripe. Instant booking confirmation."}
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={executeCarBooking}
-                disabled={submitting}
-                className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm sm:text-base py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-50"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
-                    <span>Redirecting to Payment Gateway...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      {isPartialPayment
-                        ? `PAY DEPOSIT (£${depositAmount})`
-                        : `PAY FULL AMOUNT (£${totalAmountFormatted})`}
-                    </span>
-                    <ArrowRight className="w-5 h-5 text-zinc-950" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PaymentSelectionModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        totalAmount={numericPrice}
+        selectedMethod={paymentMethod as any}
+        onMethodChange={(m) => setPaymentMethod(m as any)}
+        isPartial={isPartialPayment}
+        onPartialChange={setIsPartialPayment}
+        onConfirm={executeCarBooking}
+        loading={submitting}
+        serviceTitle={car ? `Car Hire: ${car.brand} ${car.model || ""}` : "Car Hire Booking"}
+        depositPercentage={25}
+      />
     </div>
   );
 }

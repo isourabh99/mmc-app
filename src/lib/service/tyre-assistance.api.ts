@@ -1,3 +1,4 @@
+import { fetchZoneIdFromCoordinates, getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode } from "@/lib/service/address.helper";
 import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
@@ -13,7 +14,7 @@ import {
 
 const STORAGE_KEY = "mmc_tyre_assistance_bookings";
 const ACTIVE_BOOKING_KEY = "mmc_active_tyre_booking_id";
-const ZONE_KEY = "zoneId";
+const ZONE_KEY = "zone_id";
 
 // Default IDs
 export const TYRE_CATEGORY_ID = "5d98d5c9-509e-4ab7-859d-806174384e27";
@@ -21,7 +22,7 @@ export const TYRE_EMERGENCY_SERVICE_ID = "1e5455a9-62f8-4489-bfa8-4eb52d033a7d";
 export const TYRE_REPLACEMENT_SERVICE_ID = "9913c6e3-1f99-4929-989c-25484da50e00";
 export const DEFAULT_SERVICE_ID = TYRE_REPLACEMENT_SERVICE_ID;
 export const DEFAULT_PROVIDER_ID = "cffcce91-5498-4b73-b571-8e6e69bbd89d";
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 
 export const isUuid = (str: any): boolean =>
   typeof str === "string" &&
@@ -1726,7 +1727,9 @@ export async function confirmQuoteAndAssignTechnician(
     response?.url
   );
 
-  if (isPaymentAmountZero || !hasDirectRedirect) {
+  const isWallet = effectivePaymentMethod === "wallet_payment";
+
+  if (!isWallet && (isPaymentAmountZero || !hasDirectRedirect)) {
     console.log("[TyrePayment] Fallback auto-recovery: Adding verified tyre variation and retrying booking send...");
     try {
       await addTyreToCart({
@@ -1839,7 +1842,7 @@ export async function confirmQuoteAndAssignTechnician(
     (!booking.id.startsWith("MMC-TYR-") ? booking.id : null) ||
     (!booking.referenceNumber.startsWith("MMC-TYR-") ? booking.referenceNumber : null);
 
-  if (!redirectLink && targetBookingId) {
+  if (!isWallet && !redirectLink && targetBookingId) {
     const payloadsToTry = [
       {
         booking_id: String(targetBookingId),
@@ -1975,10 +1978,16 @@ export async function confirmQuoteAndAssignTechnician(
       totalAmount: fareAmount,
       paidAmount: depositAmt,
       dueAmount: dueAmt,
-      isPaid: false,
+      isPaid: isWallet ? true : false,
       isPartiallyPaid: isPartialNum === 1,
-      paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Pending Payment",
-      paymentMethod: "Stripe (Online)",
+      paymentStatus: isWallet
+        ? isPartialNum === 1
+          ? "Deposit Paid via Wallet"
+          : "Paid via Wallet"
+        : isPartialNum === 1
+        ? "Partial Deposit"
+        : "Pending Payment",
+      paymentMethod: isWallet ? "wallet_payment" : "Stripe (Online)",
       status: "accepted",
       statusDisplay: "Accepted",
       scheduleDate: booking.scheduledDate,
@@ -1996,9 +2005,15 @@ export async function confirmQuoteAndAssignTechnician(
       price: fareAmount,
       paidAmount: depositAmt,
       dueAmount: dueAmt,
-      isPaid: false,
+      isPaid: isWallet ? true : false,
       isPartiallyPaid: isPartialNum === 1,
-      paymentStatus: isPartialNum === 1 ? "Partially Paid" : "Pending Payment",
+      paymentStatus: isWallet
+        ? isPartialNum === 1
+          ? "Deposit Paid via Wallet"
+          : "Paid via Wallet"
+        : isPartialNum === 1
+        ? "Partially Paid"
+        : "Pending Payment",
       scheduleDate: booking.scheduledDate,
       scheduleTime: booking.scheduledTimeSlot,
       serviceAddress: (booking as any).serviceAddress || booking.locationAddress || resolvedTyreAddr,

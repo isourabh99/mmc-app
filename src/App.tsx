@@ -48,6 +48,7 @@ import TyreFittingsServicesPage from "./app/services/tyre-fittings/page";
 import TyreFittingsDirectPage from "./app/tyre-fittings/page";
 import ValetWashPage from "./app/services/valet-wash/page";
 import ValetWashProvidersPage from "./app/services/valet-wash/providers/page";
+import OurWorkGalleryPage from "./app/services/our-work/page";
 import ServiceCategorySlugPage from "./app/services/[slug]/page";
 import TermsAndConditionsPage from "./app/terms-and-conditions/page";
 import NotFoundPage from "./app/not-found";
@@ -128,6 +129,10 @@ export default function App() {
             <Route path="/tyre-fittings" element={<TyreFittingsDirectPage />} />
             <Route path="/services/valet-wash" element={<ValetWashPage />} />
             <Route path="/services/valet-wash/providers" element={<ValetWashProvidersPage />} />
+            <Route path="/services/our-work" element={<OurWorkGalleryPage />} />
+            <Route path="/services/gallery" element={<OurWorkGalleryPage />} />
+            <Route path="/our-work" element={<OurWorkGalleryPage />} />
+            <Route path="/gallery" element={<OurWorkGalleryPage />} />
             <Route path="/services/:slug" element={<ServiceCategorySlugPage />} />
 
             {/* 404 Fallback */}

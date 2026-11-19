@@ -1,143 +1,130 @@
 "use client";
 
+import React from "react";
 import Image from "next/image";
+import Link from "next/link";
+import {
+  Zap,
+  ShieldCheck,
+  Scale,
+  MessageSquareCheck,
+  Sparkles,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react";
 
 const matchingPoints = [
-  {
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    ),
-    title: "Instant AI Matching",
-    desc: "Our engine analyses 14+ parameters to find providers perfectly suited to your specific vehicle, location and budget in real time.",
-  },
-  {
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
-      </svg>
-    ),
-    title: "Vetted Professional Network",
-    desc: "Access 2,400+ thoroughly verified automotive professionals — from solo specialists to multi-location garages.",
-  },
-  {
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-    title: "Price Transparency",
-    desc: "Compare detailed, itemised quotes side-by-side. No hidden charges, no surprises at the finish line.",
-  },
-  {
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
-    ),
-    title: "End-to-End Communication",
-    desc: "Built-in messaging keeps you in direct contact with your provider throughout the entire job.",
-  },
+
+];
+
+const keyMetrics = [
+ 
 ];
 
 export default function MatchingSection() {
   return (
     <section
       id="matching"
-      className="py-6 sm:py-12 lg:py-16 relative overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, #000000 0%, #080500 50%, #000000 100%)",
-      }}
+      aria-label="Intelligent Provider Matching"
+      className="relative w-full pt-6 pb-2 sm:pt-10 sm:pb-3 lg:pt-14 lg:pb-4 overflow-hidden bg-[#050505]"
     >
-      {/* Decorative grid */}
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(rgba(250,210,147,0.8) 1px, transparent 1px)`,
-          backgroundSize: "32px 32px",
-        }}
-      />
+      {/* Luxury ambient gold glow background */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="absolute left-1/2 top-1/4 -translate-x-1/2 w-[500px] sm:w-[900px] h-[300px] sm:h-[450px] rounded-full blur-[140px] sm:blur-[190px] opacity-20"
+          style={{
+            background: "radial-gradient(circle, #FAD293 0%, #CEA46B 45%, transparent 70%)",
+          }}
+        />
+        {/* Subtle architectural dot grid */}
+        <div
+          className="absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage: `radial-gradient(rgba(250,210,147,0.85) 1px, transparent 1px)`,
+            backgroundSize: "32px 32px",
+          }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,#050505_100%)]" />
+      </div>
 
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-14 items-center">
-          {/* Left: Showcase Image Banner */}
-          <div className="relative w-full rounded-3xl overflow-hidden border border-[#FAD293]/25 shadow-2xl group bg-black/40">
-            <div className="relative w-full aspect-[16/9] overflow-hidden rounded-3xl">
+      <div className="relative z-10 mx-auto w-full max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] px-4 sm:px-8 lg:px-[50px] space-y-8 sm:space-y-12">
+        
+        {/* Section Header (Centered, bold and balanced) */}
+        <div className="text-center max-w-3xl mx-auto space-y-3 sm:space-y-4">
+          <div className="inline-flex items-center gap-2">
+            <span className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#dcb36d]/10 border border-[#dcb36d]/30 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#FAD293]">
+              <Sparkles className="h-3 w-3 text-[#FAD293]" />
+              Intelligent Matching Engine
+            </span>
+          </div>
+
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
+            The Right Provider,{" "}
+            <span className="bg-gradient-to-r from-[#FAD293] via-[#E8AF66] to-[#CEA46B] bg-clip-text text-transparent">
+              Every Single Time.
+            </span>
+          </h2>
+
+          <p className="text-sm sm:text-base lg:text-lg text-white/60 leading-relaxed">
+            Our proprietary algorithmic engine evaluates 14+ technical criteria in real-time — connecting your specific vehicle model, location, and budget with certified specialists guaranteed to deliver excellence.
+          </p>
+
+          {/* Metrics Pills Row */}
+        
+        </div>
+
+        {/* Big Prominent Showcase Image (Full-width, crystal clear & high-res) */}
+        <div className="relative group">
+          <div className="relative w-full rounded-2xl sm:rounded-3xl border border-[#CEA46B]/35 bg-[#0a0705] shadow-[0_25px_80px_rgba(0,0,0,0.95)] overflow-hidden transition-all duration-500 group-hover:border-[#FAD293]/60 group-hover:shadow-[0_30px_90px_rgba(206,164,107,0.22)]">
+            {/* Top gold sheen border line */}
+            <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#FAD293] to-transparent z-20 pointer-events-none" />
+
+            {/* Showcase Banner Container - exact 1672/742 ratio matching qoutes-2.png */}
+            <div className="relative w-full aspect-[1672/742] overflow-hidden bg-black/80">
               <Image
                 src="/qoutes-2.png"
-                alt="Motor Market Club - Choose With Confidence"
+                alt="Motor Market Club - Choose With Confidence, Compare Specialists Side by Side"
                 fill
                 priority
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-fit rounded-3xl transition-transform duration-700 ease-out group-hover:scale-105"
+                sizes="(max-width: 1440px) 100vw, 1440px"
+                className="w-full h-full object-cover rounded-2xl sm:rounded-3xl transition-transform duration-700 ease-out group-hover:scale-[1.01]"
               />
-            </div>
-            {/* Ambient inner border glow */}
-            <div className="absolute inset-0 rounded-3xl ring-1 ring-inset ring-[#FAD293]/20 pointer-events-none" />
-            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-[#FAD293]/10 rounded-full blur-3xl pointer-events-none" />
-          </div>
 
-          {/* Right: text content */}
-          <div>
-            <div className="flex items-center gap-3 mb-5">
-              <div className="h-px w-10" style={{ background: "linear-gradient(90deg, #FAD293, transparent)" }} />
-              <span
-                className="text-xs font-semibold tracking-[0.25em] uppercase"
-                style={{
-                  background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Intelligent Matching
+              {/* Subtle edge vignette */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10 pointer-events-none" />
+            </div>
+
+            {/* Floating Live Matching Status Pill */}
+            <div className="absolute top-3 left-3 sm:top-5 sm:left-6 z-20 flex items-center gap-2 rounded-full border border-white/15 bg-black/80 px-3.5 py-1.5 backdrop-blur-md shadow-xl">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FAD293] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FAD293]" />
+              </span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white">
+                Live Quotation Engine • Real-Time Bids
               </span>
             </div>
 
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              The Right Provider,{" "}
-              <span
-                style={{
-                  background: "linear-gradient(135deg, #FAD293, #CEA46B)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Every Time
+            {/* Floating Verified Specialists Pill at Bottom */}
+            <div className="absolute bottom-3 right-3 sm:bottom-5 sm:right-6 z-20 flex items-center gap-1.5 rounded-full border border-[#FAD293]/35 bg-[#120F0C]/90 px-3.5 py-1.5 backdrop-blur-md shadow-xl text-[#FAD293]">
+              <ShieldCheck className="w-4 h-4" />
+              <span className="text-[10px] sm:text-xs font-extrabold tracking-wide text-[#FAD293]">
+                100% Certified Specialists
               </span>
-            </h2>
-            <p className="text-white/55 text-lg mb-10 leading-relaxed">
-              Our proprietary matching engine doesn&apos;t just find available providers — it finds the <em className="not-italic text-white/80">best</em> provider for your specific situation.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {matchingPoints.map((point, index) => (
-                <div
-                  key={index}
-                  className="p-5 rounded-2xl border border-white/8 bg-white/3 hover:border-[#FAD293]/20 hover:bg-white/5 transition-all duration-300 group"
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center mb-4 group-hover:shadow-[0_0_16px_rgba(250,210,147,0.15)] transition-all duration-300"
-                    style={{
-                      background: "linear-gradient(135deg, rgba(250,210,147,0.1), rgba(206,164,107,0.05))",
-                      border: "1px solid rgba(250,210,147,0.15)",
-                      color: "#FAD293",
-                    }}
-                  >
-                    {point.icon}
-                  </div>
-                  <h3 className="text-base font-semibold mb-2 group-hover:text-[#FAD293] transition-colors duration-300">
-                    {point.title}
-                  </h3>
-                  <p className="text-xs text-white/40 leading-relaxed">{point.desc}</p>
-                </div>
-              ))}
             </div>
+
+            {/* Bottom subtle gold sheen bar */}
+            <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-[#CEA46B]/40 to-transparent z-20 pointer-events-none" />
           </div>
         </div>
+
+
+
+        {/* Bottom Call to Action Strip */}
+        <div className="pt-0 sm:pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-center">
+       
+        </div>
+
       </div>
     </section>
   );

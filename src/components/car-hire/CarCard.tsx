@@ -59,15 +59,9 @@ export const CarCard: React.FC<CarCardProps> = ({ car, onBookNow }) => {
           className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           onError={(e) => {
             const target = e.currentTarget as HTMLImageElement;
-            const nextImg = galleryImages.find(
-              (img) => img && img !== target.src && !img.includes("photo-1549399542")
-            );
-            if (nextImg) {
-              target.src = nextImg;
-            } else {
-              target.src =
-                "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
-            }
+            target.onerror = null;
+            target.src =
+              "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d0d] via-transparent to-black/30" />

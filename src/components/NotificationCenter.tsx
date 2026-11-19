@@ -23,6 +23,7 @@ import {
   Radio,
   UserRound,
   Tag,
+  Receipt,
 } from "lucide-react";
 import {
   BookingNotification,
@@ -223,6 +224,19 @@ export default function NotificationCenter({
     setUnreadCount((prev) => Math.max(0, prev - 1));
     setIsOpen(false);
     if (onCloseMobileMenu) onCloseMobileMenu();
+
+    // If Provider Estimate -> redirect to Provider Estimates tab
+    if (item.actionType === "estimate" || item.category === "estimate" || item.targetUrl?.includes("tab=estimates")) {
+      router.push(item.targetUrl || "/account?tab=estimates");
+      return;
+    }
+
+    // If Customer Quote Request / Bid -> redirect to My Quotes tab
+    if (item.actionType === "quote" || item.targetUrl?.includes("tab=quotes")) {
+      router.push(item.targetUrl || "/account?tab=quotes");
+      return;
+    }
+
     setSelectedNotification(item);
   };
 
@@ -245,6 +259,8 @@ export default function NotificationCenter({
   // Icon selector
   const getCategoryIcon = (category: BookingNotification["category"]) => {
     switch (category) {
+      case "estimate":
+        return <Receipt className="w-4 h-4 text-[#e0b777]" />;
       case "quote":
         return <Sparkles className="w-4 h-4 text-[#e0b777] animate-pulse" />;
       case "car_hire":
@@ -536,6 +552,10 @@ export default function NotificationCenter({
                                 }}
                               />
                             </div>
+                          ) : item.actionType === "estimate" || item.category === "estimate" ? (
+                            <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
+                              <Receipt size={19} />
+                            </div>
                           ) : item.actionType === "quote" || item.category === "quote" ? (
                             <div className="w-11 h-11 rounded-2xl bg-[#231b13] border border-[#d9a85f]/30 flex items-center justify-center text-[#d9a85f] shrink-0 shadow-sm mt-0.5">
                               <Tag size={19} />
@@ -563,14 +583,18 @@ export default function NotificationCenter({
                               {item.description || (item.bookingId ? `Your booking #${formatToNumericBookingId(item.readableId || item.bookingId)} status has been updated.` : "")}
                             </p>
 
-                            {/* Footer: Time ago on left, View Bids / View Details on right */}
+                            {/* Footer: Time ago on left, View Estimate / View Bids / View Details on right */}
                             <div className="flex items-center justify-between text-xs text-white/40 mt-2.5 pt-0.5">
                               <span className="font-medium text-[11px] text-white/40">
                                 {item.timeAgo}
                               </span>
 
                               <div className="flex items-center gap-2.5">
-                                {item.actionType === "quote" ? (
+                                {item.actionType === "estimate" || item.category === "estimate" ? (
+                                  <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
+                                    View Estimate &gt;
+                                  </span>
+                                ) : item.actionType === "quote" ? (
                                   <span className="text-[#d9a85f] text-xs font-bold hover:underline flex items-center gap-0.5">
                                     View Bids &gt;
                                   </span>

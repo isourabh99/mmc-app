@@ -9,6 +9,7 @@ import {
   FileText,
   LogOut,
   Sparkles,
+  Wallet,
 } from "lucide-react";
 
 interface AccountMobileNavProps {
@@ -65,6 +66,16 @@ export const AccountMobileNav: React.FC<AccountMobileNavProps> = ({
       label: "Estimates",
       icon: Sparkles,
       href: "/estimate",
+    },
+    {
+      id: "wallet",
+      label: "Wallet",
+      icon: Wallet,
+      href: "/account?tab=wallet",
+      badge:
+        user?.wallet_balance !== undefined && Number(user.wallet_balance) > 0
+          ? `£${Number(user.wallet_balance).toFixed(0)}`
+          : undefined,
     },
   ];
 

@@ -97,6 +97,8 @@ import {
     clearServiceFormDraft,
 } from "@/lib/serviceFormDraft";
 
+import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+
 export default function AlloyWheelPage() {
     const router = useRouter();
     const { showToast } = useToast();
@@ -183,7 +185,6 @@ export default function AlloyWheelPage() {
         if (typeof window === "undefined") return;
 
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
-        localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
         const storedLat = localStorage.getItem("user_lat");
         const storedLon = localStorage.getItem("user_lon");
@@ -624,7 +625,7 @@ export default function AlloyWheelPage() {
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, any>>({});
     const [serviceAddressId, setServiceAddressId] = useState<string>("");
     const [bookingNotes, setBookingNotes] = useState<string>("");
-    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe" | "wallet_payment">("wallet_payment");
     const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [showPaymentSheet, setShowPaymentSheet] = useState<boolean>(false);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
@@ -715,7 +716,42 @@ export default function AlloyWheelPage() {
     useEffect(() => {
         if (typeof window === "undefined") return;
         try {
+            const searchStr = window.location.search || window.location.href;
             const searchParams = new URLSearchParams(window.location.search);
+            const isWalletTopUp = searchStr.includes("wallet_topup=success") || searchParams.get("wallet_topup") === "success";
+            if (isWalletTopUp || searchStr.includes("view=booking")) {
+                const saved = sessionStorage.getItem("mmc_current_alloy_booking");
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.provider) setBookingProviderModal(parsed.provider);
+                        if (parsed.bidOffer) setBookingBidOffer(parsed.bidOffer);
+                        if (parsed.postItem) setBookingPostItem(parsed.postItem);
+                        const pId = parsed.postId || parsed.bidOffer?.post_id || (parsed.bidOffer as any)?.postId || parsed.postItem?.id || "";
+                        if (pId) setBookingPostId(pId);
+                        if (parsed.bookingDate) setBookingDate(parsed.bookingDate);
+                        if (parsed.bookingTime) setBookingTime(parsed.bookingTime);
+                        if (parsed.selectedSlotId) setSelectedSlotId(parsed.selectedSlotId);
+                        if (parsed.bookingPaymentMethod) setBookingPaymentMethod(parsed.bookingPaymentMethod);
+                        if (parsed.isPartialPayment !== undefined) setIsPartialPayment(parsed.isPartialPayment);
+                        navigateToView("booking");
+                    } catch { }
+                }
+                const topUpAmt = searchParams.get("topup_amount") || searchParams.get("amount");
+                showToast(`Wallet topped up successfully with £${topUpAmt || ""}! Balance updated.`, "success");
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete("wallet_topup");
+                cleanUrl.searchParams.delete("topup_amount");
+                cleanUrl.searchParams.delete("open_payment");
+                cleanUrl.searchParams.delete("reopen_payment");
+                cleanUrl.searchParams.delete("status");
+                cleanUrl.searchParams.delete("payment_status");
+                cleanUrl.searchParams.delete("payment");
+                cleanUrl.searchParams.delete("flag");
+                window.history.replaceState({}, document.title, cleanUrl.toString());
+                return;
+            }
+
             const status = searchParams.get("status") || searchParams.get("payment_status") || searchParams.get("payment");
             const bookingId = searchParams.get("booking_id") || searchParams.get("readable_id");
 
@@ -927,6 +963,24 @@ export default function AlloyWheelPage() {
         }
     };
 
+    // Auto-load bid and enter booking view directly if post_id & bid_id are provided (eliminates duplicate screen)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const urlParams = new URLSearchParams(window.location.search);
+        const bidId = urlParams.get("bid_id");
+        const postId = urlParams.get("post_id");
+        if (bidId && postId && !bookingProviderModal) {
+            getReceivedBidsForPost(postId, 20, 1).then((bids) => {
+                const targetBid = bids?.find((b) => String(b.id) === bidId) || bids?.[0];
+                if (targetBid) {
+                    const post = myQuotationRequests.find((p) => p.id === postId) || null;
+                    if (post) setSelectedPostForBids(post);
+                    handleBookBidOffer(targetBid);
+                }
+            }).catch((err) => console.warn("Failed to auto-select bid for direct booking:", err));
+        }
+    }, [myQuotationRequests, bookingProviderModal]);
+
     const handleBookBidOffer = (bid: PostBidItem) => {
         if (!isAuthenticated()) {
             showToast("Please login to book this quotation offer.", "info");
@@ -979,6 +1033,21 @@ export default function AlloyWheelPage() {
         setShowPaymentSheet(false);
         setSelectedPostForBids(null);
         setBookingProviderModal(providerToBook);
+        if (typeof window !== "undefined") {
+            try {
+                sessionStorage.setItem("mmc_current_alloy_booking", JSON.stringify({
+                    provider: providerToBook,
+                    bidOffer: bid,
+                    postItem: post,
+                    postId: targetPostId,
+                    bookingDate,
+                    bookingTime,
+                    selectedSlotId,
+                    bookingPaymentMethod,
+                    isPartialPayment,
+                }));
+            } catch { }
+        }
         navigateToView("booking");
     };
 
@@ -994,8 +1063,16 @@ export default function AlloyWheelPage() {
 
         if (!bookingProviderModal) return;
 
-        const effectivePostId = bookingPostId.trim();
+        const effectivePostId = (
+            bookingPostId ||
+            bookingBidOffer?.post_id ||
+            (bookingBidOffer as any)?.postId ||
+            bookingPostItem?.id ||
+            ""
+        ).trim();
+
         if (!effectivePostId) {
+            console.error("[Alloy] No effectivePostId found!", { bookingPostId, bookingBidOffer, bookingPostItem });
             showToast("Please select a valid quote offer to proceed with booking", "error");
             setBookingError("A valid quotation offer is required. Please select an offer from Quotes & Bids.");
             return;
@@ -1026,8 +1103,16 @@ export default function AlloyWheelPage() {
     const handleExecuteBooking = async () => {
         if (!bookingProviderModal) return;
 
-        const effectivePostId = bookingPostId.trim();
+        const effectivePostId = (
+            bookingPostId ||
+            bookingBidOffer?.post_id ||
+            (bookingBidOffer as any)?.postId ||
+            bookingPostItem?.id ||
+            ""
+        ).trim();
+
         if (!effectivePostId) {
+            console.error("[Alloy] No effectivePostId found!", { bookingPostId, bookingBidOffer, bookingPostItem });
             showToast("Please select a valid quote offer to proceed with booking", "error");
             setBookingError("A valid quotation offer is required. Please select an offer from Quotes & Bids.");
             return;
@@ -1274,9 +1359,21 @@ export default function AlloyWheelPage() {
                         vehicleReg: regNo || "",
                         vehicleModel: carBrand || "",
                         totalAmount: effectivePrice,
-                        isPaid: false,
-                        paymentStatus: "Pending Payment",
-                        paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : "Cash After Service",
+                        isPaid: bookingPaymentMethod === "wallet_payment",
+                        paymentStatus:
+                            bookingPaymentMethod === "wallet_payment"
+                                ? isPartialPayment
+                                    ? "Partial Deposit Paid (Wallet)"
+                                    : "Paid in Full (Wallet)"
+                                : bookingPaymentMethod === "stripe"
+                                ? "Pending Payment"
+                                : "Cash After Service",
+                        paymentMethod:
+                            bookingPaymentMethod === "wallet_payment"
+                                ? "MMC Digital Wallet"
+                                : bookingPaymentMethod === "stripe"
+                                ? "Online (Stripe)"
+                                : "Cash After Service",
                         status: "accepted",
                         statusDisplay: "Accepted",
                         scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1286,7 +1383,14 @@ export default function AlloyWheelPage() {
                     });
                 }
 
-                showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
+                if (bookingPaymentMethod === "wallet_payment") {
+                    showToast(
+                        `Payment of £${isPartialPayment ? depositAmount : effectivePrice} deducted from Wallet! Booking confirmed!`,
+                        "success"
+                    );
+                } else {
+                    showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
+                }
 
                 triggerDevicePushNotification(
                     "MMC Booking Confirmed! 🎉",
@@ -1627,7 +1731,7 @@ export default function AlloyWheelPage() {
                             {/* Left Column: Heading, Badges, Video Card */}
                             <div className="lg:col-span-7 flex flex-col justify-between">
                                 <div>
-                                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.08] mb-5">
+                                    <h1 className="text-2xl sm:text-3xl lg:text-3.5xl font-black tracking-tight text-white leading-tight mb-2">
                                         Alloy Wheel <br />
                                         <span
                                             style={{
@@ -1641,13 +1745,13 @@ export default function AlloyWheelPage() {
                                         </span>
                                     </h1>
 
-                                    <p className="text-zinc-300 text-base sm:text-lg max-w-xl leading-relaxed mb-8">
+                                    <p className="text-zinc-400 text-xs sm:text-sm max-w-lg leading-relaxed mb-2.5">
                                         Restore your alloy wheels with professional finishing and expert
                                         refurbishment services.
                                     </p>
 
                                     {/* 3 Badges */}
-                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-10">
+                                    <div className="flex flex-wrap items-center gap-6 sm:gap-10 mb-3 gap-4 sm:gap-6">
                                         {/* Badge 1 */}
                                         <div className="flex items-center gap-3">
                                             <div className="w-11 h-11 rounded-full border border-zinc-800 bg-zinc-900/80 flex items-center justify-center text-[#E8AF66] shadow-[0_0_20px_rgba(232,175,102,0.15)]">
@@ -1683,47 +1787,13 @@ export default function AlloyWheelPage() {
                                     </div>
                                 </div>
 
-                                {/* Video / Feature Highlight Banner Card */}
-                                <div className="relative group rounded-2xl border border-zinc-800/90 bg-[#121316]/90 p-5 sm:p-6 backdrop-blur-md overflow-hidden max-w-xl shadow-2xl transition-all duration-300 hover:border-zinc-700">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                                        <div className="z-10 flex-1">
-                                            <span className="inline-block text-xs font-bold tracking-widest text-[#E8AF66] uppercase mb-1">
-                                                Featured Service
-                                            </span>
-                                            <h3 className="text-lg sm:text-xl font-extrabold tracking-wide text-white uppercase leading-snug">
-                                                ALLOY WHEEL <br className="hidden sm:block" />
-                                                REFURBISHMENT
-                                            </h3>
-                                            <p className="text-[11px] tracking-widest text-zinc-400 font-medium mt-1.5 uppercase">
-                                                CLEAN &bull; REFRESH &bull; REFINE
-                                            </p>
-                                            <p className="text-xs text-zinc-400 mt-2 font-normal">
-                                                Professional care for a lasting impression.
-                                            </p>
-                                        </div>
-
-                                        {/* Image & Play Button */}
-                                        <div className="relative w-full sm:w-48 h-32 rounded-xl overflow-hidden shrink-0 border border-zinc-700/60 shadow-inner">
-                                            <Image
-                                                src="/images/alloy-wheel/alloy_detailing.jpg"
-                                                alt="Alloy Wheel Buffing Process"
-                                                fill
-                                                className="object-cover group-hover:scale-105 transition-transform duration-500"
-                                            />
-                                            <div className="absolute inset-0 bg-black/35 group-hover:bg-black/20 transition-colors" />
-
-                                            {/* Play Button */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowVideoModal(true)}
-                                                aria-label="Play refurbishment video"
-                                                className="absolute inset-0 m-auto w-11 h-11 rounded-full border-2 border-[#E8AF66] bg-black/70 flex items-center justify-center text-[#E8AF66] hover:scale-110 active:scale-95 transition-all shadow-[0_0_15px_rgba(232,175,102,0.4)] cursor-pointer"
-                                            >
-                                                <Play className="w-5 h-5 ml-0.5 fill-[#E8AF66]" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                {/* OUR WORK SHOWCASE */}
+                                <ServiceOurWorkShowcase
+                                    categoryId={ALLOY_CATEGORY_ID}
+                                    categoryName="Alloy Wheel Refurbishment"
+                                    customSubtitle="Explore our verified diamond-cut wheel CNC lathe recuts, powder coating, and kerb scuff restorations."
+                                    viewAllUrl="/services/our-work"
+                                />
                             </div>
 
                             {/* Right Column: Get Alloy Quote Form Card */}

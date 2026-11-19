@@ -1,3 +1,4 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient, { getBackendRootUrl } from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
@@ -30,7 +31,7 @@ export interface AlloyServicesResponse {
 
 export const ALLOY_CATEGORY_ID = "e1fb2dae-c233-4b45-852b-8253373e06d7";
 export const BOOKING_QUESTIONS_CATEGORY_ID = ALLOY_CATEGORY_ID;
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 
 /**
  * Fetch Alloy Wheel services strictly from the backend API.
@@ -42,7 +43,7 @@ export const getAlloyServices = async (
   offset: number = 1
 ): Promise<AlloyServiceItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<any>(
       `/customer/service/category/${categoryId}`,
@@ -174,7 +175,7 @@ export const searchProvidersByService = async (params: {
   longitude?: string | number;
 }): Promise<ProviderItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const lat =
       params.latitude ||
@@ -466,7 +467,7 @@ export const sendQuotationRequest = async (
     formData.append("attachments[]", params.car_image);
   }
 
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
 
   const response = await apiClient.post<CreateQuotationResponse>(
     "/customer/post",
@@ -617,7 +618,7 @@ export const getMyQuotationRequests = async (
   offset: number = 1
 ): Promise<CustomerQuotationPostItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<CustomerQuotationPostsResponse>(
       "/customer/post",
@@ -749,7 +750,7 @@ export const getReceivedBidsForPost = async (
   }
 
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<PostBidsResponse>(
       "/customer/post/bid",
@@ -853,7 +854,7 @@ export const getProviderSlots = async (
   date?: string
 ): Promise<BookingSlotItem[]> => {
   try {
-    const zoneId = DEFAULT_ZONE_ID;
+    const zoneId = getStoredZoneId();
 
     const response = await apiClient.get<any>(
       "/customer/booking/provider/slots",

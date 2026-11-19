@@ -1,70 +1,46 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  getAddressFromCoordinates,
-  saveCustomerAddress,
-} from "@/app/services/api/profile.api";
 
 export default function LocationPermission() {
   useEffect(() => {
-    if (typeof window === "undefined" || !navigator.geolocation) {
-      return;
-    }
+    if (typeof window === "undefined") return;
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-
-        try {
-          const googleData = await getAddressFromCoordinates(
-            latitude,
-            longitude
-          );
-
-          const address = googleData?.address;
-          if (address) {
-            localStorage.setItem("user_address", address);
-            localStorage.setItem("user_lat", String(latitude));
-            localStorage.setItem("user_lon", String(longitude));
-          }
-
-          const token = localStorage.getItem("token");
-          if (token && address) {
-            const storedUser = localStorage.getItem("user");
-            const user = storedUser ? JSON.parse(storedUser) : null;
-
-            await saveCustomerAddress({
-              lat: String(latitude),
-              lon: String(longitude),
-              address: address,
-              address_type: "service",
-              contact_person_name: user
-                ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-                : "",
-              contact_person_number: user?.phone || "",
-              address_label: "Home",
-            });
-          }
-        } catch (error: any) {
-          if (error?.response?.status !== 400) {
-            console.warn(
-              "Location/address sync:",
-              error?.response?.status || error?.message
-            );
-          }
+    try {
+      // 1. Clean up duplicate zone keys and temporary location items from localStorage
+      const junkKeys = [
+        "zoneid",
+        "zoneId",
+        "zone-id",
+        "user_lat",
+        "user_lon",
+        "user_postcode",
+        "user_street",
+        "user_address",
+        "street",
+        "city",
+        "house",
+        "floor",
+        "zone_last_fetched",
+        "zone_name",
+      ];
+      junkKeys.forEach((key) => {
+        if (localStorage.getItem(key) !== null) {
+          localStorage.removeItem(key);
         }
-      },
-      (error) => {
-        // Location permission dismissed or timed out
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 30000,
-        maximumAge: 60000,
+      });
+
+      // 2. Ensure only single standardized zone_id exists with correct live zone
+      const currentZone = localStorage.getItem("zone_id");
+      if (
+        !currentZone ||
+        currentZone === "undefined" ||
+        currentZone === "null" ||
+        currentZone === "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+      ) {
+        localStorage.setItem("zone_id", "c5b64f38-90ac-49f3-858c-d8dae5c0a53f");
       }
-    );
+    } catch {}
   }, []);
 
   return null;

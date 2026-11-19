@@ -722,28 +722,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       labelParts.push(cleanAddress);
       const formattedLabel = labelParts.join(", ");
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("service_address", serviceAddressJson);
-        localStorage.setItem("service_address_json", serviceAddressJson);
-        localStorage.setItem("customer_service_address", serviceAddressJson);
-        localStorage.setItem("postcode", effectivePostcode);
-        localStorage.setItem("user_postcode", effectivePostcode);
-        localStorage.setItem("user_address", formattedLabel);
-        localStorage.setItem("user_lat", String(lat));
-        localStorage.setItem("user_lon", String(lon));
-        localStorage.setItem("user_house", effectiveHouse);
-        localStorage.setItem("house", effectiveHouse);
-        localStorage.setItem("user_floor", effectiveFloor);
-        localStorage.setItem("floor", effectiveFloor);
-        localStorage.setItem("user_street", effectiveStreet);
-        localStorage.setItem("street", effectiveStreet);
-        localStorage.setItem("user_city", effectiveCity);
-        localStorage.setItem("city", effectiveCity);
-        localStorage.setItem("user_contact_name", effectiveContactName);
-        localStorage.setItem("contact_person_name", effectiveContactName);
-        localStorage.setItem("user_contact_phone", effectiveContactPhone);
-        localStorage.setItem("contact_person_number", effectiveContactPhone);
-      }
+
 
       // 3. Return full structured location data
       onSelectLocation({
@@ -1138,10 +1117,6 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                       const val = e.target.value;
                       setContactName(val);
                       hasUserEditedContactRef.current = true;
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_contact_name", val);
-                        localStorage.setItem("contact_person_name", val);
-                      }
                     }}
                     placeholder="Full Name"
                     className="w-full h-9 bg-black/50 border border-white/15 focus:border-[#d09a50] rounded-xl px-3 text-xs text-white outline-none"
@@ -1159,10 +1134,6 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                       const val = e.target.value;
                       setContactPhone(val);
                       hasUserEditedContactRef.current = true;
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_contact_phone", val);
-                        localStorage.setItem("contact_person_number", val);
-                      }
                     }}
                     placeholder="+44 7123 456789"
                     className="w-full h-9 bg-black/50 border border-white/15 focus:border-[#d09a50] rounded-xl px-3 text-xs text-white outline-none"

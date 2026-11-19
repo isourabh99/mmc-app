@@ -1,7 +1,8 @@
+import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 export const FALLBACK_MECHANICAL_CATEGORY_ID = "b0a78f28-5281-4284-a50d-781d4592b1c4";
 
 export interface MechanicalCategoryItem {
@@ -180,7 +181,7 @@ export const REAL_MECHANICAL_SERVICES: MechanicalServiceItem[] = [
 ];
 
 export const getMechanicalCategories = async (): Promise<MechanicalCategoryItem[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
 
   try {
     const response = await apiClient.get("/customer/category", {
@@ -228,7 +229,7 @@ export const getMechanicalServices = async (
   categoryId: string = FALLBACK_MECHANICAL_CATEGORY_ID
 ): Promise<MechanicalServiceItem[]> => {
   const targetCategory = categoryId || FALLBACK_MECHANICAL_CATEGORY_ID;
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
   const combinedMap = new Map<string, MechanicalServiceItem>();
 
   const mapItem = (item: any): MechanicalServiceItem => ({
@@ -595,7 +596,7 @@ export const addMechanicalToCart = async (payload: {
 };
 
 export const getMechanicalProviderSlots = async (providerId: string, date: string): Promise<any[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
 
   try {
     const response = await apiClient.get("/customer/booking/provider/slots", {
@@ -618,7 +619,7 @@ export const getMechanicalProviderQuestions = async (
   providerId: string,
   categoryId: string = FALLBACK_MECHANICAL_CATEGORY_ID
 ): Promise<any[]> => {
-  const zoneId = DEFAULT_ZONE_ID;
+  const zoneId = getStoredZoneId();
 
   try {
     const response = await apiClient.get("/customer/booking/provider/questions", {

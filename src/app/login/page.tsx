@@ -369,24 +369,52 @@ function LoginContent() {
 
               {/* LOGIN AS A PROVIDER */}
               <div className="mt-5 pt-4 border-t border-white/10">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-px bg-white/10 flex-1" />
-                  <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">
-                    Partner Portal
-                  </span>
-                  <div className="h-px bg-white/10 flex-1" />
-                </div>
+             
 
-                <a
-                  href="https://mmcclub.co.uk/backend/provider/auth/login"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border border-[#FAD293]/30 bg-gradient-to-r from-[#FAD293]/10 to-[#CEA46B]/10 hover:from-[#FAD293]/20 hover:to-[#CEA46B]/20 hover:border-[#FAD293]/60 text-[#FAD293] hover:text-white font-semibold text-xs sm:text-sm transition-all duration-200 shadow-sm group cursor-pointer"
-                >
-                  <ShieldCheck size={16} className="text-[#FAD293] group-hover:scale-110 transition-transform" />
-                  <span>Login as a Provider</span>
-                  <ExternalLink size={13} className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-                </a>
+           
+<a
+  href="https://mmcclub.co.uk/backend/provider/auth/login"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl
+  border border-[#FAD293]/30
+  bg-gradient-to-r from-[#1D1D1D] via-[#29231C] to-[#1D1D1D]
+  hover:from-[#30271C] hover:via-[#3A2D1D] hover:to-[#30271C]
+  hover:border-[#FAD293]/70
+  text-white transition-all duration-300
+  shadow-[0_4px_18px_rgba(250,210,147,0.08)]
+  hover:shadow-[0_6px_24px_rgba(250,210,147,0.18)]
+  group cursor-pointer"
+>
+  <span className="flex items-center justify-center w-10 h-10 rounded-lg
+    bg-[#FAD293]/10 border border-[#FAD293]/20
+    group-hover:bg-[#FAD293]/20 transition-all duration-300"
+  >
+    <ShieldCheck
+      size={19}
+      className="text-[#FAD293] group-hover:scale-110 transition-transform duration-300"
+    />
+  </span>
+
+  <span className="flex-1 flex flex-col gap-0.5">
+    <span className="font-semibold text-sm sm:text-base tracking-wide">
+      Provider & Partner Login
+    </span>
+    <span className="text-[11px] sm:text-xs text-white/55">
+      Access your professional dashboard
+    </span>
+  </span>
+
+  <span className="flex items-center justify-center w-8 h-8 rounded-full
+    bg-white/5 group-hover:bg-[#FAD293]/15 transition-all duration-300"
+  >
+    <ExternalLink
+      size={15}
+      className="text-[#FAD293] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300"
+    />
+  </span>
+</a>
+
               </div>
 
             </div>

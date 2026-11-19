@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 import Image from "next/image";
 import {
   AlertOctagon,
@@ -191,8 +192,17 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
 
   // Payment Selection Modal
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [paymentMethod, setPaymentMethod] = useState<"wallet_payment" | "stripe">("wallet_payment");
   const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true); // true => 1 (Deposit 25%), false => 0 (Online Payment Full)
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      setShowPaymentModal(true);
+    }
+  }, []);
 
   // Load cached location & auto detect GPS on mount
   useEffect(() => {
@@ -329,7 +339,6 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
     const provId = (selectedProvider?.id && isUuid(selectedProvider.id)) ? selectedProvider.id : DEFAULT_PROVIDER_ID;
     const effectiveZoneId = DEFAULT_ZONE_ID;
     if (typeof window !== "undefined") {
-      localStorage.setItem("zoneId", effectiveZoneId);
       localStorage.setItem("zone_id", effectiveZoneId);
     }
 
@@ -371,9 +380,11 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
 
       // STEP 2: Send booking request (POST /customer/booking/request/send)
       showToast("Creating booking session...", "info");
+      const isWallet = paymentMethod === "wallet_payment";
+
       let bookingRes = await sendBookingRequestToBackend({
         provider_id: provId,
-        payment_method: "stripe",
+        payment_method: isWallet ? "wallet_payment" : "stripe",
         payment_platform: "app",
         is_partial: isPartialNum,
         zone_id: effectiveZoneId,
@@ -417,7 +428,7 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
 
         bookingRes = await sendBookingRequestToBackend({
           provider_id: DEFAULT_PROVIDER_ID,
-          payment_method: "stripe",
+          payment_method: isWallet ? "wallet_payment" : "stripe",
           payment_platform: "app",
           is_partial: 0,
           zone_id: DEFAULT_ZONE_ID,
@@ -510,10 +521,12 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           totalAmount: totalAmount,
           paidAmount: depositAmt,
           dueAmount: dueAmt,
-          isPaid: isPartialNum === 0,
+          isPaid: isWallet ? true : (isPartialNum === 0),
           isPartiallyPaid: isPartialNum === 1,
-          paymentStatus: isPartialNum === 1 ? "Partial Deposit" : "Pending Payment",
-          paymentMethod: "Stripe (Online)",
+          paymentStatus: isWallet
+            ? (isPartialNum === 1 ? "Paid (25% Deposit from Wallet)" : "Paid via Wallet")
+            : (isPartialNum === 1 ? "Partial Deposit" : "Pending Payment"),
+          paymentMethod: isWallet ? "MMC Wallet" : "Stripe (Online)",
           status: "accepted",
           statusDisplay: "Accepted",
           scheduleDate: serviceSchedule.split(" ")[0],
@@ -521,7 +534,24 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           createdAt: new Date().toISOString(),
         });
 
-        saveBookingMeta(confirmedRefId, {
+              if (isWallet) {
+        showToast(`Payment of £${depositAmt.toFixed(2)} deducted from Wallet! Emergency booking confirmed!`, "success");
+        setShowPaymentModal(false);
+        if (onBookingComplete) {
+          onBookingComplete({
+            id: confirmedRefId,
+            referenceNumber: confirmedRefId,
+            serviceSchedule,
+            provider: selectedProvider,
+            totalAmount,
+            paidAmount: depositAmt,
+            dueAmount: dueAmt,
+          });
+        }
+        return;
+      }
+
+      saveBookingMeta(confirmedRefId, {
           serviceTitle: `Tyre Assistance: Emergency (${situationType})`,
           serviceCategoryName: "Tyre Assistance",
           serviceType: "emergency",
@@ -1159,165 +1189,20 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* SELECT PAYMENT METHOD MODAL (MATCHING SCREENSHOT 5) */}
-      {/* ==================================================== */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto animate-fade-in">
-          <div className="w-full max-w-md bg-[#13110E] border border-white/20 rounded-3xl p-6 space-y-5 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg sm:text-xl font-black text-white tracking-wide">
-                  Select Payment Method
-                </h3>
-                <p className="text-xs text-white/50 mt-0.5">
-                  Choose how you want to pay for this service
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Options */}
-            <div className="space-y-3.5">
-              {/* Option 1: Deposit (25% Advance) -> is_partial: 1 */}
-              <div
-                onClick={() => setIsPartialPayment(true)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${isPartialPayment
-                  ? "bg-[#1C1814] border-[#E5B874] ring-1 ring-[#E5B874]/40 shadow-lg"
-                  : "bg-[#141210] border-white/10 hover:border-white/20"
-                  }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#E5B874] text-black flex items-center justify-center shrink-0">
-                      <Banknote size={20} className="stroke-[2.2]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">Deposit</span>
-                        <span className="text-[10px] font-bold text-[#E5B874] bg-[#E5B874]/15 border border-[#E5B874]/30 px-2 py-0.5 rounded-full uppercase">
-                          25% Advance
-                        </span>
-                      </div>
-                      <p className="text-xs text-white/50 mt-0.5">
-                        Pay 25% deposit now to confirm booking
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                      ? "bg-[#E5B874] border-[#E5B874] text-black"
-                      : "border-white/30 bg-transparent"
-                      }`}
-                  >
-                    {isPartialPayment && <Check size={14} className="stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 space-y-1 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-white/80 font-semibold">Deposit Due Now (25%):</span>
-                    <span className="text-sm font-bold text-[#E5B874]">£{depositAmount}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-white/40 text-[11px]">
-                    <span>Due after service (75%):</span>
-                    <span>£{remainingAmount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Option 2: Online Payment (Full) -> is_partial: 0 */}
-              <div
-                onClick={() => setIsPartialPayment(false)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                  ? "bg-[#1C1814] border-[#E5B874] ring-1 ring-[#E5B874]/40 shadow-lg"
-                  : "bg-[#141210] border-white/10 hover:border-white/20"
-                  }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#221F1B] border border-white/10 text-[#E5B874] flex items-center justify-center shrink-0">
-                      <CreditCard size={20} className="stroke-[2]" />
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-white block">
-                        Online Payment
-                      </span>
-                      <p className="text-xs text-white/50 mt-0.5">
-                        Pay full amount now online
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                      ? "bg-[#E5B874] border-[#E5B874] text-black"
-                      : "border-white/30 bg-transparent"
-                      }`}
-                  >
-                    {!isPartialPayment && <Check size={14} className="stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs">
-                  <span className="text-white/80 font-semibold">Amount Due Now:</span>
-                  <span className="text-sm font-bold text-[#E5B874]">£{currentPrice.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Advance Notice Box */}
-            <div className="p-3.5 rounded-2xl bg-[#1D1811] border border-[#E5B874]/20 flex items-start gap-2.5">
-              <Info size={16} className="text-[#E5B874] shrink-0 mt-0.5" />
-              <div className="text-xs space-y-0.5">
-                <span className="font-bold text-[#E5B874] block">
-                  {isPartialPayment ? "25% Advance Payment Required" : "Full Online Payment"}
-                </span>
-                <p className="text-white/60 leading-relaxed text-[11px]">
-                  {isPartialPayment
-                    ? "You must pay a 25% deposit upfront to confirm your booking. The remaining 75% will be paid once the service is completed."
-                    : "Pay full amount now online with secure Stripe checkout."}
-                </p>
-              </div>
-            </div>
-
-            {/* Pay Button */}
-            <button
-              type="button"
-              onClick={handleExecutePayment}
-              disabled={isProcessingPayment}
-              className="w-full py-4 rounded-2xl text-sm font-black text-black flex items-center justify-center gap-2 shadow-xl hover:brightness-105 active:scale-[0.99] transition cursor-pointer disabled:opacity-50"
-              style={{
-                background: "linear-gradient(135deg, #FAD293 0%, #E5B874 50%, #D9A35F 100%)",
-              }}
-            >
-              {isProcessingPayment ? (
-                <>
-                  <Loader2 size={18} className="animate-spin text-black" />
-                  <span>Redirecting to Stripe...</span>
-                </>
-              ) : (
-                <>
-                  <span className="uppercase tracking-wider">
-                    {isPartialPayment
-                      ? `Pay Deposit (£${depositAmount})`
-                      : `Pay Full Amount (£${currentPrice.toFixed(2)})`}
-                  </span>
-                  <ArrowRight size={16} className="stroke-[2.5]" />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Unified Payment Selection Modal */}
+      <PaymentSelectionModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        totalAmount={Number(currentPrice || 50)}
+        selectedMethod={paymentMethod as any}
+        onMethodChange={(m) => setPaymentMethod(m as any)}
+        isPartial={isPartialPayment}
+        onPartialChange={setIsPartialPayment}
+        onConfirm={handleExecutePayment}
+        loading={isProcessingPayment}
+        serviceTitle={`Emergency Tyre Assistance (${situationType})`}
+        allowCash={false}
+      />
 
       {/* Interactive Map Location Picker Modal */}
       <LocationPickerModal
@@ -1342,24 +1227,7 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
           if (data.city) setCity(data.city);
           setServiceAddressJson(data.service_address_json);
           if (typeof window !== "undefined") {
-            localStorage.setItem("user_address", data.formattedAddress);
-            localStorage.setItem("user_postcode", data.postcode);
-            localStorage.setItem("user_lat", data.lat);
-            localStorage.setItem("user_lon", data.lon);
-            localStorage.setItem("user_house", data.house);
-            localStorage.setItem("house", data.house);
-            localStorage.setItem("user_floor", data.floor);
-            localStorage.setItem("floor", data.floor);
-            if (data.street) {
-              localStorage.setItem("user_street", data.street);
-              localStorage.setItem("street", data.street);
-            }
-            if (data.city) {
-              localStorage.setItem("user_city", data.city);
-              localStorage.setItem("city", data.city);
-            }
             localStorage.setItem("service_address", data.service_address_json);
-            localStorage.setItem("service_address_json", data.service_address_json);
           }
           setShowLocationModal(false);
         }}
