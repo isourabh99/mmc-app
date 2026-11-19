@@ -20,6 +20,7 @@ import {
   Calendar,
   X,
   CreditCard,
+  Wallet,
   Building,
   Phone,
   Mail,
@@ -52,8 +53,10 @@ import { getBackendRootUrl } from "@/lib/http/apiClient";
 import { saveBookingMeta, saveConfirmedBooking } from "@/lib/service/bookings.api";
 import { useToast } from "@/components/ToastProvider";
 import { isAuthenticated } from "@/lib/auth.api";
+import { getCustomerWalletInfo } from "@/lib/service/wallet.api";
 import { triggerDevicePushNotification } from "@/lib/firebase";
 import ServiceOurWorkShowcase from "@/components/gallery/ServiceOurWorkShowcase";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 
 interface PackageVariationOption {
   key: string;
@@ -140,10 +143,41 @@ function ChooseDetailersContent() {
   const [additionalNotes, setAdditionalNotes] = useState("");
 
   // Payment State
+  const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"wallet_payment" | "stripe">("wallet_payment");
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isPartialPayment, setIsPartialPayment] = useState(true);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [confirmedBookingRef, setConfirmedBookingRef] = useState("");
+
+  // Check for returning Stripe wallet top-up callback
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      const saved = sessionStorage.getItem("mmc_current_valet_provider");
+      if (saved) {
+        try {
+          setSelectedProvider(JSON.parse(saved));
+        } catch { }
+      }
+      setShowPaymentModal(true);
+    }
+  }, []);
+
+
+  // Fetch Customer Wallet Balance
+  useEffect(() => {
+    if (typeof window !== "undefined" && isAuthenticated()) {
+      getCustomerWalletInfo()
+        .then((res: any) => {
+          const bal = Number(res?.wallet_balance ?? res?.content?.wallet_balance ?? 0);
+          setWalletBalance(isNaN(bal) ? 0 : bal);
+        })
+        .catch(() => setWalletBalance(0));
+    }
+  }, []);
 
   // Restore Request Data from SessionStorage
   useEffect(() => {
@@ -552,6 +586,11 @@ function ChooseDetailersContent() {
   // Transition to dedicated screen view
   const handleSelectProviderForBooking = (provider: ValetProvider) => {
     setSelectedProvider(provider);
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("mmc_current_valet_provider", JSON.stringify(provider));
+      } catch { }
+    }
     setIsBookingSuccess(false);
 
     // Initialize variation selection for each service of this provider
@@ -582,8 +621,8 @@ function ChooseDetailersContent() {
     }
   };
 
-  // Submit Booking & Redirect to Stripe Online Payment
-  const handleConfirmAndPay = async (e: React.FormEvent) => {
+  // Open Payment Selection Modal
+  const handleConfirmAndPay = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProvider) return;
 
@@ -598,6 +637,12 @@ function ChooseDetailersContent() {
       return;
     }
 
+    setShowPaymentModal(true);
+  };
+
+  // Submit Booking & Execute Payment
+  const executeValetBookingPayment = async () => {
+    if (!selectedProvider) return;
     setIsBookingSubmitting(true);
 
     try {
@@ -649,12 +694,25 @@ function ChooseDetailersContent() {
         selectedServiceVariations[servicesWithVariations[0]?.serviceId] ||
         currentSelectedPackage.key;
 
+      const isWallet = bookingPaymentMethod === "wallet_payment";
+      const effectiveIsPartial = isPartialPayment ? 1 : 0;
+      const dueAmount = isPartialPayment ? Number(depositAmount) : activePackagePrice;
+
+      if (isWallet && walletBalance !== null && walletBalance < dueAmount) {
+        showToast(
+          `Insufficient Wallet balance (£${walletBalance.toFixed(2)}). Need £${dueAmount.toFixed(2)}. Please Top-Up your wallet.`,
+          "error"
+        );
+        setIsBookingSubmitting(false);
+        return;
+      }
+
       const bookingRes = await sendValetBookingRequest({
         service_id: primaryServiceId,
         provider_id: selectedProvider.id,
         variant_key: primaryVariantKey,
-        payment_method: "stripe",
-        is_partial: isPartialPayment ? 1 : 0,
+        payment_method: isWallet ? "wallet_payment" : "stripe",
+        is_partial: effectiveIsPartial,
         zone_id: DEFAULT_ZONE_ID,
         service_schedule: formattedSchedule,
         service_address_id: requestData?.serviceAddressId || "2",
@@ -681,6 +739,42 @@ function ChooseDetailersContent() {
 
       const confirmedId = String(ref || `MMC-VAL-${Date.now().toString().slice(-6)}`);
       setConfirmedBookingRef(confirmedId);
+
+      if (isWallet) {
+        saveConfirmedBooking({
+          id: confirmedId,
+          readable_id: confirmedId,
+          service_id: primaryServiceId,
+          service_name: summaryPackages,
+          category_name: "Valet & Detailing",
+          provider_name: selectedProvider.company_name,
+          booking_status: "pending",
+          payment_status: effectiveIsPartial === 1 ? "partially_paid" : "paid",
+          is_paid: true,
+          total_booking_amount: activePackagePrice,
+          paid_amount: dueAmount,
+          due_amount: effectiveIsPartial === 1 ? Number(remainingAmount) : 0,
+          service_schedule: formattedSchedule,
+          service_address: requestData?.locationAddress || paramLocation || "Customer Address",
+          car_registration_number: requestData?.carReg || paramReg || "MMC VEHICLE",
+          car_model: carBrandModel.trim() || requestData?.carModel || "Vehicle",
+          car_color: carColor.trim() || requestData?.carColor || "Standard",
+          created_at: new Date().toISOString(),
+        });
+
+        triggerDevicePushNotification({
+          title: "Valet Booking Confirmed!",
+          body: `Booking #${confirmedId} for ${summaryPackages} with ${selectedProvider.company_name} confirmed via Wallet.`,
+        });
+
+        showToast(
+          `Payment of £${dueAmount.toFixed(2)} deducted from Wallet! Booking confirmed!`,
+          "success"
+        );
+        setShowPaymentModal(false);
+        setIsBookingSuccess(true);
+        return;
+      }
 
       // Direct Stripe URL Redirection
       const redirectLink =
@@ -1333,19 +1427,55 @@ function ChooseDetailersContent() {
                     </div>
                   </div>
 
-                  {/* Dynamic Stripe Card Payment Card */}
+                  {/* Payment Card (Wallet or Stripe) */}
                   <div className="p-6 rounded-3xl border border-[#FAD293]/40 bg-gradient-to-b from-[#FAD293]/10 to-[#FAD293]/5 space-y-5 shadow-2xl relative">
                     <div className="flex items-center justify-between pb-3 border-b border-[#FAD293]/20">
                       <div className="flex items-center gap-2">
-                        <CreditCard size={18} className="text-[#FAD293]" />
-                        <span className="text-sm font-black text-white">Stripe Card Payment</span>
+                        {bookingPaymentMethod === "wallet_payment" ? (
+                          <Wallet size={18} className="text-[#FAD293]" />
+                        ) : (
+                          <CreditCard size={18} className="text-[#FAD293]" />
+                        )}
+                        <span className="text-sm font-black text-white">
+                          {bookingPaymentMethod === "wallet_payment" ? "MMC Digital Wallet Payment" : "Stripe Card Payment"}
+                        </span>
                       </div>
                       <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
                         <Lock size={12} /> SSL Secure
                       </span>
                     </div>
 
-                    {/* Package Pricing Breakdown (Dynamic per service & variation) */}
+                    {/* Deposit vs Full Payment Option */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsPartialPayment(true)}
+                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                          isPartialPayment
+                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
+                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-xs font-black">25% Deposit Now</div>
+                        <div className="text-[11px] text-white/50 mt-0.5">£{depositAmount} today</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPartialPayment(false)}
+                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                          !isPartialPayment
+                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
+                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-xs font-black">Full Payment</div>
+                        <div className="text-[11px] text-white/50 mt-0.5">£{activePackagePrice.toFixed(2)} now</div>
+                      </button>
+                    </div>
+
+                    
+{/* Package Pricing Breakdown (Dynamic per service & variation) */}
                     <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 space-y-2.5 text-xs">
                       <div className="text-[10px] uppercase font-bold text-white/50 tracking-wider">
                         Selected Packages Breakdown
@@ -1386,33 +1516,67 @@ function ChooseDetailersContent() {
                       </div>
                     </div>
 
-                    {/* Deposit vs Full Payment Option */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setIsPartialPayment(true)}
-                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                          isPartialPayment
-                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
-                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="text-xs font-black">25% Deposit Now</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">£{depositAmount} today</div>
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setIsPartialPayment(false)}
-                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                          !isPartialPayment
-                            ? "border-[#FAD293] bg-[#FAD293]/20 text-[#FAD293] shadow-md ring-1 ring-[#FAD293]/60"
-                            : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="text-xs font-black">Full Payment</div>
-                        <div className="text-[11px] text-white/50 mt-0.5">£{activePackagePrice.toFixed(2)} now</div>
-                      </button>
+                    {/* Choose Payment Method: Wallet vs Stripe */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-white/50 uppercase font-bold tracking-wider">
+                        Select Payment Method
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div
+                          onClick={() => setBookingPaymentMethod("wallet_payment")}
+                          className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                            bookingPaymentMethod === "wallet_payment"
+                              ? "border-[#FAD293] bg-[#FAD293]/15 shadow-md ring-1 ring-[#FAD293]"
+                              : "border-white/10 bg-white/[0.02] hover:border-white/20 text-white/70"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Wallet size={15} className="text-[#FAD293]" />
+                              <span className="text-xs font-bold text-white">MMC Wallet</span>
+                            </div>
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                bookingPaymentMethod === "wallet_payment"
+                                  ? "border-[#FAD293] bg-[#FAD293] text-black"
+                                  : "border-white/30"
+                              }`}
+                            >
+                              {bookingPaymentMethod === "wallet_payment" && <Check size={10} className="stroke-[3]" />}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-white/60">
+                            Balance: <span className="font-bold text-[#FAD293]">£{walletBalance !== null ? walletBalance.toFixed(2) : "..."}</span>
+                          </div>
+                        </div>
+
+                        <div
+                          onClick={() => setBookingPaymentMethod("stripe")}
+                          className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                            bookingPaymentMethod === "stripe"
+                              ? "border-[#FAD293] bg-[#FAD293]/15 shadow-md ring-1 ring-[#FAD293]"
+                              : "border-white/10 bg-white/[0.02] hover:border-white/20 text-white/70"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <CreditCard size={15} className="text-[#FAD293]" />
+                              <span className="text-xs font-bold text-white">Stripe / Card</span>
+                            </div>
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                bookingPaymentMethod === "stripe"
+                                  ? "border-[#FAD293] bg-[#FAD293] text-black"
+                                  : "border-white/30"
+                              }`}
+                            >
+                              {bookingPaymentMethod === "stripe" && <Check size={10} className="stroke-[3]" />}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-white/60">Instant Checkout</div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Financial Summary */}
@@ -1440,7 +1604,7 @@ function ChooseDetailersContent() {
                       {isBookingSubmitting ? (
                         <>
                           <Loader2 size={16} className="animate-spin" />
-                          <span>Processing & Launching Stripe...</span>
+                          <span>{bookingPaymentMethod === "wallet_payment" ? "Deducting from Wallet..." : "Processing & Launching Stripe..."}</span>
                         </>
                       ) : providerSlots.length === 0 || !selectedSlotId ? (
                         <>
@@ -1450,14 +1614,14 @@ function ChooseDetailersContent() {
                       ) : (
                         <>
                           <Lock size={15} />
-                          <span>Pay £{payableAmount} & Book via Stripe</span>
+                          <span>{bookingPaymentMethod === "wallet_payment" ? `Pay £${payableAmount} from Wallet & Book` : `Pay £${payableAmount} & Book via Stripe`}</span>
                           <ArrowRight size={16} />
                         </>
                       )}
                     </button>
 
                     <div className="text-center text-[10px] text-white/40">
-                      Guaranteed booking • 100% Secure via Stripe Payments
+                      Guaranteed booking • 100% Secure via Motor Market Club
                     </div>
                   </div>
 
@@ -1700,12 +1864,35 @@ function ChooseDetailersContent() {
 
       {/* ─── Provider Gallery / My Work Modal ─── */}
       {selectedProviderForGallery && (
-        <ServiceOurWorkShowcase
-          providerId={selectedProviderForGallery.id}
-          providerName={selectedProviderForGallery.company_name}
-          onClose={() => setSelectedProviderForGallery(null)}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-xl">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/10 bg-[#14100c] p-6 text-white shadow-2xl">
+            <button
+              onClick={() => setSelectedProviderForGallery(null)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <ServiceOurWorkShowcase
+              categoryName="Valet & Detailing"
+              serviceTitle={`Work Showcase - ${selectedProviderForGallery.company_name}`}
+            />
+          </div>
+        </div>
       )}
+
+      {/* Unified Payment Selection Modal */}
+      <PaymentSelectionModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        totalAmount={activePackagePrice}
+        selectedMethod={bookingPaymentMethod as any}
+        onMethodChange={(m) => setBookingPaymentMethod(m as any)}
+        isPartial={isPartialPayment}
+        onPartialChange={setIsPartialPayment}
+        onConfirm={executeValetBookingPayment}
+        loading={isBookingSubmitting}
+        serviceTitle={selectedProvider ? `Valet & Detailing: ${selectedProvider.company_name}` : "Valet Service"}
+      />
     </div>
   );
 }

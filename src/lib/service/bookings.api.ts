@@ -100,6 +100,12 @@ export const MMC_CATEGORY_IDS = {
   VALET: "812a149b-2ccd-43ef-901a-a665f2ff78ea",
   TYRE: "5d98d5c9-509e-4ab7-859d-806174384e27",
   EMERGENCY: "860791e7-ed6d-46ca-992c-1348dd4c42ad",
+  MECHANICAL: "b0a78f28-5281-4284-a50d-781d4592b1c4",
+  BODYWORK: "dbafef35-cfa4-4757-90f4-ddbf568d5d83",
+  ALLOY: "e1fb2dae-c233-4b45-852b-8253373e06d7",
+  MODIFICATION: "675fb918-9d0c-4ee5-9a0a-904b42651033",
+  CAR_HIRE: "35f3a758-c66b-444e-83fb-9325a345e2db",
+  CHAUFFEUR: "fd6a04cf-3803-4a9b-a830-6cfa9c3c48d4",
 };
 
 export const getDigitalPaymentCallbackUrl = (): string => {
@@ -370,78 +376,209 @@ function detectServiceType(item: any): BookingServiceType {
     if (meta?.serviceType) return meta.serviceType;
   }
 
-  // 1. Chauffeur detection
-  if (item.car || item.car_id || item.car_bookings || item.pickup_type || item.drop_location) {
+  // 1. Direct service_category or booking_type from backend
+  const rawServiceCategory = String(
+    item.service_category ||
+    item.booking_type ||
+    item.serviceCategory ||
+    item.category?.service_category ||
+    ""
+  ).toLowerCase().trim();
+
+  if (rawServiceCategory === "car_hire" || rawServiceCategory === "car") {
+    return "car";
+  }
+  if (rawServiceCategory === "chauffeur") {
     return "chauffeur";
   }
-
-  // 2. Category ID matching
-  const catId = String(item.category_id || item.sub_category_id || item.category?.id || "");
-  if (catId === MMC_CATEGORY_IDS.VALET) return "valet";
-  if (catId === MMC_CATEGORY_IDS.TYRE) return "tyre";
-  if (catId === MMC_CATEGORY_IDS.EMERGENCY) return "emergency";
-
-  // 3. Provider company name matching (e.g. TATA ROHIT is a Valet provider)
-  const provName = String(item.provider?.company_name || item.provider_name || "").toLowerCase();
-  if (provName.includes("rohit") || provName.includes("valet") || provName.includes("wash") || provName.includes("detailing")) {
+  if (rawServiceCategory === "mechanical" || rawServiceCategory === "mechanic") {
+    return "mechanical";
+  }
+  if (rawServiceCategory === "bodywork" || rawServiceCategory === "body_work") {
+    return "bodywork";
+  }
+  if (rawServiceCategory === "alloy" || rawServiceCategory === "alloy_refurbishment") {
+    return "alloy";
+  }
+  if (rawServiceCategory === "tyre" || rawServiceCategory === "tire") {
+    return "tyre";
+  }
+  if (rawServiceCategory === "valet" || rawServiceCategory === "detailing") {
     return "valet";
   }
+  if (rawServiceCategory === "emergency" || rawServiceCategory === "roadside") {
+    return "emergency";
+  }
+  if (rawServiceCategory === "modification" || rawServiceCategory === "tuning") {
+    return "modification";
+  }
 
-  // 4. Text scanning across ALL available text fields
-  const textToScan = [
-    item.category?.name,
-    item.sub_category?.name,
-    item.special_conditions,
-    item.damage_description,
-    item.notes,
-    item.instructions,
-    item.service_location,
-    item.booking_type,
+  // 2. Category ID matching across all known services
+  const catId = String(
+    item.category_id ||
+    item.sub_category_id ||
+    item.category?.id ||
+    item.detail?.[0]?.category_id ||
+    item.detail?.[0]?.service?.category_id ||
+    ""
+  ).toLowerCase().trim();
+
+  if (catId === MMC_CATEGORY_IDS.MECHANICAL.toLowerCase()) return "mechanical";
+  if (catId === MMC_CATEGORY_IDS.BODYWORK.toLowerCase()) return "bodywork";
+  if (catId === MMC_CATEGORY_IDS.ALLOY.toLowerCase()) return "alloy";
+  if (catId === MMC_CATEGORY_IDS.MODIFICATION.toLowerCase()) return "modification";
+  if (catId === MMC_CATEGORY_IDS.CAR_HIRE.toLowerCase()) return "car";
+  if (catId === MMC_CATEGORY_IDS.CHAUFFEUR.toLowerCase()) return "chauffeur";
+  if (catId === MMC_CATEGORY_IDS.TYRE.toLowerCase()) return "tyre";
+  if (catId === MMC_CATEGORY_IDS.EMERGENCY.toLowerCase()) return "emergency";
+  if (catId === MMC_CATEGORY_IDS.VALET.toLowerCase()) return "valet";
+
+  // 3. Category & Subcategory Name checks
+  const catName = String(item.category?.name || item.sub_category?.name || item.category_name || "").toLowerCase();
+  if (catName.includes("mechanic") || catName.includes("engine") || catName.includes("diagnostic")) return "mechanical";
+  if (catName.includes("bodywork") || catName.includes("dent") || catName.includes("paint")) return "bodywork";
+  if (catName.includes("alloy") || catName.includes("wheel")) return "alloy";
+  if (catName.includes("tyre") || catName.includes("tire")) return "tyre";
+  if (catName.includes("emergency") || catName.includes("roadside") || catName.includes("recovery")) return "emergency";
+  if (catName.includes("chauffeur")) return "chauffeur";
+  if (catName.includes("car hire") || catName.includes("car rental")) return "car";
+  if (catName.includes("mod") || catName.includes("tuning") || catName.includes("wrap")) return "modification";
+  if (catName.includes("valet") || catName.includes("detailing") || catName.includes("wash")) return "valet";
+
+  // 4. Specific service detail item & title matching (HIGHEST PRIORITY FOR REAL SERVICES)
+  const serviceText = [
     item.service_name,
     item.service_title,
     item.detail?.[0]?.service_name,
     item.detail?.[0]?.service?.name,
     item.detail?.[0]?.variant_key,
-    provName,
+    item.post?.service_description,
+    item.service_description,
+    item.damage_description,
+    item.special_conditions,
+    item.notes,
+    item.instructions,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
-  if (textToScan.includes("tyre") || textToScan.includes("tire") || textToScan.includes("wheel fitting")) {
+  // Mechanical services (diagnostics, brakes, oil, engine, clutch, suspension, etc.)
+  if (
+    serviceText.includes("diagnostic") ||
+    serviceText.includes("engine") ||
+    serviceText.includes("mechanic") ||
+    serviceText.includes("brake") ||
+    serviceText.includes("clutch") ||
+    serviceText.includes("suspension") ||
+    serviceText.includes("radiator") ||
+    serviceText.includes("timing belt") ||
+    serviceText.includes("oil change") ||
+    serviceText.includes("oil filter") ||
+    serviceText.includes("battery replacement") ||
+    serviceText.includes("exhaust repair") ||
+    serviceText.includes("shock absorber") ||
+    serviceText.includes("coolant")
+  ) {
+    return "mechanical";
+  }
+
+  // Tyre services
+  if (
+    serviceText.includes("tyre") ||
+    serviceText.includes("tire") ||
+    serviceText.includes("puncture") ||
+    serviceText.includes("wheel fitting")
+  ) {
     return "tyre";
   }
+
+  // Emergency / Roadside assistance
   if (
-    textToScan.includes("emergency") ||
-    textToScan.includes("recovery") ||
-    textToScan.includes("breakdown") ||
-    textToScan.includes("towing") ||
-    textToScan.includes("jump start") ||
-    textToScan.includes("lockout")
+    serviceText.includes("recovery") ||
+    serviceText.includes("breakdown") ||
+    serviceText.includes("towing") ||
+    serviceText.includes("jump start") ||
+    serviceText.includes("lockout") ||
+    serviceText.includes("emergency roadside")
   ) {
     return "emergency";
   }
+
+  // Bodywork & Paint repairs
   if (
-    textToScan.includes("valet") ||
-    textToScan.includes("wash") ||
-    textToScan.includes("detailing") ||
-    textToScan.includes("clean") ||
-    textToScan.includes("prime") ||
-    textToScan.includes("basic")
+    serviceText.includes("bodywork") ||
+    serviceText.includes("dent repair") ||
+    serviceText.includes("scratch repair") ||
+    serviceText.includes("paint repair") ||
+    serviceText.includes("bumper repair") ||
+    serviceText.includes("respray") ||
+    serviceText.includes("panel repair")
+  ) {
+    return "bodywork";
+  }
+
+  // Alloy Wheel Refurbishment
+  if (
+    serviceText.includes("alloy") ||
+    serviceText.includes("rim refurb") ||
+    serviceText.includes("diamond cut") ||
+    serviceText.includes("powder coat") ||
+    serviceText.includes("wheel refurb")
+  ) {
+    return "alloy";
+  }
+
+  // Modifications & Tuning
+  if (
+    serviceText.includes("remap") ||
+    serviceText.includes("ecu tuning") ||
+    serviceText.includes("tuning") ||
+    serviceText.includes("exhaust mod") ||
+    serviceText.includes("car wrap") ||
+    serviceText.includes("window tint") ||
+    serviceText.includes("dechrome")
+  ) {
+    return "modification";
+  }
+
+  // Valet & Detailing
+  if (
+    serviceText.includes("full interior valet") ||
+    serviceText.includes("full exterior valet") ||
+    serviceText.includes("valet") ||
+    serviceText.includes("detailing") ||
+    serviceText.includes("ceramic coat") ||
+    serviceText.includes("machine polish") ||
+    serviceText.includes("car wash")
   ) {
     return "valet";
   }
-  if (textToScan.includes("bodywork") || textToScan.includes("dent") || textToScan.includes("paint") || textToScan.includes("scratch")) {
+
+  // 5. Chauffeur vs Car Hire detection when car entity exists
+  if (item.car || item.car_id || item.car_bookings) {
+    if (serviceText.includes("hire") || serviceText.includes("rental") || serviceText.includes("self drive") || item.car?.service_category === "car_hire") {
+      return "car";
+    }
+    return "chauffeur";
+  }
+
+  // 6. Provider company name matching ONLY for specific service specialties (never generic names like rohit)
+  const provName = String(item.provider?.company_name || item.provider_name || "").toLowerCase();
+  if (provName.includes("valet studio") || provName.includes("detailing hub")) {
+    return "valet";
+  }
+  if (provName.includes("mechanic") || provName.includes("auto repair") || provName.includes("garage")) {
+    return "mechanical";
+  }
+  if (provName.includes("tyre fitting") || provName.includes("tire centre")) {
+    return "tyre";
+  }
+  if (provName.includes("body shop") || provName.includes("accident repair")) {
     return "bodywork";
   }
-  if (textToScan.includes("alloy") || textToScan.includes("rim") || textToScan.includes("diamond cut") || textToScan.includes("refurb")) {
-    return "alloy";
-  }
-  if (textToScan.includes("mod") || textToScan.includes("remap") || textToScan.includes("tuning") || textToScan.includes("exhaust") || textToScan.includes("wrap")) {
-    return "modification";
-  }
-  if (textToScan.includes("mechanic") || textToScan.includes("engine") || textToScan.includes("brake") || textToScan.includes("suspension") || textToScan.includes("diagnostic")) {
-    return "mechanical";
+  if (provName.includes("roadside assistance") || provName.includes("breakdown recovery")) {
+    return "emergency";
   }
 
   return "service";
@@ -454,6 +591,8 @@ export function getServiceCategoryLabel(type: BookingServiceType): string {
   switch (type) {
     case "chauffeur":
       return "Chauffeur Fleet";
+    case "car":
+      return "Car Hire";
     case "tyre":
       return "Tyre Fitting & Repair";
     case "emergency":
@@ -461,14 +600,52 @@ export function getServiceCategoryLabel(type: BookingServiceType): string {
     case "valet":
       return "Valet & Detailing";
     case "bodywork":
-      return "Bodywork & Paint";
+      return "Bodywork Repairs";
     case "alloy":
       return "Alloy Wheel Services";
     case "modification":
       return "Modifications & Tuning";
+    case "mechanical":
+      return "Mechanical Repairs";
     default:
       return "Vehicle Maintenance";
   }
+}
+
+/**
+ * Get accurate category name dynamically from backend response or service type
+ */
+export function getCategoryName(
+  raw: any,
+  serviceType: BookingServiceType,
+  meta?: any,
+  localConfirmed?: any
+): string {
+  const rawCatName =
+    raw.category?.name ||
+    raw.category_name ||
+    raw.sub_category?.name ||
+    raw.sub_category_name ||
+    (Array.isArray(raw.detail) && (raw.detail[0]?.service?.category?.name || raw.detail[0]?.category?.name));
+
+  if (rawCatName && typeof rawCatName === "string" && rawCatName.trim().length > 0) {
+    const trimmed = rawCatName.trim();
+    if (/mechanic/i.test(trimmed)) return "Mechanical Repairs";
+    if (/bodywork/i.test(trimmed)) return "Bodywork Repairs";
+    if (/alloy/i.test(trimmed)) return "Alloy Wheel Services";
+    if (/tyre|tire/i.test(trimmed)) return "Tyre Fitting & Repair";
+    if (/emergency|recovery/i.test(trimmed)) return "Emergency Roadside";
+    if (/valet|detail/i.test(trimmed)) return "Valet & Detailing";
+    if (/chauffeur/i.test(trimmed)) return "Chauffeur Fleet";
+    if (/hire|rental/i.test(trimmed)) return "Car Hire";
+    if (/mod/i.test(trimmed)) return "Modifications & Tuning";
+    return trimmed;
+  }
+
+  if (meta?.serviceCategoryName) return meta.serviceCategoryName;
+  if (localConfirmed?.serviceCategoryName) return localConfirmed.serviceCategoryName;
+
+  return getServiceCategoryLabel(serviceType);
 }
 
 function parseJsonIfString(val: any): any {
@@ -1612,11 +1789,13 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
   } else if (serviceType === "alloy") {
     serviceNature = "Alloy Refurbishment";
   } else if (serviceType === "mechanical") {
-    serviceNature = "Mechanical Repair";
+    serviceNature = "Mobile Mechanical Repair";
   } else if (serviceType === "modification") {
     serviceNature = "Custom Tuning & Modification";
   } else if (serviceType === "chauffeur") {
-    serviceNature = isChauffeur ? "Chauffeur Service" : "Car Hire";
+    serviceNature = "Chauffeur Service";
+  } else if (serviceType === "car") {
+    serviceNature = "Car Hire Delivery / Pickup";
   } else {
     const rawNature =
       raw.service_nature ||
@@ -1688,7 +1867,7 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
     serviceNature,
     partialPayments,
     serviceType,
-    serviceCategoryName: getServiceCategoryLabel(serviceType),
+    serviceCategoryName: getCategoryName(raw, serviceType, meta, localConfirmed),
     serviceTitle,
     serviceSubtitle,
     image,

@@ -240,10 +240,6 @@ export const AddressesTab: React.FC<AddressesTabProps> = ({
     }));
 
     if (typeof window !== "undefined") {
-      localStorage.setItem("user_address", data.formattedAddress);
-      localStorage.setItem("user_postcode", data.postcode);
-      localStorage.setItem("user_lat", String(data.lat));
-      localStorage.setItem("user_lon", String(data.lon));
       localStorage.setItem("service_address", data.service_address_json);
       localStorage.setItem("service_address_id", data.address_id);
     }

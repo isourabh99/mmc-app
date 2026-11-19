@@ -6,7 +6,7 @@ import {
   saveCustomerAddressToBackend,
 } from "@/lib/service/address.helper";
 
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 export const DEFAULT_MODIFICATION_CATEGORY_ID =
   "f14c244c-352b-4395-9bfd-384dfa1d8ea8";
 export const BOOKING_QUESTIONS_CATEGORY_ID =

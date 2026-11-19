@@ -148,6 +148,13 @@ export default function TyreAssistancePage() {
       typeof window !== "undefined"
         ? new URLSearchParams(window.location.search)
         : null;
+    const searchStr = typeof window !== "undefined" ? window.location.search || window.location.href : "";
+    const isWalletTopUp = searchStr.includes("wallet_topup=success") || urlParams?.get("wallet_topup") === "success";
+    if (isWalletTopUp) {
+      setCurrentStep("emergency_flow");
+      return;
+    }
+
     const shouldResume =
       urlParams?.get("resume") === "true" ||
       Boolean(urlParams?.get("booking_id"));
@@ -274,6 +281,7 @@ export default function TyreAssistancePage() {
     acceptedPrivacy: boolean;
     providerId?: string;
     isPartial?: number;
+    paymentMethod?: "wallet_payment" | "stripe";
     house?: string;
     floor?: string;
     street?: string;
@@ -330,12 +338,20 @@ export default function TyreAssistancePage() {
       const depositVal = isPartialNum === 1 ? (numericFare * 0.25).toFixed(2) : numericFare.toFixed(2);
       const dueVal = isPartialNum === 1 ? (numericFare * 0.75).toFixed(2) : "0.00";
 
+      const isWallet = details.paymentMethod === "wallet_payment";
       const updated = await confirmQuoteAndAssignTechnician(booking.id, {
         is_partial: isPartialNum,
-        payment_method: "stripe",
+        payment_method: isWallet ? "wallet_payment" : "stripe",
         payment_platform: "app",
         callback: callbackUrl,
       });
+
+      if (isWallet) {
+        showToast(`Payment of £${depositVal} deducted from Wallet! Booking confirmed!`, "success");
+        setCurrentBooking(updated || booking);
+        setCurrentStep("technician_assigning");
+        return;
+      }
 
       const confirmedRefId =
         updated?.referenceNumber ||
@@ -468,11 +484,13 @@ export default function TyreAssistancePage() {
   };
 
   // 4. Step 4: Confirm Quote & Start Technician Assignment with Stripe Payment
-  const handleConfirmQuote = async (options?: { isPartial?: boolean }) => {
+  const handleConfirmQuote = async (options?: { isPartial?: boolean; paymentMethod?: string }) => {
     if (!currentBooking) return;
     try {
       const isPartialParam = options?.isPartial === false ? false : true;
       const isPartialNum = isPartialParam ? 1 : 0;
+      const chosenMethod = options?.paymentMethod || "wallet_payment";
+      const isWallet = chosenMethod === "wallet_payment";
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/booking-success`
@@ -484,7 +502,7 @@ export default function TyreAssistancePage() {
 
       const updated = await confirmQuoteAndAssignTechnician(currentBooking.id, {
         is_partial: isPartialNum,
-        payment_method: "stripe",
+        payment_method: isWallet ? "wallet_payment" : "stripe",
         payment_platform: "app",
         callback: callbackUrl,
       });
@@ -582,6 +600,13 @@ export default function TyreAssistancePage() {
         (updated as any)?.content?.redirect_url ||
         (updated as any)?.content?.payment_url;
 
+
+      if (isWallet) {
+        showToast(`Payment of £${depositVal} deducted from Wallet! Booking confirmed!`, "success");
+        setCurrentBooking(updated || currentBooking);
+        setCurrentStep("technician_assigning");
+        return;
+      }
 
       if (
         targetPaymentUrl &&
@@ -1011,7 +1036,7 @@ export default function TyreAssistancePage() {
         </div>
       )}
       {/* ─── OUR WORK SHOWCASE ─── */}
-      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pb-16 relative z-10 border-t border-white/5 mt-12 pt-8">
+      <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-[50px] pb-16 relative z-0 border-t border-white/5 mt-12 pt-8">
         <ServiceOurWorkShowcase
           categoryId={TYRE_CATEGORY_ID}
           categoryName="Tyre Fittings"

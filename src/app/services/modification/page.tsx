@@ -83,7 +83,7 @@ import {
     type BookingQuestionItem,
 } from "@/lib/service/modification.api";
 import { getBackendRootUrl } from "@/lib/http/apiClient";
-import { saveConfirmedBooking } from "@/lib/service/bookings.api";
+import { saveConfirmedBooking, saveBookingMeta } from "@/lib/service/bookings.api";
 import ModificationStepHeader, { type ActiveView } from "./components/ModificationStepHeader";
 import ModificationTechniciansView from "./components/ModificationTechniciansView";
 import ModificationQuoteFormView from "./components/ModificationQuoteFormView";
@@ -222,7 +222,6 @@ export default function ModificationPage() {
         if (typeof window === "undefined") return;
 
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
-        localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
         const storedLat = localStorage.getItem("user_lat");
         const storedLon = localStorage.getItem("user_lon");
@@ -695,7 +694,7 @@ export default function ModificationPage() {
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, any>>({});
     const [serviceAddressId, setServiceAddressId] = useState<string>("");
     const [bookingNotes, setBookingNotes] = useState<string>("");
-    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe" | "wallet_payment">("wallet_payment");
     const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
     const [bookingCarImagePreview, setBookingCarImagePreview] = useState<string | null>(null);
@@ -787,7 +786,35 @@ export default function ModificationPage() {
     useEffect(() => {
         if (typeof window === "undefined") return;
         try {
+            const searchStr = window.location.search || window.location.href;
             const searchParams = new URLSearchParams(window.location.search);
+            const isWalletTopUp = searchStr.includes("wallet_topup=success") || searchParams.get("wallet_topup") === "success";
+            if (isWalletTopUp) {
+                const saved = sessionStorage.getItem("mmc_current_modification_booking");
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.provider) setBookingProviderModal(parsed.provider);
+                        if (parsed.bidOffer) setBookingBidOffer(parsed.bidOffer);
+                        if (parsed.postItem) setBookingPostItem(parsed.postItem);
+                        navigateToView("booking");
+                    } catch { }
+                }
+                const topUpAmt = searchParams.get("topup_amount") || searchParams.get("amount");
+                showToast(`Wallet topped up successfully with £${topUpAmt || ""}! Balance updated.`, "success");
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete("wallet_topup");
+                cleanUrl.searchParams.delete("topup_amount");
+                cleanUrl.searchParams.delete("open_payment");
+                cleanUrl.searchParams.delete("reopen_payment");
+                cleanUrl.searchParams.delete("status");
+                cleanUrl.searchParams.delete("payment_status");
+                cleanUrl.searchParams.delete("payment");
+                cleanUrl.searchParams.delete("flag");
+                window.history.replaceState({}, document.title, cleanUrl.toString());
+                return;
+            }
+
             const status = searchParams.get("status") || searchParams.get("payment_status") || searchParams.get("payment");
             const bookingId = searchParams.get("booking_id") || searchParams.get("readable_id");
 
@@ -943,6 +970,15 @@ export default function ModificationPage() {
         setBookingApiResult(null);
         setSelectedPostForBids(null);
         setBookingProviderModal(providerToBook);
+        if (typeof window !== "undefined") {
+            try {
+                sessionStorage.setItem("mmc_current_modification_booking", JSON.stringify({
+                    provider: providerToBook,
+                    bidOffer: bid,
+                    postItem: post,
+                }));
+            } catch { }
+        }
         navigateToView("booking");
     };
 
@@ -1116,9 +1152,21 @@ export default function ModificationPage() {
                     vehicleReg: "Vehicle",
                     vehicleModel: "Vehicle",
                     totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
-                    isPaid: false,
-                    paymentStatus: isPartialPayment ? "Partial Deposit" : "Pending Payment",
-                    paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : bookingPaymentMethod,
+                    isPaid: bookingPaymentMethod === "wallet_payment",
+                    paymentStatus:
+                        bookingPaymentMethod === "wallet_payment"
+                            ? isPartialPayment
+                                ? "Partial Deposit Paid (Wallet)"
+                                : "Paid in Full (Wallet)"
+                            : bookingPaymentMethod === "stripe"
+                            ? "Pending Payment"
+                            : "Cash After Service",
+                    paymentMethod:
+                        bookingPaymentMethod === "wallet_payment"
+                            ? "MMC Digital Wallet"
+                            : bookingPaymentMethod === "stripe"
+                            ? "Online (Stripe)"
+                            : bookingPaymentMethod,
                     status: "accepted",
                     statusDisplay: "Accepted",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1126,6 +1174,17 @@ export default function ModificationPage() {
                     fullScheduleDisplay: formattedSchedule || "Confirmed",
                     createdAt: new Date().toISOString(),
                 });
+            }
+
+            // Wallet Payment -> Direct confirmation without Stripe redirect
+            if (bookingPaymentMethod === "wallet_payment") {
+                setBookingConfirmed(true);
+                setBookingApiResult(res.content || res);
+                showToast(
+                    `Payment of £${isPartialPayment ? depositAmount : (bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price)} deducted from Wallet! Booking confirmed!`,
+                    "success"
+                );
+                return;
             }
 
             // Online Payment (Stripe) -> Redirect to Stripe Checkout page

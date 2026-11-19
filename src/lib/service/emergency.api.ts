@@ -27,7 +27,7 @@ export interface EmergencyCategoryResponse {
 }
 
 export const EMERGENCY_CATEGORY_ID = "860791e7-ed6d-46ca-992c-1348dd4c42ad";
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 
 export const DEFAULT_FALLBACK_EMERGENCY_SERVICES: EmergencyServiceItem[] = [
   {
@@ -643,7 +643,7 @@ export const bookEmergencyProvider = async (
   // STEP 2: Send Booking Request SECOND (POST /customer/booking/request/send)
   // --------------------------------------------------------------------------
   const bookingRes = await sendEmergencyBookingRequest({
-    payment_method: "stripe",
+    payment_method: params.payment_method || "stripe",
     is_partial: params.is_partial !== undefined ? params.is_partial : 0,
     zone_id: getStoredZoneId(),
     service_schedule: nowSchedule,

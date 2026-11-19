@@ -43,6 +43,7 @@ import {
   normalizeEstimateImageUrl,
   EstimateItem,
 } from "@/lib/service/estimate.api";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 import { useToast } from "@/components/ToastProvider";
 
 export const EstimatesTab: React.FC = () => {
@@ -93,6 +94,19 @@ export const EstimatesTab: React.FC = () => {
   useEffect(() => {
     fetchEstimates();
   }, [fetchEstimates]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      const saved = sessionStorage.getItem("mmc_current_accepting_estimate");
+      if (saved) {
+        try {
+          setAcceptingItem(JSON.parse(saved));
+        } catch { }
+      }
+    }
+  }, []);
 
   // Deep-link auto-open if estimateId is provided in URL
   useEffect(() => {
@@ -149,7 +163,7 @@ export const EstimatesTab: React.FC = () => {
     try {
       setAcceptSubmitting(true);
       const isPartialNum = isPartialPayment ? 1 : 0;
-      const res = await acceptCustomerEstimate(acceptingItem, "stripe", isPartialNum);
+      const res = await acceptCustomerEstimate(acceptingItem, paymentMethod || "wallet_payment", isPartialNum);
 
       if (res.redirect_url) {
         if (typeof window !== "undefined" && acceptingItem) {
@@ -181,16 +195,27 @@ export const EstimatesTab: React.FC = () => {
         return;
       }
 
-      showToast(res.message || "Estimate accepted successfully!", "success");
+      showToast(
+        paymentMethod === "wallet_payment"
+          ? `Estimate accepted & paid via Wallet! Booking confirmed.`
+          : res.message || "Estimate accepted successfully!",
+        "success"
+      );
 
       // Update state locally
       setEstimates((prev) =>
         prev.map((est) =>
           (est.link_token === itemKey || est.id === itemKey || String(est.readable_id) === itemKey)
-            ? { ...est, status: "accepted", payment_method: "stripe" }
+            ? { ...est, status: "accepted", payment_method: paymentMethod }
             : est
         )
       );
+
+      if (selectedEstimate && (selectedEstimate.link_token === itemKey || selectedEstimate.id === itemKey)) {
+        setSelectedEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: paymentMethod } : null));
+      }
+
+      setAcceptingItem(null);
 
       if (selectedEstimate && (selectedEstimate.link_token === itemKey || selectedEstimate.id === itemKey)) {
         setSelectedEstimate((prev) => (prev ? { ...prev, status: "accepted", payment_method: "stripe" } : null));
@@ -681,7 +706,14 @@ export const EstimatesTab: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAcceptingItem(selectedEstimate)}
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        try {
+                          sessionStorage.setItem("mmc_current_accepting_estimate", JSON.stringify(selectedEstimate));
+                        } catch { }
+                      }
+                      setAcceptingItem(selectedEstimate);
+                    }}
                     className="flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] px-6 py-3 text-xs font-black text-zinc-950 transition hover:brightness-110 shadow-lg shadow-[#d09a50]/20 cursor-pointer"
                   >
                     <CheckCircle2 size={14} />
@@ -885,6 +917,11 @@ export const EstimatesTab: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (typeof window !== "undefined") {
+                          try {
+                            sessionStorage.setItem("mmc_current_accepting_estimate", JSON.stringify(item));
+                          } catch { }
+                        }
                         setAcceptingItem(item);
                       }}
                       className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#f2cb87] hover:bg-[#f5d79e] active:scale-[0.99] text-black py-3 px-4 text-xs sm:text-sm font-black transition-all cursor-pointer shadow-lg shadow-[#f2cb87]/15"
@@ -1021,7 +1058,7 @@ export const EstimatesTab: React.FC = () => {
         </div>
       )}
 
-      {/* ─── ACCEPT ESTIMATE MODAL (Deposit 25% vs Full Online) ─── */}
+      {/* ─── ACCEPT ESTIMATE MODAL (Wallet vs Stripe • 25% Deposit vs Full 100%) ─── */}
       {acceptingItem && (() => {
         const itemTotal = Number(
           acceptingItem.total_amount ??
@@ -1029,162 +1066,25 @@ export const EstimatesTab: React.FC = () => {
           acceptingItem.price ??
           0
         );
-        const depAmount = (Math.round(itemTotal * 0.25 * 100) / 100).toFixed(2);
-        const remAmount = (Math.round((itemTotal - Number(depAmount)) * 100) / 100).toFixed(2);
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
-            <div className="relative w-full max-w-md rounded-3xl border border-[#3a2a17] bg-[#14100c] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-start justify-between border-b border-white/10 pb-3">
-                <div>
-                  <h3 className="text-lg font-black text-white">Select Payment Method</h3>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Choose how you want to pay for {acceptingItem.readable_id ? `EST-${acceptingItem.readable_id}` : "this estimate"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAcceptingItem(null)}
-                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Payment Options */}
-              <div className="space-y-3 pt-1">
-                {/* Option 1: Deposit (25% Advance) */}
-                <div
-                  onClick={() => setIsPartialPayment(true)}
-                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                    isPartialPayment
-                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#F6D089] to-[#D5A054] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-                        <Banknote className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">Deposit</span>
-                          <span className="bg-[#D5A054]/25 text-[#E8AF66] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#D5A054]/40 uppercase tracking-wider">
-                            25% ADVANCE
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          Pay 25% deposit now to secure reservation
-                        </p>
-                      </div>
-                    </div>
-
-                    <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                        isPartialPayment
-                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                          : "border-zinc-700 bg-zinc-900"
-                      }`}
-                    >
-                      {isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </div>
-                  </div>
-
-                  <div className="pt-2.5 border-t border-zinc-800/80 space-y-1 text-xs">
-                    <div className="flex items-center justify-between font-bold">
-                      <span className="text-zinc-300">Deposit Due Now (25%):</span>
-                      <span className="text-sm font-extrabold text-[#E8AF66]">£{depAmount}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                      <span>Due on vehicle arrival (75%):</span>
-                      <span className="font-semibold text-zinc-300">£{remAmount}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Option 2: Online Payment (Full 100%) */}
-                <div
-                  onClick={() => setIsPartialPayment(false)}
-                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer space-y-3 ${
-                    !isPartialPayment
-                      ? "bg-[#1C1A16] border-[#D5A054] shadow-lg shadow-[#D5A054]/10 ring-1 ring-[#D5A054]/40"
-                      : "bg-[#18181B] border-zinc-800 hover:border-zinc-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0">
-                        <CreditCard className="w-5 h-5 text-[#E8AF66]" />
-                      </div>
-                      <div>
-                        <span className="text-sm font-bold text-white block">Online Payment</span>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          Pay full amount now online
-                        </p>
-                      </div>
-                    </div>
-
-                    <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                        !isPartialPayment
-                          ? "bg-[#D5A054] border-[#D5A054] text-zinc-950"
-                          : "border-zinc-700 bg-zinc-900"
-                      }`}
-                    >
-                      {!isPartialPayment && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </div>
-                  </div>
-
-                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-bold">
-                    <span className="text-zinc-300">Amount Due Now:</span>
-                    <span className="text-sm font-extrabold text-white">£{itemTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Informational Callout Box */}
-              <div className="bg-[#1C1A16]/90 border border-[#D5A054]/30 rounded-2xl p-3.5 flex items-start gap-3 text-xs">
-                <Info className="w-4 h-4 text-[#E8AF66] shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <span className="font-bold text-[#E8AF66] block">
-                    {isPartialPayment ? "25% Advance Payment Required" : "100% Online Secure Payment"}
-                  </span>
-                  <p className="text-[11px] text-zinc-300 leading-relaxed">
-                    {isPartialPayment
-                      ? "You must pay a 25% deposit upfront to confirm your reservation. The remaining 75% will be paid once the vehicle is delivered or handed over."
-                      : "Pay the full quotation amount upfront securely via Stripe for instant vehicle service authorization."}
-                  </p>
-                </div>
-              </div>
-
-              {/* Pay CTA */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleConfirmAccept}
-                  disabled={acceptSubmitting}
-                  className="w-full bg-gradient-to-r from-[#F6D089] via-[#E8AF66] to-[#D5A054] hover:brightness-105 active:scale-[0.99] text-zinc-950 font-black text-sm py-4 rounded-2xl shadow-xl shadow-[#D5A054]/25 transition-all cursor-pointer uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {acceptSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin text-zinc-950" />
-                      <span>Redirecting to Payment Gateway...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>
-                        {isPartialPayment
-                          ? `PAY DEPOSIT (£${depAmount})`
-                          : `PAY FULL AMOUNT (£${itemTotal.toFixed(2)})`}
-                      </span>
-                      <ArrowRight className="w-4 h-4 text-zinc-950" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
+          <PaymentSelectionModal
+            isOpen={Boolean(acceptingItem)}
+            onClose={() => setAcceptingItem(null)}
+            totalAmount={itemTotal}
+            selectedMethod={paymentMethod as any}
+            onMethodChange={(m) => setPaymentMethod(m)}
+            isPartial={isPartialPayment}
+            onPartialChange={setIsPartialPayment}
+            onConfirm={handleConfirmAccept}
+            loading={acceptSubmitting}
+            serviceTitle={
+              acceptingItem.readable_id
+                ? `Estimate EST-${acceptingItem.readable_id}`
+                : "Estimate Quotation"
+            }
+            allowCash={false}
+          />
         );
       })()}
 

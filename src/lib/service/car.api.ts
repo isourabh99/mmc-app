@@ -245,6 +245,22 @@ export interface CarBookingResponse {
 // API CLIENT METHODS
 // ==========================================
 
+export const CAR_DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+
+export const getCarZoneId = (): string => {
+  if (typeof window !== "undefined") {
+    const stored =
+      localStorage.getItem("zone-id") ||
+      localStorage.getItem("zone_id") ||
+      localStorage.getItem("zoneid") ||
+      localStorage.getItem("zoneId");
+    if (stored && stored !== "undefined" && stored !== "null" && stored.trim().length > 0) {
+      return stored;
+    }
+  }
+  return CAR_DEFAULT_ZONE_ID;
+};
+
 /**
  * Fetch all categories (e.g. Car Hire, Chauffeur, Tyre Fittings, etc.)
  */
@@ -257,6 +273,11 @@ export const getCarCategories = async (
       "/customer/category",
       {
         params: { limit, offset },
+        headers: {
+          Accept: "application/json",
+          "zone-id": getCarZoneId(),
+          skipAuth: true,
+        },
       }
     );
     const data = response.data?.content?.data || response.data?.content || response.data?.data || [];
@@ -331,6 +352,11 @@ export const getCarList = async (
   params?: { limit?: number; offset?: number }
 ): Promise<CarItem[]> => {
   const catId = categoryId || "35f3a758-c66b-444e-83fb-9325a345e2db";
+  const carHeaders = {
+    Accept: "application/json",
+    "zone-id": getCarZoneId(),
+    skipAuth: true,
+  };
   
   // Strategy 1: Try /customer/car/list with category_id
   try {
@@ -340,6 +366,7 @@ export const getCarList = async (
         limit: params?.limit || 50,
         offset: params?.offset || 1,
       },
+      headers: carHeaders,
     });
 
     const content = response.data?.content;
@@ -366,6 +393,7 @@ export const getCarList = async (
         limit: params?.limit || 50,
         offset: params?.offset || 1,
       },
+      headers: carHeaders,
     });
     const gContent = generalRes.data?.content;
     const gList = Array.isArray(gContent)
@@ -377,7 +405,11 @@ export const getCarList = async (
       : [];
 
     if (gList.length > 0) {
-      return gList.map((item: any) => mapBackendItemToCarItem(item, catId));
+      // Filter strictly by category_id so other categories (e.g. Chauffeur) never leak in
+      const filtered = catId ? gList.filter((item: any) => item.category_id === catId) : gList;
+      if (filtered.length > 0) {
+        return filtered.map((item: any) => mapBackendItemToCarItem(item, catId));
+      }
     }
   } catch (err) {
     console.warn("[CarHire] /customer/car/list general notice:", err);
@@ -387,6 +419,7 @@ export const getCarList = async (
   try {
     const sRes = await apiClient.get<any>(`/customer/service/category/${catId}`, {
       params: { limit: params?.limit || 50, offset: params?.offset || 1 },
+      headers: carHeaders,
     });
     const sData = sRes.data?.content?.data || sRes.data?.content || sRes.data?.data || [];
     if (Array.isArray(sData) && sData.length > 0) {
@@ -407,9 +440,18 @@ export const getCarDetails = async (
 ): Promise<CarItem | null> => {
   if (!carId) return null;
 
+  const carHeaders = {
+    Accept: "application/json",
+    "zone-id": getCarZoneId(),
+    skipAuth: true,
+  };
+
   try {
     const response = await apiClient.get<any>(
-      `/customer/car/details/${carId}`
+      `/customer/car/details/${carId}`,
+      {
+        headers: carHeaders,
+      }
     );
     const content = response.data?.content;
     const item =
@@ -436,7 +478,9 @@ export const getCarDetails = async (
 
   // Fallback 2: try /customer/service/${carId}
   try {
-    const sRes = await apiClient.get<any>(`/customer/service/${carId}`);
+    const sRes = await apiClient.get<any>(`/customer/service/${carId}`, {
+      headers: carHeaders,
+    });
     const sItem = sRes.data?.content;
     if (sItem && sItem.id) {
       return mapBackendItemToCarItem(
@@ -454,7 +498,13 @@ export const getCarDetails = async (
  */
 export const getCarTypes = async (): Promise<CarType[]> => {
   try {
-    const response = await apiClient.get<any>("/customer/car/types");
+    const response = await apiClient.get<any>("/customer/car/types", {
+      headers: {
+        Accept: "application/json",
+        "zone-id": getCarZoneId(),
+        skipAuth: true,
+      },
+    });
     const raw = response.data;
     if (Array.isArray(raw?.content)) return raw.content;
     if (raw?.content && Array.isArray(raw.content.data)) return raw.content.data;
@@ -483,7 +533,12 @@ export const bookCar = async (
     };
     const response = await apiClient.post<CarBookingResponse>(
       "/customer/car/book",
-      sanitizedPayload
+      sanitizedPayload,
+      {
+        headers: {
+          "zone-id": getCarZoneId(),
+        },
+      }
     );
     return response.data;
   } catch (error) {

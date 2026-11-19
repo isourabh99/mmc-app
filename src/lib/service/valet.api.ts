@@ -185,7 +185,7 @@ export interface SendValetBookingPayload {
   callback?: string;
 }
 
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 export const DEFAULT_PROVIDER_ID = "cffcce91-5498-4b73-b571-8e6e69bbd89d";
 export const VALET_CATEGORY_ID = "812a149b-2ccd-43ef-901a-a665f2ff78ea";
 

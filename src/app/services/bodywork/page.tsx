@@ -239,7 +239,6 @@ export default function BodyworkPage() {
         if (typeof window === "undefined") return;
 
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
-        localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
         const storedLat = localStorage.getItem("user_lat");
         const storedLon = localStorage.getItem("user_lon");
@@ -478,6 +477,25 @@ export default function BodyworkPage() {
     const [loadingQuestions, setLoadingQuestions] = useState(false);
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
 
+    // Keep session storage in sync for bodywork booking
+    useEffect(() => {
+        if (bookingProviderModal && (bookingPostId || bookingBidOffer?.post_id || bookingPostItem?.id)) {
+            try {
+                sessionStorage.setItem("mmc_current_bodywork_booking", JSON.stringify({
+                    provider: bookingProviderModal,
+                    bidOffer: bookingBidOffer,
+                    postItem: bookingPostItem,
+                    postId: bookingPostId || bookingBidOffer?.post_id || bookingPostItem?.id,
+                    bookingDate,
+                    bookingTime,
+                    selectedSlotId,
+                    bookingPaymentMethod,
+                    isPartialPayment,
+                }));
+            } catch { }
+        }
+    }, [bookingProviderModal, bookingBidOffer, bookingPostItem, bookingPostId, bookingDate, bookingTime, selectedSlotId, bookingPaymentMethod, isPartialPayment]);
+
     // Fetch provider slots
     useEffect(() => {
         if (!bookingProviderModal?.id) {
@@ -544,7 +562,42 @@ export default function BodyworkPage() {
     useEffect(() => {
         if (typeof window === "undefined") return;
         try {
+            const searchStr = window.location.search || window.location.href;
             const searchParams = new URLSearchParams(window.location.search);
+            const isWalletTopUp = searchStr.includes("wallet_topup=success") || searchParams.get("wallet_topup") === "success";
+            if (isWalletTopUp || searchStr.includes("view=booking")) {
+                const saved = sessionStorage.getItem("mmc_current_bodywork_booking");
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.provider) setBookingProviderModal(parsed.provider);
+                        if (parsed.bidOffer) setBookingBidOffer(parsed.bidOffer);
+                        if (parsed.postItem) setBookingPostItem(parsed.postItem);
+                        const pId = parsed.postId || parsed.bidOffer?.post_id || (parsed.bidOffer as any)?.postId || parsed.postItem?.id || "";
+                        if (pId) setBookingPostId(pId);
+                        if (parsed.bookingDate) setBookingDate(parsed.bookingDate);
+                        if (parsed.bookingTime) setBookingTime(parsed.bookingTime);
+                        if (parsed.selectedSlotId) setSelectedSlotId(parsed.selectedSlotId);
+                        if (parsed.bookingPaymentMethod) setBookingPaymentMethod(parsed.bookingPaymentMethod);
+                        if (parsed.isPartialPayment !== undefined) setIsPartialPayment(parsed.isPartialPayment);
+                        navigateToView("booking");
+                    } catch { }
+                }
+                const topUpAmt = searchParams.get("topup_amount") || searchParams.get("amount");
+                showToast(`Wallet topped up successfully with £${topUpAmt || ""}! Balance updated.`, "success");
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete("wallet_topup");
+                cleanUrl.searchParams.delete("topup_amount");
+                cleanUrl.searchParams.delete("open_payment");
+                cleanUrl.searchParams.delete("reopen_payment");
+                cleanUrl.searchParams.delete("status");
+                cleanUrl.searchParams.delete("payment_status");
+                cleanUrl.searchParams.delete("payment");
+                cleanUrl.searchParams.delete("flag");
+                window.history.replaceState({}, document.title, cleanUrl.toString());
+                return;
+            }
+
             const status = searchParams.get("status") || searchParams.get("payment_status") || searchParams.get("payment");
             const bookingId = searchParams.get("booking_id") || searchParams.get("readable_id");
 
@@ -795,6 +848,21 @@ export default function BodyworkPage() {
         setBookingApiResult(null);
         setSelectedPostForBids(null);
         setBookingProviderModal(providerToBook);
+        if (typeof window !== "undefined") {
+            try {
+                sessionStorage.setItem("mmc_current_bodywork_booking", JSON.stringify({
+                    provider: providerToBook,
+                    bidOffer: bid,
+                    postItem: post,
+                    postId: targetPostId,
+                    bookingDate,
+                    bookingTime,
+                    selectedSlotId,
+                    bookingPaymentMethod,
+                    isPartialPayment,
+                }));
+            } catch { }
+        }
         navigateToView("booking");
     };
 
@@ -805,10 +873,22 @@ export default function BodyworkPage() {
             return;
         }
 
-        if (!bookingProviderModal) return;
+        if (!bookingProviderModal) {
+            console.error("[Bodywork] No bookingProviderModal selected!");
+            showToast("Provider details missing. Please select your quotation offer again.", "error");
+            return;
+        }
 
-        const effectivePostId = bookingPostId.trim();
+        const effectivePostId = (
+            bookingPostId ||
+            bookingBidOffer?.post_id ||
+            (bookingBidOffer as any)?.postId ||
+            bookingPostItem?.id ||
+            ""
+        ).trim();
+
         if (!effectivePostId) {
+            console.error("[Bodywork] No effectivePostId found!", { bookingPostId, bookingBidOffer, bookingPostItem });
             showToast("Please select a valid quote offer to proceed with booking", "error");
             setBookingError("A valid quotation offer is required. Please select an offer from Quotes & Bids.");
             return;
@@ -829,19 +909,20 @@ export default function BodyworkPage() {
             .join("\n\n");
 
         const isStripe = bookingPaymentMethod === "stripe" || bookingPaymentMethod === "online";
-        const effectiveIsPartial = isStripe ? (isPartialPayment ? 1 : 0) : 0;
+        const isWallet = bookingPaymentMethod === "wallet_payment";
+        const effectiveIsPartial = isPartialPayment ? 1 : 0;
         const totalBookingPrice = Number(
             bookingBidOffer?.offered_price ||
             bookingProviderModal?.total_selected_services_price ||
             0
         );
-        const depositAmount = effectiveIsPartial ? Math.round(totalBookingPrice * 0.2) : totalBookingPrice;
+        const depositAmount = effectiveIsPartial ? Math.round(totalBookingPrice * 0.25) : totalBookingPrice;
 
         try {
             const res = await sendBookingRequest({
                 post_id: effectivePostId,
                 provider_id: bookingProviderModal.id,
-                payment_method: isStripe ? "stripe" : bookingPaymentMethod,
+                payment_method: isWallet ? "wallet_payment" : isStripe ? "stripe" : bookingPaymentMethod,
                 is_partial: effectiveIsPartial,
                 service_location: serviceLocation,
                 service_schedule: formattedSchedule,
@@ -953,9 +1034,19 @@ export default function BodyworkPage() {
                     vehicleReg: vReg,
                     vehicleModel: vModel,
                     totalAmount: effectivePrice,
-                    isPaid: false,
-                    paymentStatus: "Pending Payment",
-                    paymentMethod: isStripe ? "Online (Stripe)" : bookingPaymentMethod,
+                    isPaid: isWallet,
+                    paymentStatus: isWallet
+                        ? effectiveIsPartial
+                            ? "Partial Deposit Paid (Wallet)"
+                            : "Paid in Full (Wallet)"
+                        : isStripe
+                        ? "Pending Payment"
+                        : "Cash After Service",
+                    paymentMethod: isWallet
+                        ? "MMC Digital Wallet"
+                        : isStripe
+                        ? "Online (Stripe)"
+                        : bookingPaymentMethod,
                     status: "accepted",
                     statusDisplay: "Accepted",
                     scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -963,6 +1054,16 @@ export default function BodyworkPage() {
                     fullScheduleDisplay: formattedSchedule || "Confirmed",
                     createdAt: new Date().toISOString(),
                 });
+            }
+
+            if (isWallet) {
+                setBookingConfirmed(true);
+                setBookingApiResult(res.content || res);
+                showToast(
+                    `Payment of £${effectiveIsPartial ? depositAmount : effectivePrice} deducted from Wallet! Booking confirmed!`,
+                    "success"
+                );
+                return;
             }
 
             if (isStripe) {

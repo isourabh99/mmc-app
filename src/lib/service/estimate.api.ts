@@ -308,6 +308,8 @@ export async function acceptCustomerEstimate(
   const methodCandidates =
     paymentMethod === "cash_after_service"
       ? ["cash_after_service", "cash_on_delivery", "offline"]
+      : paymentMethod === "wallet_payment"
+      ? ["wallet_payment"]
       : [paymentMethod, "stripe", "digital_payment", "online", "card"];
 
   const uniqueMethods = Array.from(new Set(methodCandidates));
@@ -328,17 +330,19 @@ export async function acceptCustomerEstimate(
         const data = response.data;
 
         const redirectUrl =
-          data?.content?.redirect_url ||
-          data?.content?.url ||
-          data?.content?.payment_url ||
-          data?.content?.redirect_link ||
-          data?.redirect_url ||
-          data?.url ||
-          (data?.content?.payment_id || data?.content?.id || data?.content?.booking_id
-            ? `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
-                String(data?.content?.payment_id || data?.content?.id || data?.content?.booking_id)
-              )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`
-            : undefined);
+          method === "wallet_payment"
+            ? undefined
+            : data?.content?.redirect_url ||
+              data?.content?.url ||
+              data?.content?.payment_url ||
+              data?.content?.redirect_link ||
+              data?.redirect_url ||
+              data?.url ||
+              (data?.content?.payment_id || data?.content?.id || data?.content?.booking_id
+                ? `${getBackendRootUrl()}/payment/stripe/pay?payment_id=${encodeURIComponent(
+                    String(data?.content?.payment_id || data?.content?.id || data?.content?.booking_id)
+                  )}&is_partial=${isPartialNum}&callback=${encodeURIComponent(callbackUrl)}`
+                : undefined);
 
         return {
           success: true,

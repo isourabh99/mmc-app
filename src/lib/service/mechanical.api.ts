@@ -2,7 +2,7 @@ import { getStoredZoneId } from "@/lib/service/zone.service";
 import apiClient from "@/lib/http/apiClient";
 import { ensureServiceAddressJson, extractPostcode, saveCustomerAddressToBackend } from "@/lib/service/address.helper";
 
-export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 export const FALLBACK_MECHANICAL_CATEGORY_ID = "b0a78f28-5281-4284-a50d-781d4592b1c4";
 
 export interface MechanicalCategoryItem {

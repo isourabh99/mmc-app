@@ -185,7 +185,6 @@ export default function AlloyWheelPage() {
         if (typeof window === "undefined") return;
 
         localStorage.setItem("zone_id", DEFAULT_ZONE_ID);
-        localStorage.setItem("zoneid", DEFAULT_ZONE_ID);
 
         const storedLat = localStorage.getItem("user_lat");
         const storedLon = localStorage.getItem("user_lon");
@@ -626,7 +625,7 @@ export default function AlloyWheelPage() {
     const [questionAnswers, setQuestionAnswers] = useState<Record<string, any>>({});
     const [serviceAddressId, setServiceAddressId] = useState<string>("");
     const [bookingNotes, setBookingNotes] = useState<string>("");
-    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe">("stripe");
+    const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"cash_after_service" | "stripe" | "wallet_payment">("wallet_payment");
     const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
     const [showPaymentSheet, setShowPaymentSheet] = useState<boolean>(false);
     const [bookingCarImage, setBookingCarImage] = useState<File | null>(null);
@@ -717,7 +716,42 @@ export default function AlloyWheelPage() {
     useEffect(() => {
         if (typeof window === "undefined") return;
         try {
+            const searchStr = window.location.search || window.location.href;
             const searchParams = new URLSearchParams(window.location.search);
+            const isWalletTopUp = searchStr.includes("wallet_topup=success") || searchParams.get("wallet_topup") === "success";
+            if (isWalletTopUp || searchStr.includes("view=booking")) {
+                const saved = sessionStorage.getItem("mmc_current_alloy_booking");
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.provider) setBookingProviderModal(parsed.provider);
+                        if (parsed.bidOffer) setBookingBidOffer(parsed.bidOffer);
+                        if (parsed.postItem) setBookingPostItem(parsed.postItem);
+                        const pId = parsed.postId || parsed.bidOffer?.post_id || (parsed.bidOffer as any)?.postId || parsed.postItem?.id || "";
+                        if (pId) setBookingPostId(pId);
+                        if (parsed.bookingDate) setBookingDate(parsed.bookingDate);
+                        if (parsed.bookingTime) setBookingTime(parsed.bookingTime);
+                        if (parsed.selectedSlotId) setSelectedSlotId(parsed.selectedSlotId);
+                        if (parsed.bookingPaymentMethod) setBookingPaymentMethod(parsed.bookingPaymentMethod);
+                        if (parsed.isPartialPayment !== undefined) setIsPartialPayment(parsed.isPartialPayment);
+                        navigateToView("booking");
+                    } catch { }
+                }
+                const topUpAmt = searchParams.get("topup_amount") || searchParams.get("amount");
+                showToast(`Wallet topped up successfully with £${topUpAmt || ""}! Balance updated.`, "success");
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete("wallet_topup");
+                cleanUrl.searchParams.delete("topup_amount");
+                cleanUrl.searchParams.delete("open_payment");
+                cleanUrl.searchParams.delete("reopen_payment");
+                cleanUrl.searchParams.delete("status");
+                cleanUrl.searchParams.delete("payment_status");
+                cleanUrl.searchParams.delete("payment");
+                cleanUrl.searchParams.delete("flag");
+                window.history.replaceState({}, document.title, cleanUrl.toString());
+                return;
+            }
+
             const status = searchParams.get("status") || searchParams.get("payment_status") || searchParams.get("payment");
             const bookingId = searchParams.get("booking_id") || searchParams.get("readable_id");
 
@@ -999,6 +1033,21 @@ export default function AlloyWheelPage() {
         setShowPaymentSheet(false);
         setSelectedPostForBids(null);
         setBookingProviderModal(providerToBook);
+        if (typeof window !== "undefined") {
+            try {
+                sessionStorage.setItem("mmc_current_alloy_booking", JSON.stringify({
+                    provider: providerToBook,
+                    bidOffer: bid,
+                    postItem: post,
+                    postId: targetPostId,
+                    bookingDate,
+                    bookingTime,
+                    selectedSlotId,
+                    bookingPaymentMethod,
+                    isPartialPayment,
+                }));
+            } catch { }
+        }
         navigateToView("booking");
     };
 
@@ -1014,8 +1063,16 @@ export default function AlloyWheelPage() {
 
         if (!bookingProviderModal) return;
 
-        const effectivePostId = bookingPostId.trim();
+        const effectivePostId = (
+            bookingPostId ||
+            bookingBidOffer?.post_id ||
+            (bookingBidOffer as any)?.postId ||
+            bookingPostItem?.id ||
+            ""
+        ).trim();
+
         if (!effectivePostId) {
+            console.error("[Alloy] No effectivePostId found!", { bookingPostId, bookingBidOffer, bookingPostItem });
             showToast("Please select a valid quote offer to proceed with booking", "error");
             setBookingError("A valid quotation offer is required. Please select an offer from Quotes & Bids.");
             return;
@@ -1046,8 +1103,16 @@ export default function AlloyWheelPage() {
     const handleExecuteBooking = async () => {
         if (!bookingProviderModal) return;
 
-        const effectivePostId = bookingPostId.trim();
+        const effectivePostId = (
+            bookingPostId ||
+            bookingBidOffer?.post_id ||
+            (bookingBidOffer as any)?.postId ||
+            bookingPostItem?.id ||
+            ""
+        ).trim();
+
         if (!effectivePostId) {
+            console.error("[Alloy] No effectivePostId found!", { bookingPostId, bookingBidOffer, bookingPostItem });
             showToast("Please select a valid quote offer to proceed with booking", "error");
             setBookingError("A valid quotation offer is required. Please select an offer from Quotes & Bids.");
             return;
@@ -1294,9 +1359,21 @@ export default function AlloyWheelPage() {
                         vehicleReg: regNo || "",
                         vehicleModel: carBrand || "",
                         totalAmount: effectivePrice,
-                        isPaid: false,
-                        paymentStatus: "Pending Payment",
-                        paymentMethod: bookingPaymentMethod === "stripe" ? "Online (Stripe)" : "Cash After Service",
+                        isPaid: bookingPaymentMethod === "wallet_payment",
+                        paymentStatus:
+                            bookingPaymentMethod === "wallet_payment"
+                                ? isPartialPayment
+                                    ? "Partial Deposit Paid (Wallet)"
+                                    : "Paid in Full (Wallet)"
+                                : bookingPaymentMethod === "stripe"
+                                ? "Pending Payment"
+                                : "Cash After Service",
+                        paymentMethod:
+                            bookingPaymentMethod === "wallet_payment"
+                                ? "MMC Digital Wallet"
+                                : bookingPaymentMethod === "stripe"
+                                ? "Online (Stripe)"
+                                : "Cash After Service",
                         status: "accepted",
                         statusDisplay: "Accepted",
                         scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
@@ -1306,7 +1383,14 @@ export default function AlloyWheelPage() {
                     });
                 }
 
-                showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
+                if (bookingPaymentMethod === "wallet_payment") {
+                    showToast(
+                        `Payment of £${isPartialPayment ? depositAmount : effectivePrice} deducted from Wallet! Booking confirmed!`,
+                        "success"
+                    );
+                } else {
+                    showToast(`Booking Placed successfully! ${refId ? `Ref: #${refId}` : ""}`, "success");
+                }
 
                 triggerDevicePushNotification(
                     "MMC Booking Confirmed! 🎉",

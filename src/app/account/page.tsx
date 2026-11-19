@@ -26,6 +26,7 @@ import { QuotesTab } from "@/components/account/QuotesTab";
 import { EstimatesTab } from "@/components/account/EstimatesTab";
 import { VehiclesTab } from "@/components/account/VehiclesTab";
 import { DocumentsTab } from "@/components/account/DocumentsTab";
+import { WalletTab } from "@/components/account/WalletTab";
 
 function AccountContent() {
   const searchParams = useSearchParams();
@@ -228,6 +229,9 @@ function AccountContent() {
             )}
 
             {activeTab === "quotes" && <QuotesTab />}
+            {activeTab === "wallet" && (
+              <WalletTab user={user} onProfileUpdated={fetchUserProfile} />
+            )}
             {activeTab === "security" && <SecurityTab />}
           </main>
         </div>

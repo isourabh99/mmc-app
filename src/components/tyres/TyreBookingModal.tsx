@@ -66,10 +66,10 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
   // Vehicle Details
   const [regNumber, setRegNumber] = useState(initialVehicle?.registration || "UK22 ABC");
   const [carModel, setCarModel] = useState(
-    initialVehicle ? `${initialVehicle.make} ${initialVehicle.model}` 
+    initialVehicle ? `${initialVehicle.make} ${initialVehicle.model}` : "Audi A4"
   );
-  const [carYear, setCarYear] = useState(initialVehicle?.year );
-  const [carColor, setCarColor] = useState(initialVehicle?.color);
+  const [carYear, setCarYear] = useState(initialVehicle?.year || "2021");
+  const [carColor, setCarColor] = useState(initialVehicle?.color || "Black");
 
   // Schedule
   const [scheduleDate, setScheduleDate] = useState(todayStr);
@@ -85,9 +85,8 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
   const [contactPhone, setContactPhone] = useState("");
 
   // Payment & Notes
-  const [paymentMethod, setPaymentMethod] = useState<"" | "stripe" | "offline">(
-    ""
-  );
+  const [paymentMethod, setPaymentMethod] = useState<string>("wallet_payment");
+  const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true);
   const [notes, setNotes] = useState("Please bring both tyres for rear axle mobile fitting.");
   const [agreeTerms, setAgreeTerms] = useState(false);
 
@@ -176,6 +175,11 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
       setSubmitting(false);
       showToast("Tyre Fitting Booking Placed successfully!", "success");
 
+      const isWallet = paymentMethod === "wallet_payment";
+      const depositVal = (totalAmount * 0.25).toFixed(2);
+      const paidAmt = isWallet ? (isPartialPayment ? Number(depositVal) : totalAmount) : 0;
+      const dueAmt = isWallet ? (isPartialPayment ? Number((totalAmount * 0.75).toFixed(2)) : 0) : totalAmount;
+
       saveBookingMeta(generatedRef, {
         serviceTitle: "Mobile Tyre Fitting",
         serviceCategoryName: "Tyre Fitting & Repair",
@@ -183,8 +187,15 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
         vehicleModel: carModel || "Vehicle",
         vehicleReg: regNumber || undefined,
         price: totalAmount,
-        isPaid: false,
-        paymentStatus: "Pay later",
+        paidAmount: paidAmt,
+        dueAmount: dueAmt,
+        isPaid: isWallet ? !isPartialPayment : false,
+        isPartiallyPaid: isWallet ? isPartialPayment : false,
+        paymentStatus: isWallet
+          ? (isPartialPayment ? "Deposit Paid via Wallet (25%)" : "Paid via Wallet")
+          : paymentMethod === "stripe"
+          ? "Online Card Payment"
+          : "Pay Upon Fitting Completion",
         scheduleDate: scheduleDate,
         scheduleTime: scheduleTimeSlot,
       });
@@ -592,17 +603,50 @@ export const TyreBookingModal: React.FC<TyreBookingModalProps> = ({
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
                 className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-[#FAD293]"
               >
-                <option value="cash_after_service" className="bg-neutral-900">
-                  Cash After Service / Pay Upon Fitting Completion
+                <option value="wallet_payment" className="bg-neutral-900">
+                  MMC Digital Wallet (Instant Pay / 25% Deposit)
                 </option>
                 <option value="stripe" className="bg-neutral-900">
                   Online Card Payment (Stripe)
                 </option>
-                <option value="offline" className="bg-neutral-900">
-                  Offline Bank Transfer / Invoice
-                </option>
               </select>
             </div>
+
+            {/* Deposit vs Full Payment Options */}
+            {(paymentMethod === "wallet_payment" || paymentMethod === "stripe") && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-white/50 uppercase font-bold tracking-wider">
+                  Payment Split
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsPartialPayment(true)}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      isPartialPayment
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293] ring-1 ring-[#FAD293]/50"
+                        : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="text-xs font-bold">25% Deposit Now</div>
+                    <div className="text-[10px] text-white/50 mt-0.5">£{(totalAmount * 0.25).toFixed(2)} today</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPartialPayment(false)}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      !isPartialPayment
+                        ? "border-[#FAD293] bg-[#FAD293]/15 text-[#FAD293] ring-1 ring-[#FAD293]/50"
+                        : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="text-xs font-bold">Full 100% Payment</div>
+                    <div className="text-[10px] text-white/50 mt-0.5">£{totalAmount.toFixed(2)} today</div>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 9. Live Pricing Breakdown */}
             <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5 text-xs">

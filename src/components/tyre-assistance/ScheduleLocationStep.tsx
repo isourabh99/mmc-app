@@ -38,6 +38,7 @@ import {
 } from "@/lib/service/tyre-assistance.api";
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
 import type { SelectedLocationData } from "@/lib/service/address.helper";
+import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 
 export type ServiceLocationType = "mobile_repair" | "workshop";
 
@@ -78,6 +79,7 @@ interface ScheduleLocationStepProps {
     acceptedPrivacy: boolean;
     providerId?: string;
     isPartial?: number; // 1 for Deposit, 0 for Full
+    paymentMethod?: "wallet_payment" | "stripe";
   }) => Promise<void>;
   onBack: () => void;
 }
@@ -156,9 +158,18 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
 
   // Payment Selection Modal
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [paymentMethod, setPaymentMethod] = useState<"wallet_payment" | "stripe">("wallet_payment");
   const [isPartialPayment, setIsPartialPayment] = useState<boolean>(true); // true => 1 (25% Deposit), false => 0 (Full)
   const [isConfirmingPayment, setIsConfirmingPayment] = useState<boolean>(false);
   const [thumbError, setThumbError] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = window.location.search || window.location.href;
+    if (search.includes("wallet_topup=success") || search.includes("open_payment=1")) {
+      setShowPaymentModal(true);
+    }
+  }, []);
 
   // Auto-detect GPS on mount
   useEffect(() => {
@@ -373,6 +384,7 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
         acceptedPrivacy,
         providerId: chosenTyre?.provider_id || (chosenTyre?.provider as any)?.id || DEFAULT_PROVIDER_ID,
         isPartial: isPartialPayment ? 1 : 0, // 1 for Deposit (25%), 0 for Online Payment (Full)
+        paymentMethod,
       });
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to submit booking request. Please try again.");
@@ -665,10 +677,6 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                     value={house}
                     onChange={(e) => {
                       setHouse(e.target.value);
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_house", e.target.value);
-                        localStorage.setItem("house", e.target.value);
-                      }
                     }}
                     placeholder="e.g. Flat 5B or House 42"
                     className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none transition"
@@ -682,10 +690,6 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
                     value={floor}
                     onChange={(e) => {
                       setFloor(e.target.value);
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("user_floor", e.target.value);
-                        localStorage.setItem("floor", e.target.value);
-                      }
                     }}
                     placeholder="e.g. 2nd Floor or Ground Floor"
                     className="w-full bg-[#1C1A17] border border-white/10 focus:border-[#FAD293] rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none transition"
@@ -858,164 +862,20 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
         </div>
       </form>
 
-      {/* 3. Payment Method Modal (25% Deposit vs Full Online) */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto animate-fade-in">
-          <div className="w-full max-w-lg bg-[#141210] border border-white/20 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative text-white my-auto max-h-[92vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-white/10">
-              <div>
-                <h3 className="text-xl font-black text-white tracking-tight">
-                  Select Payment Method
-                </h3>
-                <p className="text-xs text-white/50 mt-0.5">
-                  Choose how you want to pay for your tyre appointment
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Payment Options */}
-            <div className="space-y-3.5">
-              {/* Option 1: Deposit (25% Advance) -> is_partial: 1 */}
-              <div
-                onClick={() => setIsPartialPayment(true)}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${isPartialPayment
-                    ? "bg-[#1C1A17] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
-                    : "bg-[#181614] border-white/10 hover:border-white/20"
-                  }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-[#FAD293] text-black flex items-center justify-center shrink-0">
-                      <Banknote size={20} className="stroke-[2.2]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">25% Advance Deposit</span>
-                        <span className="text-[10px] font-bold text-[#FAD293] bg-[#FAD293]/15 border border-[#FAD293]/30 px-2 py-0.5 rounded-full uppercase">
-                          Recommended
-                        </span>
-                      </div>
-                      <p className="text-xs text-white/50 mt-0.5">
-                        Secure technician appointment with a 25% deposit
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${isPartialPayment
-                        ? "bg-[#FAD293] border-[#FAD293] text-black"
-                        : "border-white/30 bg-transparent"
-                      }`}
-                  >
-                    {isPartialPayment && <Check size={14} className="stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 space-y-1 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-white/80 font-semibold">Deposit Due Now (25%):</span>
-                    <span className="text-sm font-bold text-[#FAD293]">£{depositAmount}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-white/40 text-[11px]">
-                    <span>Remaining Due on Completion (75%):</span>
-                    <span>£{remainingAmount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Option 2: Online Payment (Full) -> is_partial: 0 */}
-              <div
-                onClick={() => setIsPartialPayment(false)}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${!isPartialPayment
-                    ? "bg-[#1C1A17] border-[#FAD293] ring-1 ring-[#FAD293]/40 shadow-lg"
-                    : "bg-[#181614] border-white/10 hover:border-white/20"
-                  }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-[#221F1B] border border-white/10 text-[#FAD293] flex items-center justify-center shrink-0">
-                      <CreditCard size={20} className="stroke-[2]" />
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-white block">
-                        Full Online Payment
-                      </span>
-                      <p className="text-xs text-white/50 mt-0.5">
-                        Pay full service amount now with Stripe
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border transition-all ${!isPartialPayment
-                        ? "bg-[#FAD293] border-[#FAD293] text-black"
-                        : "border-white/30 bg-transparent"
-                      }`}
-                  >
-                    {!isPartialPayment && <Check size={14} className="stroke-[3]" />}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs">
-                  <span className="text-white/80 font-semibold">Total Amount Due Now:</span>
-                  <span className="text-sm font-bold text-[#FAD293]">£{numericFare.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Info Notice */}
-            <div className="p-3.5 rounded-2xl bg-[#1D1811] border border-[#FAD293]/20 flex items-start gap-2.5">
-              <Info size={16} className="text-[#FAD293] shrink-0 mt-0.5" />
-              <div className="text-xs space-y-0.5">
-                <span className="font-bold text-[#FAD293] block">
-                  {isPartialPayment ? "25% Advance Booking Guarantee" : "Full Online Payment"}
-                </span>
-                <p className="text-white/60 leading-relaxed text-[11px]">
-                  {isPartialPayment
-                    ? "Pay 25% now to confirm technician dispatch. The rest is collected after satisfactory completion."
-                    : "Pay 100% upfront via secure Stripe online checkout."}
-                </p>
-              </div>
-            </div>
-
-            {/* Pay Button */}
-            <button
-              type="button"
-              onClick={handleConfirmAndPay}
-              disabled={isConfirmingPayment}
-              className="w-full py-4 rounded-2xl text-sm font-black text-black flex items-center justify-center gap-2 shadow-xl hover:brightness-110 active:scale-[0.99] transition cursor-pointer disabled:opacity-50"
-              style={{
-                background: "linear-gradient(135deg, #FAD293 0%, #E5B874 50%, #D9A35F 100%)",
-              }}
-            >
-              {isConfirmingPayment ? (
-                <>
-                  <Loader2 size={18} className="animate-spin text-black" />
-                  <span>Connecting to Stripe Secure Checkout...</span>
-                </>
-              ) : (
-                <>
-                  <span className="uppercase tracking-wider">
-                    {isPartialPayment
-                      ? `Pay Deposit (£${depositAmount})`
-                      : `Pay Full Amount (£${numericFare.toFixed(2)})`}
-                  </span>
-                  <ArrowRight size={16} className="stroke-[2.5]" />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 3. Unified Payment Selection Modal */}
+      <PaymentSelectionModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        totalAmount={numericFare}
+        selectedMethod={paymentMethod as any}
+        onMethodChange={(m) => setPaymentMethod(m as any)}
+        isPartial={isPartialPayment}
+        onPartialChange={setIsPartialPayment}
+        onConfirm={handleConfirmAndPay}
+        loading={isConfirmingPayment}
+        serviceTitle={selectedTyre ? `Tyre Replacement: ${selectedTyre.brand} ${selectedTyre.model}` : "Tyre Fitting & Replacement"}
+        depositPercentage={25}
+      />
 
       {/* Interactive Map Location Picker Modal */}
       <LocationPickerModal
@@ -1040,24 +900,7 @@ export const ScheduleLocationStep: React.FC<ScheduleLocationStepProps> = ({
           if (data.city) setCity(data.city);
           setServiceAddressJson(data.service_address_json);
           if (typeof window !== "undefined") {
-            localStorage.setItem("user_address", data.formattedAddress);
-            localStorage.setItem("user_postcode", data.postcode);
-            localStorage.setItem("user_lat", data.lat);
-            localStorage.setItem("user_lon", data.lon);
-            localStorage.setItem("user_house", data.house);
-            localStorage.setItem("house", data.house);
-            localStorage.setItem("user_floor", data.floor);
-            localStorage.setItem("floor", data.floor);
-            if (data.street) {
-              localStorage.setItem("user_street", data.street);
-              localStorage.setItem("street", data.street);
-            }
-            if (data.city) {
-              localStorage.setItem("user_city", data.city);
-              localStorage.setItem("city", data.city);
-            }
             localStorage.setItem("service_address", data.service_address_json);
-            localStorage.setItem("service_address_json", data.service_address_json);
             localStorage.setItem("service_address_id", data.address_id);
           }
         }}

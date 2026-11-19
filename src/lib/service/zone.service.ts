@@ -16,7 +16,7 @@ export interface ZoneConfigResponse {
   };
 }
 
-export const DEFAULT_FALLBACK_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
+export const DEFAULT_FALLBACK_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
 
 /**
  * Fetch zone ID dynamically from the live backend API using coordinates.
@@ -71,12 +71,9 @@ export async function fetchZoneIdFromCoordinates(
     if (zoneId && zoneId.trim().length > 0) {
       if (typeof window !== "undefined") {
         localStorage.setItem("zone_id", zoneId);
-        localStorage.setItem("zoneid", zoneId);
-        localStorage.setItem("zoneId", zoneId);
-        if (zoneName) {
-          localStorage.setItem("zone_name", zoneName);
-        }
-        localStorage.setItem("zone_last_fetched", String(Date.now()));
+        localStorage.removeItem("zoneid");
+        localStorage.removeItem("zoneId");
+        localStorage.removeItem("zone-id");
       }
       return zoneId;
     }
@@ -86,15 +83,17 @@ export async function fetchZoneIdFromCoordinates(
 
   // Fallback to cached value in localStorage
   if (typeof window !== "undefined") {
-    const cached =
-      localStorage.getItem("zone_id") ||
-      localStorage.getItem("zoneid") ||
-      localStorage.getItem("zoneId");
+    localStorage.removeItem("zoneid");
+    localStorage.removeItem("zoneId");
+    localStorage.removeItem("zone-id");
+
+    const cached = localStorage.getItem("zone_id");
     if (
       cached &&
       cached !== "undefined" &&
       cached !== "null" &&
-      cached.trim().length > 0
+      cached.trim().length > 0 &&
+      cached !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
     ) {
       return cached;
     }
@@ -108,35 +107,25 @@ export const getZoneIdFromCoordinates = fetchZoneIdFromCoordinates;
 
 /**
  * Get active zone ID asynchronously.
- * If not yet cached or if cache is older than 2 hours, triggers dynamic API fetch.
  */
 export async function getActiveZoneId(): Promise<string> {
   if (typeof window !== "undefined") {
-    const cached =
-      localStorage.getItem("zone_id") ||
-      localStorage.getItem("zoneid") ||
-      localStorage.getItem("zoneId");
+    localStorage.removeItem("zoneid");
+    localStorage.removeItem("zoneId");
+    localStorage.removeItem("zone-id");
 
-    const lastFetched = Number(localStorage.getItem("zone_last_fetched") || 0);
-    const isStale = Date.now() - lastFetched > 1000 * 60 * 60 * 2; // 2 hours
-
+    const cached = localStorage.getItem("zone_id");
     if (
       cached &&
       cached !== "undefined" &&
       cached !== "null" &&
       cached.trim().length > 0 &&
-      !isStale
+      cached !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
     ) {
       return cached;
     }
 
-    const lat = localStorage.getItem("user_lat") || "51.5074";
-    const lng =
-      localStorage.getItem("user_lon") ||
-      localStorage.getItem("user_lng") ||
-      "-0.1278";
-
-    return fetchZoneIdFromCoordinates(lat, lng);
+    return DEFAULT_FALLBACK_ZONE_ID;
   }
 
   return DEFAULT_FALLBACK_ZONE_ID;
@@ -144,31 +133,24 @@ export async function getActiveZoneId(): Promise<string> {
 
 /**
  * Synchronous helper to get current zone ID for headers and requests.
- * Reads directly from localStorage; if empty, kicks off dynamic fetch in the background.
+ * Reads directly from localStorage.
  */
 export function getStoredZoneId(fallback: string = DEFAULT_FALLBACK_ZONE_ID): string {
   if (typeof window !== "undefined") {
-    const stored =
-      localStorage.getItem("zone_id") ||
-      localStorage.getItem("zoneid") ||
-      localStorage.getItem("zoneId");
+    localStorage.removeItem("zoneid");
+    localStorage.removeItem("zoneId");
+    localStorage.removeItem("zone-id");
 
+    const stored = localStorage.getItem("zone_id");
     if (
       stored &&
       stored !== "undefined" &&
       stored !== "null" &&
-      stored.trim().length > 0
+      stored.trim().length > 0 &&
+      stored !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
     ) {
       return stored;
     }
-
-    // Trigger dynamic fetch in background so subsequent calls will have the updated zone
-    const lat = localStorage.getItem("user_lat") || "51.5074";
-    const lng =
-      localStorage.getItem("user_lon") ||
-      localStorage.getItem("user_lng") ||
-      "-0.1278";
-    fetchZoneIdFromCoordinates(lat, lng).catch(() => {});
   }
 
   return fallback;

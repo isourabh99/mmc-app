@@ -17,6 +17,7 @@ import {
   Bell,
   FileText,
   Receipt,
+  Wallet,
 } from "lucide-react";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
@@ -424,6 +425,22 @@ export default function Navbar() {
                         <Receipt size={14} className="text-[#e7bd78]" />
                         <span>Provider Estimates</span>
                       </Link>
+
+                      <Link
+                        href="/account?tab=wallet"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-[#251d16] hover:text-[#e7bd78]"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Wallet size={14} className="text-[#e7bd78]" />
+                          <span>Wallet &amp; Points</span>
+                        </div>
+                        {user?.wallet_balance !== undefined && Number(user.wallet_balance) > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            £{Number(user.wallet_balance).toFixed(0)}
+                          </span>
+                        )}
+                      </Link>
                     </div>
 
                     {/* Logout */}
@@ -647,6 +664,22 @@ export default function Navbar() {
               >
                 <Receipt size={17} className="text-[#FAD293]" />
                 <span>Provider Estimates</span>
+              </Link>
+
+              <Link
+                href="/account?tab=wallet"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center justify-between w-full py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium hover:text-white"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Wallet size={17} className="text-[#FAD293]" />
+                  <span>Wallet &amp; Loyalty Points</span>
+                </div>
+                {user?.wallet_balance !== undefined && Number(user.wallet_balance) > 0 && (
+                  <span className="text-xs font-bold text-emerald-400">
+                    £{Number(user.wallet_balance).toFixed(0)}
+                  </span>
+                )}
               </Link>
 
               <Link
