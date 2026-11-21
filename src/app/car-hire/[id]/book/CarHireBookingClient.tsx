@@ -351,7 +351,7 @@ export default function CarHireBookingClient() {
         bookingObj?.id ||
         res?.content?.booking_id ||
         res?.content?.id ||
-        `MMC-CAR-${Date.now().toString().slice(-6)}`
+        ""
       );
 
       let redirectLink =
@@ -363,6 +363,28 @@ export default function CarHireBookingClient() {
         (res as any)?.url ||
         (res as any)?.redirect_link ||
         (res as any)?.redirect_url;
+
+      const isBookingSuccess =
+        res?.response_code === "booking_place_success_200" ||
+        res?.response_code === "default_200" ||
+        res?.response_code === "booking_success_200" ||
+        res?.content?.flag === "success" ||
+        Boolean(bookingObj) ||
+        Boolean(bookingRef) ||
+        Boolean(redirectLink);
+
+      if (!isBookingSuccess) {
+        console.error("[CarHireBooking] Placement failed:", res);
+        const errMsg =
+          (Array.isArray((res as any)?.errors) && (res as any).errors[0]?.message) ||
+          (res as any)?.message ||
+          "Failed to place car hire reservation on the server. Please try again.";
+        showToast(errMsg, "error");
+        setSubmitting(false);
+        return;
+      }
+
+      const effectiveBookingRef = bookingRef || `MMC-CAR-${Date.now().toString().slice(-6)}`;
 
       // If backend didn't return URL directly, call /customer/booking/switch-payment-method to obtain Stripe gateway URL
       if (!redirectLink && bookingRef) {

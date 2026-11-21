@@ -84,7 +84,7 @@ import BodyworkQuotesView from "./components/BodyworkQuotesView";
 import BodyworkBookingView from "./components/BodyworkBookingView";
 import { searchPlaces, type LocationSuggestion } from "@/lib/service/location.service";
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
-import type { SelectedLocationData } from "@/lib/service/address.helper";
+import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
 import {
     saveServiceFormDraft,
     getServiceFormDraft,
@@ -946,7 +946,7 @@ export default function BodyworkPage() {
                         : `${getBackendRootUrl()}/booking-success`,
             });
 
-            const responseContent: any = res.content || {};
+            const responseContent: any = res?.content || {};
             let redirectUrl =
                 responseContent.url ||
                 responseContent.redirect_link ||
@@ -958,6 +958,26 @@ export default function BodyworkPage() {
                 (res as any)?.redirect_link ||
                 (res as any)?.redirect_url ||
                 (typeof res?.content === "string" && (res.content as string).startsWith("http") ? (res.content as string) : null);
+
+            const isBookingSuccess =
+                res?.response_code === "booking_place_success_200" ||
+                res?.response_code === "default_200" ||
+                res?.response_code === "booking_success_200" ||
+                res?.content?.flag === "success" ||
+                Boolean(responseContent.booking_id) ||
+                Boolean(responseContent.readable_id) ||
+                Boolean(redirectUrl);
+
+            if (!isBookingSuccess) {
+                console.error("[BodyworkBooking] Placement failed:", res);
+                const errMsg =
+                    (Array.isArray(res?.errors) && res.errors[0]?.message) ||
+                    res?.message ||
+                    "Server failed to place booking. Please check details or try another payment method.";
+                showToast(errMsg, "error");
+                setSubmittingBooking(false);
+                return;
+            }
 
             const rawBookingId = responseContent.booking_id;
             const bookingUuid =
@@ -1034,7 +1054,11 @@ export default function BodyworkPage() {
                     vehicleReg: vReg,
                     vehicleModel: vModel,
                     totalAmount: effectivePrice,
-                    isPaid: isWallet,
+                    isPaid: !effectiveIsPartial && isWallet,
+                    isPartiallyPaid: effectiveIsPartial,
+                    is_partial: effectiveIsPartial ? 1 : 0,
+                    paidAmount: effectiveIsPartial ? Number(depositAmount) : (isWallet ? effectivePrice : 0),
+                    dueAmount: effectiveIsPartial ? Math.max(0, effectivePrice - Number(depositAmount)) : 0,
                     paymentStatus: isWallet
                         ? effectiveIsPartial
                             ? "Partial Deposit Paid (Wallet)"

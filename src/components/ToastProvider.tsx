@@ -8,10 +8,11 @@ interface ToastMessage {
   id: number;
   message: string;
   type: ToastType;
+  image?: string | null;
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: ToastType) => void;
+  showToast: (message: string, type?: ToastType, image?: string | null) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -20,21 +21,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback(
-  (message: string, type: ToastType = "info") => {
-    const id = Date.now();
+    (message: string, type: ToastType = "info", image?: string | null) => {
+      const id = Date.now();
 
-    // Sirf ek toast rakho
-    setToasts([{ id, message, type }]);
+      // Sirf ek toast rakho
+      setToasts([{ id, message, type, image }]);
 
-    // 6 seconds baad toast remove
-    setTimeout(() => {
-      setToasts((prev) =>
-        prev.filter((t) => t.id !== id)
-      );
-    }, 6000);
-  },
-  []
-);
+      // 6 seconds baad toast remove
+      setTimeout(() => {
+        setToasts((prev) =>
+          prev.filter((t) => t.id !== id)
+        );
+      }, 6000);
+    },
+    []
+  );
 
   return (
     <ToastContext.Provider value={{ showToast }}>
@@ -53,7 +54,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   : "rgba(255,255,255,0.15)",
             }}
           >
-            {t.type === "success" && (
+            {t.image ? (
+              <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-[#FAD293]/35 bg-black/60 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={t.image}
+                  alt="Notification"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    if (target.parentElement) target.parentElement.style.display = "none";
+                  }}
+                />
+              </div>
+            ) : t.type === "success" ? (
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
                 style={{
@@ -66,15 +80,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-            )}
-            {t.type === "error" && (
+            ) : t.type === "error" ? (
               <div className="w-8 h-8 rounded-full bg-red-500/10 border border-red-500/30 text-red-500 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-            )}
-            {t.type === "info" && (
+            ) : (
               <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 text-white flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

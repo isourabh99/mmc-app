@@ -26,7 +26,7 @@ export interface BodyworkServicesResponse {
 // Bodywork Repairs category ID from backend
 export const DEFAULT_BODYWORK_CATEGORY_ID = "dbafef35-cfa4-4757-90f4-ddbf568d5d83";
 export const BOOKING_QUESTIONS_CATEGORY_ID = "675fb918-9d0c-4ee5-9a0a-904b42651033";
-export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 let cachedBodyworkCategoryId: string | null = null;
 

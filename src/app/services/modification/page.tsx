@@ -1077,6 +1077,26 @@ export default function ModificationPage() {
                         : undefined,
             });
 
+            const isBookingSuccess =
+                res?.response_code === "booking_place_success_200" ||
+                res?.response_code === "default_200" ||
+                res?.response_code === "booking_success_200" ||
+                res?.content?.flag === "success" ||
+                Boolean(res?.content?.booking_id) ||
+                Boolean(res?.content?.readable_id) ||
+                Boolean(res?.content?.url || (res as any)?.redirect_link);
+
+            if (!isBookingSuccess) {
+                console.error("[ModificationBooking] Placement failed:", res);
+                const errMsg =
+                    (Array.isArray(res?.errors) && res.errors[0]?.message) ||
+                    res?.message ||
+                    "Server failed to place booking. Please check details or try another payment method.";
+                showToast(errMsg, "error");
+                setSubmittingBooking(false);
+                return;
+            }
+
             const confirmedRefId = res.content?.readable_id || res.content?.booking_id || `MMC-MOD-${Date.now().toString().slice(-6)}`;
 
             // Extract redirect URL for Stripe if returned
@@ -1152,7 +1172,11 @@ export default function ModificationPage() {
                     vehicleReg: "Vehicle",
                     vehicleModel: "Vehicle",
                     totalAmount: bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0,
-                    isPaid: bookingPaymentMethod === "wallet_payment",
+                    isPaid: !isPartialPayment && bookingPaymentMethod === "wallet_payment",
+                    isPartiallyPaid: isPartialPayment,
+                    is_partial: isPartialPayment ? 1 : 0,
+                    paidAmount: isPartialPayment ? Number(depositAmount) : (bookingPaymentMethod === "wallet_payment" ? Number(bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0) : 0),
+                    dueAmount: isPartialPayment ? Math.max(0, Number(bookingBidOffer?.offered_price || bookingProviderModal?.total_selected_services_price || 0) - Number(depositAmount)) : 0,
                     paymentStatus:
                         bookingPaymentMethod === "wallet_payment"
                             ? isPartialPayment

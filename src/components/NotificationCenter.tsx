@@ -91,7 +91,7 @@ export default function NotificationCenter({
 
     if (showSpinner) setLoading(true);
     try {
-      const data = await fetchBookingNotifications();
+      const data = await fetchBookingNotifications(showSpinner);
       const resolvedAuth = data.isAuthenticated || checkAuth();
       setIsAuthenticated(resolvedAuth);
       if (resolvedAuth) {
@@ -118,10 +118,11 @@ export default function NotificationCenter({
 
     const handleUpdate = () => {
       checkAuth();
-      loadNotifications(false);
+      loadNotifications(true);
     };
 
     window.addEventListener("mmc-notifications-updated", handleUpdate);
+    window.addEventListener("mmc-bookings-updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
     window.addEventListener("auth-change", handleUpdate);
     window.addEventListener("focus", handleUpdate);
@@ -133,6 +134,7 @@ export default function NotificationCenter({
 
     return () => {
       window.removeEventListener("mmc-notifications-updated", handleUpdate);
+      window.removeEventListener("mmc-bookings-updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
       window.removeEventListener("auth-change", handleUpdate);
       window.removeEventListener("focus", handleUpdate);
@@ -327,7 +329,7 @@ export default function NotificationCenter({
         type="button"
         onClick={() => {
           setIsOpen(!isOpen);
-          if (!isOpen) loadNotifications(false);
+          if (!isOpen) loadNotifications(true);
         }}
         aria-label="Notifications"
         aria-expanded={isOpen}

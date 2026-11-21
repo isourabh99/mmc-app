@@ -1,48 +1,40 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getMessaging, getToken, onMessage, isSupported, type Messaging } from "firebase/messaging";
 
+const cleanFirebaseProjectId = (
+  rawId: string = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "motor-market-connect-a2eff"
+): string => {
+  return rawId
+    .replace(/\.firebaseapp\.com$/i, "")
+    .replace(/\.firebasestorage\.app$/i, "")
+    .trim();
+};
+
+const resolvedProjectId = cleanFirebaseProjectId();
+
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCGoZ-coUFTMUoUcAat5aQUzAu7mj8g26g",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || `${resolvedProjectId}.firebaseapp.com`,
+  projectId: resolvedProjectId,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || `${resolvedProjectId}.firebasestorage.app`,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "361839663402",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:361839663402:web:7ad55d5dac8adcb1e96653",
 };
 
 export const FIREBASE_VAPID_KEY =
-  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "";
+  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
+  "BANV68oFFJrXS0remYYXkHfg8q9LHPNleiL_nOROHNnX4bbju-ztFfZHsc_xH07detmCdfcjx13uRaRPPA3CaiM";
 
 // Initialize or reuse existing Firebase App
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 /**
- * Request notification permission, register service worker, and generate FCM Device Token.
- * Returns the FCM token string and caches it in localStorage.
+ * Ensures Service Worker is registered with correct scope and credentials
  */
-export const getFCMToken = async (): Promise<string> => {
-  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
-    return "";
-  }
-
-  // Return existing token from cache if available
-  const cachedToken = localStorage.getItem("fcm_token");
-  if (cachedToken) {
-    return cachedToken;
-  }
+export const ensureServiceWorkerRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
 
   try {
-    const supported = await isSupported();
-    if (!supported) {
-      return "";
-    }
-
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      return "";
-    }
-
-    // 2. Register Service Worker with dynamic config
     const swUrl = `/firebase-messaging-sw.js?apiKey=${encodeURIComponent(
       firebaseConfig.apiKey
     )}&projectId=${encodeURIComponent(
@@ -51,12 +43,54 @@ export const getFCMToken = async (): Promise<string> => {
       firebaseConfig.messagingSenderId
     )}&appId=${encodeURIComponent(firebaseConfig.appId)}`;
 
-    const registration = await navigator.serviceWorker.register(swUrl, {
-      scope: "/",
-    });
+    let registration = await navigator.serviceWorker.getRegistration("/");
+    if (!registration) {
+      registration = await navigator.serviceWorker.register(swUrl, { scope: "/" });
+    }
     await navigator.serviceWorker.ready;
+    return registration;
+  } catch (err) {
+    console.warn("[FCM] ServiceWorker registration error:", err);
+    return null;
+  }
+};
 
-    // 3. Obtain FCM Token
+/**
+ * Request notification permission, register service worker, and generate FCM Device Token.
+ * Returns the FCM token string and caches it in localStorage.
+ */
+export const getFCMToken = async (forceRefresh: boolean = false): Promise<string> => {
+  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
+    return "";
+  }
+
+  // If cached token exists and forceRefresh is false, return cached token but still ensure SW is active
+  const cachedToken = localStorage.getItem("fcm_token");
+  if (cachedToken && !forceRefresh) {
+    ensureServiceWorkerRegistration().catch(() => {});
+    return cachedToken;
+  }
+
+  try {
+    const supported = await isSupported();
+    if (!supported) {
+      console.warn("[FCM] Messaging is not supported in this browser environment");
+      return "";
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      console.warn("[FCM] Notification permission not granted:", permission);
+      return "";
+    }
+
+    // 1. Register Service Worker
+    const registration = await ensureServiceWorkerRegistration();
+    if (!registration) {
+      return "";
+    }
+
+    // 2. Obtain FCM Token
     const messaging: Messaging = getMessaging(app);
     const token = await getToken(messaging, {
       vapidKey: FIREBASE_VAPID_KEY,
@@ -68,7 +102,7 @@ export const getFCMToken = async (): Promise<string> => {
       return token;
     }
   } catch (error) {
-    // Suppress console output
+    console.warn("[FCM] Error obtaining FCM Token:", error);
   }
 
   return "";
@@ -120,13 +154,16 @@ function isAlreadyPushed(key: string): boolean {
 }
 
 /**
- * Reliably displays a native device push notification with strict single-dispatch deduplication.
+ * Reliably displays a native device push notification with single-dispatch deduplication.
+ * @param bypassDedup Set to true for live admin/server push messages so they are never suppressed
  */
 export const triggerDevicePushNotification = async (
   title: string,
   body: string,
   url?: string,
-  dedupKey?: string
+  dedupKey?: string,
+  bypassDedup: boolean = false,
+  imageUrl?: string | null
 ) => {
   if (typeof window === "undefined") return;
 
@@ -145,14 +182,16 @@ export const triggerDevicePushNotification = async (
     `${title.trim()}:${body.trim()}`
   ).toLowerCase().replace(/\s+/g, "_");
 
-  // Prevent duplicate notifications for the same booking, quote, or offer
-  if (isAlreadyPushed(effectiveKey)) {
-    console.log("[PushNotification] Deduplicated - already pushed once:", effectiveKey);
-    return;
-  }
-  if (detectedBookingKey && effectiveKey !== detectedBookingKey && isAlreadyPushed(detectedBookingKey)) {
-    console.log("[PushNotification] Deduplicated by booking ref:", detectedBookingKey);
-    return;
+  // Prevent duplicate notifications for local periodic polling, but allow explicit server pushes
+  if (!bypassDedup) {
+    if (isAlreadyPushed(effectiveKey)) {
+      console.log("[PushNotification] Deduplicated - already pushed once:", effectiveKey);
+      return;
+    }
+    if (detectedBookingKey && effectiveKey !== detectedBookingKey && isAlreadyPushed(detectedBookingKey)) {
+      console.log("[PushNotification] Deduplicated by booking ref:", detectedBookingKey);
+      return;
+    }
   }
 
   const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
@@ -163,10 +202,11 @@ export const triggerDevicePushNotification = async (
     try {
       const notif = new Notification(title, {
         body,
-        icon: "/mmc-logo.png",
+        icon: imageUrl || "/mmc-logo.png",
         badge: "/mmc-logo.png",
+        image: imageUrl || undefined,
         tag: notifTag,
-      });
+      } as any);
       notif.onclick = () => {
         window.focus();
         if (targetUrl) window.location.href = targetUrl;
@@ -186,11 +226,12 @@ export const triggerDevicePushNotification = async (
       if (reg && "showNotification" in reg) {
         await reg.showNotification(title, {
           body,
-          icon: "/mmc-logo.png",
+          icon: imageUrl || "/mmc-logo.png",
           badge: "/mmc-logo.png",
+          image: imageUrl || undefined,
           tag: notifTag,
           vibrate: [200, 100, 200],
-          data: { url: targetUrl, click_action: targetUrl },
+          data: { url: targetUrl, click_action: targetUrl, image: imageUrl || undefined },
         } as any);
         return;
       }
@@ -206,9 +247,10 @@ export const triggerDevicePushNotification = async (
       if (perm === "granted") {
         const notif = new Notification(title, {
           body,
-          icon: "/mmc-logo.png",
+          icon: imageUrl || "/mmc-logo.png",
           badge: "/mmc-logo.png",
-        });
+          image: imageUrl || undefined,
+        } as any);
         notif.onclick = () => {
           window.focus();
           if (targetUrl) window.location.href = targetUrl;

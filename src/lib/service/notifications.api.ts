@@ -1,6 +1,13 @@
 import apiClient from "@/lib/http/apiClient";
 import { triggerDevicePushNotification } from "@/lib/firebase";
-import { isFakeDummyId, getBookingMeta, formatToNumericBookingId, isUuidStr } from "@/lib/service/bookings.api";
+import {
+  isFakeDummyId,
+  getBookingMeta,
+  formatToNumericBookingId,
+  isUuidStr,
+  fetchAllCustomerBookings,
+  UnifiedBookingItem,
+} from "@/lib/service/bookings.api";
 
 export interface BookingNotification {
   id: string;
@@ -329,6 +336,101 @@ export function resolveBookingServiceName(item: any): string {
     default:
       return "Vehicle Service";
   }
+}
+
+/**
+ * Normalizes a unified booking item (from fetchAllCustomerBookings) into a clean NotificationItem
+ */
+export function normalizeUnifiedBookingNotification(
+  b: UnifiedBookingItem,
+  readIds: Set<string>
+): BookingNotification {
+  const readableId = formatToNumericBookingId(b.readableId || b.rawId || b.id);
+  const id = `notif-booking-${readableId}`;
+
+  let category: BookingNotification["category"] = "service";
+  if (b.serviceType === "car") category = "car_hire";
+  else if (b.serviceType === "chauffeur") category = "chauffeur";
+  else if (b.serviceType === "tyre") category = "tyre";
+  else if (b.serviceType === "emergency") category = "emergency";
+  else if (b.serviceType === "mechanical") category = "mechanical";
+  else if (b.serviceType === "alloy") category = "alloy";
+  else if (b.serviceType === "bodywork") category = "bodywork";
+  else category = "service";
+
+  const statusRaw = (b.status || "pending").toLowerCase();
+  let status: BookingNotification["status"] = "pending";
+  if (["completed", "done", "finished"].includes(statusRaw)) status = "completed";
+  else if (["accepted", "confirmed"].includes(statusRaw)) status = "accepted";
+  else if (["ongoing", "in_progress"].includes(statusRaw)) status = "ongoing";
+  else if (["canceled", "cancelled", "rejected"].includes(statusRaw)) status = "canceled";
+
+  const statusLabel = b.statusDisplay || (status.charAt(0).toUpperCase() + status.slice(1));
+  const serviceName = b.serviceTitle || b.serviceCategoryName || "Vehicle Service";
+  const vehicleText = b.vehicleModel
+    ? `${b.vehicleModel}${b.vehicleReg ? ` (${b.vehicleReg})` : ""}`
+    : b.vehicleReg || "";
+
+  // Title: Service title with emoji reflecting status
+  let title = `${serviceName} — #${readableId}`;
+  if (status === "accepted") {
+    title = `${serviceName} Confirmed! 🛠️`;
+    if (b.serviceType === "car" || b.serviceType === "chauffeur") {
+      title = `${serviceName} Confirmed! 🚗`;
+    }
+  } else if (status === "ongoing") {
+    title = `${serviceName} In Progress! 🚗`;
+  } else if (status === "completed") {
+    title = `${serviceName} Completed! ✅`;
+  } else if (status === "canceled") {
+    title = `${serviceName} Cancelled ⚠️`;
+  }
+
+  // Subtitle: Provider name and vehicle reference
+  let subtitle = "";
+  if (b.providerName && vehicleText) {
+    subtitle = `${b.providerName} • ${vehicleText} • Ref #${readableId}`;
+  } else if (b.providerName) {
+    subtitle = `${b.providerName} • Ref #${readableId}`;
+  } else if (vehicleText) {
+    subtitle = `${vehicleText} • Ref #${readableId}`;
+  } else {
+    subtitle = `Service Ref #${readableId}`;
+  }
+
+  // Description / Summary
+  const sched = b.fullScheduleDisplay || b.scheduleDate || "Scheduled Service";
+  const paymentText = b.isPartiallyPaid
+    ? `Partially Paid: £${b.paidAmount}`
+    : b.isPaid
+    ? "Paid"
+    : "Pay later";
+  const desc = `Booking #${readableId} status is ${statusLabel}. ${sched} • £${b.totalAmount} (${paymentText})`;
+
+  return {
+    id,
+    bookingId: formatToNumericBookingId(b.id || readableId),
+    readableId,
+    bookingType: b.serviceType === "car" ? "car" : "regular",
+    category,
+    title,
+    subtitle,
+    description: desc,
+    status,
+    statusLabel,
+    totalAmount: b.totalAmount,
+    isPaid: b.isPaid,
+    paymentMethod: b.paymentMethod ? b.paymentMethod.replace(/_/g, " ") : "Cash After Service",
+    scheduleTime: sched,
+    serviceLocation: b.serviceAddress || b.pickupLocation || (b.city ? `${b.city}, UK` : undefined),
+    vehicleInfo: vehicleText || undefined,
+    createdAt: b.createdAt || new Date().toISOString(),
+    timeAgo: formatTimeAgo(b.createdAt),
+    read: readIds.has(id) || readIds.has(String(readableId)) || readIds.has(String(b.id)),
+    targetUrl: `/account?tab=bookings&bookingId=${encodeURIComponent(String(readableId))}`,
+    image: b.image || null,
+    raw: b.raw || b,
+  };
 }
 
 /**
@@ -1013,7 +1115,7 @@ export async function fetchBookingNotifications(forceRefresh = false): Promise<{
 
   inFlightNotifsPromise = (async () => {
     try {
-      const res = await doFetchBookingNotifications();
+      const res = await doFetchBookingNotifications(forceRefresh);
       cachedNotifsResult = res;
       lastNotifsFetchTime = Date.now();
       return res;
@@ -1041,7 +1143,7 @@ export async function fetchBookingNotifications(forceRefresh = false): Promise<{
   return inFlightNotifsPromise;
 }
 
-async function doFetchBookingNotifications(): Promise<{
+async function doFetchBookingNotifications(forceRefresh: boolean = false): Promise<{
   notifications: BookingNotification[];
   unreadCount: number;
   isLive: boolean;
@@ -1116,7 +1218,25 @@ async function doFetchBookingNotifications(): Promise<{
     console.warn("Backend /customer/notification fetch warning:", err?.message || err);
   }
 
-  // Only use live confirmed bookings from the API
+  // 2. Fetch live confirmed customer bookings across all categories (car hire, chauffeur, tyre, alloy, mechanical, etc.)
+  let rawCustomerBookings: UnifiedBookingItem[] = [];
+  try {
+    const customerBookings = await fetchAllCustomerBookings({
+      limit: 50,
+      offset: 1,
+      forceRefresh: forceRefresh === true,
+    });
+    if (customerBookings && customerBookings.length > 0) {
+      rawCustomerBookings = customerBookings.filter(
+        (b) => !isFakeDummyId(b.id) && !isFakeDummyId(b.rawId)
+      );
+      if (rawCustomerBookings.length > 0) {
+        isLive = true;
+      }
+    }
+  } catch (err: any) {
+    console.warn("Live customer bookings fetch warning:", err?.message || err);
+  }
 
   // Fetch quotes and check for received specialist bids/offers for THIS logged-in user only
   const rawReceivedBids: { bid: any; post: any }[] = [];
@@ -1241,7 +1361,15 @@ async function doFetchBookingNotifications(): Promise<{
 
   const list: BookingNotification[] = [];
 
-  // 1. Convert official backend notifications from GET /customer/notification?limit=10&offset=1
+  // 1. Convert live customer bookings into notifications
+  rawCustomerBookings.forEach((b) => {
+    const notif = normalizeUnifiedBookingNotification(b, readIds);
+    if (!dismissedIds.has(notif.id) && !dismissedIds.has(String(b.id)) && !dismissedIds.has(String(b.rawId))) {
+      list.push(notif);
+    }
+  });
+
+  // 2. Convert official backend notifications from GET /customer/notification?limit=10&offset=1
   rawBackendNotifications.forEach((item) => {
     const notif = normalizeBackendCustomerNotification(item, readIds);
     if (!dismissedIds.has(notif.id) && !dismissedIds.has(String(item.id))) {
@@ -1249,23 +1377,13 @@ async function doFetchBookingNotifications(): Promise<{
     }
   });
 
-  // 2. Convert received specialist bid offers (belonging strictly to this user's requests)
+  // 3. Convert received specialist bid offers (belonging strictly to this user's requests)
   rawReceivedBids.forEach(({ bid, post }) => {
     const notif = normalizeBidNotification(bid, post, readIds);
     if (!dismissedIds.has(notif.id)) {
       list.push(notif);
     }
   });
-
-  // 2. If backend notifications list is empty, fall back to received bid offers
-  if (list.length === 0 && rawReceivedBids.length > 0) {
-    rawReceivedBids.forEach(({ bid, post }) => {
-      const notif = normalizeBidNotification(bid, post, readIds);
-      if (!dismissedIds.has(notif.id)) {
-        list.push(notif);
-      }
-    });
-  }
 
   // Convert custom notifications (deduplicate and keep user-scoped)
   if (typeof window !== "undefined") {
@@ -1348,7 +1466,9 @@ async function doFetchBookingNotifications(): Promise<{
           n.title,
           n.subtitle ? `${n.subtitle} • ${n.description}` : n.description,
           n.targetUrl,
-          pushStorageKey
+          pushStorageKey,
+          false,
+          n.image
         );
       }
     });

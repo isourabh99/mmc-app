@@ -16,7 +16,7 @@ export interface ZoneConfigResponse {
   };
 }
 
-export const DEFAULT_FALLBACK_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+export const DEFAULT_FALLBACK_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 /**
  * Fetch zone ID dynamically from the live backend API using coordinates.
@@ -32,6 +32,7 @@ export async function fetchZoneIdFromCoordinates(
   try {
     let zoneId = "";
     let zoneName = "";
+    let servicesCount = 0;
 
     try {
       const res = await apiClient.get<ZoneConfigResponse>(
@@ -48,6 +49,7 @@ export async function fetchZoneIdFromCoordinates(
         (res.data as any)?.zone?.id ||
         "";
       zoneName = res.data?.content?.zone?.name || "";
+      servicesCount = res.data?.content?.available_services_count ?? 1;
     } catch (clientErr) {
       // Direct axios fallback to live domain if apiClient encountered an interceptor issue
       const baseUrl = getApiBaseUrl() || "https://mmcclub.co.uk/backend/api/v1";
@@ -66,6 +68,12 @@ export async function fetchZoneIdFromCoordinates(
         (liveRes.data as any)?.zone?.id ||
         "";
       zoneName = liveRes.data?.content?.zone?.name || "";
+      servicesCount = liveRes.data?.content?.available_services_count ?? 1;
+    }
+
+    // If the detected zone has 0 available services (e.g. indore Zone), fallback to universal zone with all 114 services
+    if (servicesCount === 0 || !zoneId) {
+      zoneId = DEFAULT_FALLBACK_ZONE_ID;
     }
 
     if (zoneId && zoneId.trim().length > 0) {
@@ -93,7 +101,7 @@ export async function fetchZoneIdFromCoordinates(
       cached !== "undefined" &&
       cached !== "null" &&
       cached.trim().length > 0 &&
-      cached !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+      cached !== "c5b64f38-90ac-49f3-858c-d8dae5c0a53f" // c5b64f38 has 0 services in Demandium
     ) {
       return cached;
     }
@@ -120,7 +128,7 @@ export async function getActiveZoneId(): Promise<string> {
       cached !== "undefined" &&
       cached !== "null" &&
       cached.trim().length > 0 &&
-      cached !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+      cached !== "c5b64f38-90ac-49f3-858c-d8dae5c0a53f" // c5b64f38 has 0 services in Demandium
     ) {
       return cached;
     }
@@ -147,7 +155,7 @@ export function getStoredZoneId(fallback: string = DEFAULT_FALLBACK_ZONE_ID): st
       stored !== "undefined" &&
       stored !== "null" &&
       stored.trim().length > 0 &&
-      stored !== "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+      stored !== "c5b64f38-90ac-49f3-858c-d8dae5c0a53f" // c5b64f38 has 0 services in Demandium
     ) {
       return stored;
     }

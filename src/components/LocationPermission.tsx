@@ -36,9 +36,9 @@ export default function LocationPermission() {
         !currentZone ||
         currentZone === "undefined" ||
         currentZone === "null" ||
-        currentZone === "a1614dbe-4732-11ee-9702-dee6e8d77be4"
+        currentZone === "c5b64f38-90ac-49f3-858c-d8dae5c0a53f"
       ) {
-        localStorage.setItem("zone_id", "c5b64f38-90ac-49f3-858c-d8dae5c0a53f");
+        localStorage.setItem("zone_id", "a1614dbe-4732-11ee-9702-dee6e8d77be4");
       }
     } catch {}
   }, []);

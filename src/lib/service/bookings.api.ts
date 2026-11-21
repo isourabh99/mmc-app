@@ -1127,69 +1127,86 @@ export function normalizeBooking(raw: any, fallbackType?: BookingServiceType): U
           ? Number(localConfirmed.paidAmount)
           : undefined;
 
-  // Check if Demandium returned partial_payments array
-  if (Array.isArray(raw.partial_payments) && raw.partial_payments.length > 0) {
-    const latestPartial = raw.partial_payments[raw.partial_payments.length - 1];
+  // Check if Demandium returned partial_payments or booking_partial_payments array
+  const partialsArray =
+    Array.isArray(raw.booking_partial_payments) && raw.booking_partial_payments.length > 0
+      ? raw.booking_partial_payments
+      : Array.isArray(raw.partial_payments) && raw.partial_payments.length > 0
+        ? raw.partial_payments
+        : Array.isArray(raw.bookingPartialPayments) && raw.bookingPartialPayments.length > 0
+          ? raw.bookingPartialPayments
+          : [];
+
+  if (partialsArray.length > 0) {
+    const latestPartial = partialsArray[partialsArray.length - 1];
     if (latestPartial?.due_amount !== undefined && latestPartial?.due_amount !== null) {
       rawDueAmount = Number(latestPartial.due_amount);
     }
     if (latestPartial?.paid_amount !== undefined && latestPartial?.paid_amount !== null) {
       rawPaidAmount = Number(latestPartial.paid_amount);
     }
+    const sumPaid = partialsArray.reduce((acc: number, p: any) => acc + Number(p.paid_amount || 0), 0);
+    if (sumPaid > 0) {
+      rawPaidAmount = sumPaid;
+    }
   }
 
-  // Determine if booking is fully paid
-  const isExplicitlyPaidBackend = Boolean(
-    (raw.payment_status === "paid" || raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true) &&
-    (raw.due_amount === undefined || raw.due_amount === null || Number(raw.due_amount) <= 0) &&
-    raw.payment_status !== "partially_paid" &&
-    raw.payment_status !== "partial"
-  );
-
-  const isExplicitlyPaidMeta = Boolean(
-    meta?.isPaid === true &&
-    meta?.isPartiallyPaid !== true &&
-    (meta?.dueAmount === undefined || meta?.dueAmount === null || Number(meta?.dueAmount) <= 0)
-  );
-
-  let isPaid = isExplicitlyPaidBackend || isExplicitlyPaidMeta;
-  let isPartiallyPaid = false;
-
+  // Detect partial payment flag across Demandium API, metadata, and local state
   const isPartialFlag = Boolean(
     raw.is_partial === 1 ||
     raw.is_partial === "1" ||
     raw.is_partial === true ||
-    raw.payment_status === "partially_paid" ||
-    raw.payment_status === "partial" ||
+    raw.is_paid === 2 ||
+    raw.is_paid === "2" ||
+    (raw.payment_status && String(raw.payment_status).toLowerCase().includes("part")) ||
+    partialsArray.length > 0 ||
     meta?.is_partial === 1 ||
     meta?.isPartiallyPaid === true ||
     localConfirmed?.isPartiallyPaid === true ||
+    localConfirmed?.is_partial === 1 ||
     pendingSession?.is_partial === 1 ||
     pendingSession?.is_partial === true ||
-    (rawDueAmount !== undefined && rawDueAmount > 0)
+    (rawDueAmount !== undefined && rawDueAmount > 0 && ((rawPaidAmount !== undefined && rawPaidAmount > 0) || raw.is_paid === 1 || raw.is_paid === "1"))
   );
 
-  const hasDueRemaining = (rawDueAmount !== undefined && rawDueAmount > 0) || isPartialFlag;
+  let isPaid = false;
+  let isPartiallyPaid = false;
 
-  // Booking is ONLY fully paid if NOT partial and NO due remaining
-  if (isPaid) {
-    rawDueAmount = 0;
-    isPartiallyPaid = false;
+  if (isPartialFlag) {
+    // If it is a partial booking, it is ONLY fully paid if due is 0 and paid amount covers the total
+    if (rawDueAmount !== undefined && rawDueAmount <= 0 && rawPaidAmount !== undefined && rawPaidAmount > 0) {
+      isPaid = true;
+      isPartiallyPaid = false;
+      rawDueAmount = 0;
+    } else {
+      isPaid = false;
+      isPartiallyPaid = true;
+    }
   } else {
-    isPaid = !isPartialFlag && !hasDueRemaining && Boolean(
-    (raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true || raw.payment_status === "paid") &&
-    (rawDueAmount === undefined || rawDueAmount <= 0)
-  );
+    // Normal booking full-payment check
+    const isExplicitlyPaidBackend = Boolean(
+      (raw.payment_status === "paid" || raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true) &&
+      (rawDueAmount === undefined || rawDueAmount === null || Number(rawDueAmount) <= 0) &&
+      !String(raw.payment_status || "").toLowerCase().includes("part")
+    );
 
-  // Detect partial payment
-    isPartiallyPaid = isPartialFlag || (!isPaid && Boolean(
-    hasDueRemaining && (
-      (rawPaidAmount !== undefined && rawPaidAmount > 0) ||
-      raw.is_paid === 1 || raw.is_paid === "1" || raw.is_paid === true ||
-      localConfirmed?.isPartiallyPaid ||
-      meta?.isPartiallyPaid
-    )
-    ));
+    const isExplicitlyPaidMeta = Boolean(
+      meta?.isPaid === true &&
+      meta?.isPartiallyPaid !== true &&
+      (meta?.dueAmount === undefined || meta?.dueAmount === null || Number(meta?.dueAmount) <= 0)
+    );
+
+    const isExplicitlyPaidLocal = Boolean(
+      localConfirmed?.isPaid === true &&
+      localConfirmed?.isPartiallyPaid !== true &&
+      (localConfirmed?.dueAmount === undefined || localConfirmed?.dueAmount === null || Number(localConfirmed?.dueAmount) <= 0)
+    );
+
+    isPaid = isExplicitlyPaidBackend || isExplicitlyPaidMeta || isExplicitlyPaidLocal;
+    isPartiallyPaid = false;
+    if (isPaid) {
+      rawDueAmount = 0;
+    }
   }
 
   const paymentStatus = isPaid ? "Paid" : isPartiallyPaid ? "Partially Paid" : "Pending Payment";

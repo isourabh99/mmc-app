@@ -340,6 +340,9 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
     const effectiveZoneId = DEFAULT_ZONE_ID;
     if (typeof window !== "undefined") {
       localStorage.setItem("zone_id", effectiveZoneId);
+      localStorage.removeItem("zoneid");
+      localStorage.removeItem("zoneId");
+      localStorage.removeItem("zone-id");
     }
 
     const totalAmount = Number(currentPrice || selectedProvider?.total_selected_services_price || 50);
@@ -449,7 +452,7 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         console.log("[EmergencyPayment] Fallback response:", bookingRes);
       }
 
-      // STEP 3: Extract redirect_link from response
+      // STEP 3: Extract redirect_link & Validate backend response
       let redirectUrl =
         bookingRes?.content?.redirect_link ||
         bookingRes?.redirect_link ||
@@ -459,17 +462,37 @@ export const EmergencyProviderSelectionStep: React.FC<EmergencyProviderSelection
         bookingRes?.content?.redirect_url ||
         bookingRes?.content?.payment_url;
 
-      const pIdMatch = typeof redirectUrl === "string" ? redirectUrl.match(/payment_id=([^&]+)/) : null;
       const rawBookingId = bookingRes?.content?.booking_id || bookingRes?.content?.id || bookingRes?.booking_id;
+      const readableId = bookingRes?.content?.readable_id ? String(bookingRes.content.readable_id) : null;
+      const isBookingSuccess =
+        bookingRes?.response_code === "booking_place_success_200" ||
+        bookingRes?.response_code === "default_200" ||
+        bookingRes?.response_code === "booking_success_200" ||
+        bookingRes?.content?.flag === "success" ||
+        Boolean(rawBookingId) ||
+        Boolean(readableId) ||
+        Boolean(redirectUrl);
+
+      if (!isBookingSuccess) {
+        console.error("[EmergencyPayment] Booking placement failed on backend:", bookingRes);
+        const errMsg =
+          (Array.isArray(bookingRes?.errors) && bookingRes.errors[0]?.message) ||
+          bookingRes?.message ||
+          "Backend could not place your booking request. Please check details or try another payment method.";
+        showToast(errMsg, "error");
+        return;
+      }
+
+      const pIdMatch = typeof redirectUrl === "string" ? redirectUrl.match(/payment_id=([^&]+)/) : null;
       const paymentUuid =
         (pIdMatch ? decodeURIComponent(pIdMatch[1]) : null) ||
+        readableId ||
         (Array.isArray(rawBookingId) && rawBookingId.length > 0 ? String(rawBookingId[0]) : null) ||
         (typeof rawBookingId === "string" || typeof rawBookingId === "number" ? String(rawBookingId) : null) ||
-        (bookingRes?.content?.readable_id ? String(bookingRes.content.readable_id) : null) ||
         (bookingRes?.content?.payment_id ? String(bookingRes.content.payment_id) : null) ||
         null;
 
-      const confirmedRefId = paymentUuid || `MMC-EMG-${Date.now()}`;
+      const confirmedRefId = readableId || paymentUuid || `MMC-EMG-${Date.now()}`;
 
       try {
         sessionStorage.setItem(
