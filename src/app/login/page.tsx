@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   sendLoginOtp,
   verifyLoginOtp,
+  updateFCMTokenToBackend,
 } from "@/lib/auth.api";
 import { getCustomerProfile } from "@/app/services/api/profile.api";
 import { useToast } from "@/components/ToastProvider";
@@ -173,6 +174,17 @@ function LoginContent() {
         } catch (profileErr) {
           console.warn("Could not pre-fetch profile on login:", profileErr);
         }
+
+        // Sync FCM device token with customer account on login
+        try {
+          getFCMToken(true)
+            .then((fcmToken) => {
+              if (fcmToken) {
+                updateFCMTokenToBackend(fcmToken).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        } catch {}
 
         // Notify Navbar and other components of auth state change
         window.dispatchEvent(new Event("storage"));

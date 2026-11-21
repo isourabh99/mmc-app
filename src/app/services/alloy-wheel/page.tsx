@@ -90,7 +90,7 @@ import ProviderProfilePageView from "./components/ProviderProfilePageView";
 import QuotesPageView from "./components/QuotesPageView";
 import BookingPageView from "./components/BookingPageView";
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
-import type { SelectedLocationData } from "@/lib/service/address.helper";
+import { extractPostcode, getCleanDisplayAddress, type SelectedLocationData } from "@/lib/service/address.helper";
 import {
     saveServiceFormDraft,
     getServiceFormDraft,
@@ -1178,6 +1178,26 @@ export default function AlloyWheelPage() {
                         : undefined,
             });
 
+            const isBookingSuccess =
+                res?.response_code === "booking_place_success_200" ||
+                res?.response_code === "default_200" ||
+                res?.response_code === "booking_success_200" ||
+                res?.content?.flag === "success" ||
+                Boolean(res?.content?.booking_id) ||
+                Boolean(res?.content?.readable_id) ||
+                Boolean(res?.content?.url || (res as any)?.redirect_link);
+
+            if (!isBookingSuccess) {
+                console.error("[AlloyBooking] Placement failed:", res);
+                const errMsg =
+                    (Array.isArray(res?.errors) && res.errors[0]?.message) ||
+                    res?.message ||
+                    "Server failed to place booking. Please check details or try another payment method.";
+                showToast(errMsg, "error");
+                setSubmittingBooking(false);
+                return;
+            }
+
             const confirmedRefId = res.content?.readable_id || res.content?.booking_id || `MMC-ALL-${Date.now().toString().slice(-6)}`;
 
             // Extract redirect URL for Stripe if returned
@@ -1317,6 +1337,11 @@ export default function AlloyWheelPage() {
                 const bookingId = res.content?.booking_id || res.content?.id || refId;
                 if (bookingId) {
                     const resolvedAlloyAddr = serviceAddressJson || locationAddress || (house && postcode ? `${house}, ${postcode}` : postcode);
+                    const isWallet = bookingPaymentMethod === "wallet_payment";
+                    const isPartial = Boolean(isPartialPayment);
+                    const paidAmt = isPartial ? Number(depositAmount) : (isWallet ? effectivePrice : 0);
+                    const dueAmt = isPartial ? Math.max(0, effectivePrice - Number(depositAmount)) : 0;
+
                     const alloyMeta = {
                         serviceTitle: "Alloy Wheel Refurbishment & Repair",
                         serviceCategoryName: "Alloy Wheel Repair",
@@ -1325,8 +1350,17 @@ export default function AlloyWheelPage() {
                         vehicleReg: regNo || "",
                         vehicleModel: carBrand || "",
                         price: effectivePrice,
-                        isPaid: false,
-                        paymentStatus: "Pending Payment",
+                        totalAmount: effectivePrice,
+                        paidAmount: paidAmt,
+                        dueAmount: dueAmt,
+                        is_partial: isPartial ? 1 : 0,
+                        isPaid: !isPartial && isWallet,
+                        isPartiallyPaid: isPartial,
+                        paymentStatus: isPartial
+                            ? "Partially Paid"
+                            : isWallet
+                            ? "Paid"
+                            : "Pending Payment",
                         scheduleDate: formattedSchedule ? formattedSchedule.split(" ")[0] : new Date().toISOString().split("T")[0],
                         scheduleTime: formattedSchedule ? formattedSchedule.split(" ")[1] : "11:00",
                         serviceAddress: resolvedAlloyAddr,
@@ -1359,17 +1393,21 @@ export default function AlloyWheelPage() {
                         vehicleReg: regNo || "",
                         vehicleModel: carBrand || "",
                         totalAmount: effectivePrice,
-                        isPaid: bookingPaymentMethod === "wallet_payment",
+                        isPaid: !isPartial && isWallet,
+                        isPartiallyPaid: isPartial,
+                        is_partial: isPartial ? 1 : 0,
+                        paidAmount: paidAmt,
+                        dueAmount: dueAmt,
                         paymentStatus:
-                            bookingPaymentMethod === "wallet_payment"
-                                ? isPartialPayment
-                                    ? "Partial Deposit Paid (Wallet)"
-                                    : "Paid in Full (Wallet)"
+                            isPartial
+                                ? "Partially Paid"
+                                : isWallet
+                                ? "Paid in Full (Wallet)"
                                 : bookingPaymentMethod === "stripe"
                                 ? "Pending Payment"
                                 : "Cash After Service",
                         paymentMethod:
-                            bookingPaymentMethod === "wallet_payment"
+                            isWallet
                                 ? "MMC Digital Wallet"
                                 : bookingPaymentMethod === "stripe"
                                 ? "Online (Stripe)"
@@ -2549,7 +2587,7 @@ export default function AlloyWheelPage() {
                         bookingConfirmed={bookingConfirmed}
                         bookingApiResult={bookingApiResult}
                         bookingError={bookingError}
-                        serviceAddress={serviceAddressJson || locationAddress}
+                        serviceAddress={locationAddress || (serviceAddressJson ? getCleanDisplayAddress(serviceAddressJson, postcode) : "")}
                         locationAddress={locationAddress}
                         house={house}
                         floor={floor}

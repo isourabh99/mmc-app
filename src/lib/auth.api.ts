@@ -149,30 +149,21 @@ export const sendOtp = sendLoginOtp;
  * PUT /customer/update/fcm-token
  */
 export const updateFCMTokenToBackend = async (fcmToken: string) => {
+  if (!fcmToken || !fcmToken.trim()) return null;
   try {
     if (typeof window !== "undefined") {
-      localStorage.setItem("fcm_token", fcmToken);
+      localStorage.setItem("fcm_token", fcmToken.trim());
     }
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) return null;
-    let response;
-    try {
-      response = await apiClient.put("/customer/update/fcm-token", {
-        fcm_token: fcmToken,
-      });
-    } catch {
-      try {
-        response = await apiClient.put("/customer/update-fcm-token", {
-          fcm_token: fcmToken,
-        });
-      } catch {
-        response = await apiClient.post("/customer/update-fcm-token", {
-          fcm_token: fcmToken,
-        });
-      }
-    }
+
+    const response = await apiClient.put("/customer/update/fcm-token", {
+      fcm_token: fcmToken.trim(),
+    });
+    console.log("[FCM] Device token registered to customer profile:", response.data?.message || "Success");
     return response.data;
-  } catch (err) {
+  } catch (err: any) {
+    console.warn("[FCM] Failed to update token to /customer/update/fcm-token:", err?.response?.data || err?.message || err);
     return null;
   }
 };

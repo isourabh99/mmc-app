@@ -22,7 +22,7 @@ export const TYRE_EMERGENCY_SERVICE_ID = "1e5455a9-62f8-4489-bfa8-4eb52d033a7d";
 export const TYRE_REPLACEMENT_SERVICE_ID = "9913c6e3-1f99-4929-989c-25484da50e00";
 export const DEFAULT_SERVICE_ID = TYRE_REPLACEMENT_SERVICE_ID;
 export const DEFAULT_PROVIDER_ID = "cffcce91-5498-4b73-b571-8e6e69bbd89d";
-export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 export const isUuid = (str: any): boolean =>
   typeof str === "string" &&
@@ -733,7 +733,7 @@ export async function addTyreToCart(payload: {
   guest_id?: string;
   zone_id?: string;
 }): Promise<any> {
-  const zoneId =
+  const rawZone =
     payload.zone_id ||
     (typeof window !== "undefined" &&
       (localStorage.getItem("zone_id") ||
@@ -741,6 +741,7 @@ export async function addTyreToCart(payload: {
         localStorage.getItem("zoneId") ||
         localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
+  const zoneId = (rawZone === "c5b64f38-90ac-49f3-858c-d8dae5c0a53f") ? DEFAULT_ZONE_ID : rawZone;
 
   const guestId = payload.guest_id || getOrCreateGuestId();
 
@@ -854,7 +855,6 @@ export interface SendBookingRequestPayload {
   floor?: string;
   street?: string;
   city?: string;
-  guest_id?: string;
   latitude?: number | string;
   longitude?: number | string;
   is_partial?: number | boolean | string;
@@ -871,7 +871,7 @@ export interface SendBookingRequestPayload {
 export async function sendBookingRequestToBackend(
   payload: SendBookingRequestPayload
 ): Promise<any> {
-  const zoneId =
+  const rawZone =
     payload.zone_id ||
     (typeof window !== "undefined" &&
       (localStorage.getItem("zone_id") ||
@@ -879,6 +879,7 @@ export async function sendBookingRequestToBackend(
         localStorage.getItem("zoneId") ||
         localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
+  const zoneId = (rawZone === "c5b64f38-90ac-49f3-858c-d8dae5c0a53f") ? DEFAULT_ZONE_ID : rawZone;
 
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -932,6 +933,9 @@ export async function sendBookingRequestToBackend(
   if (payload.guest_id) {
     postData.guest_id = payload.guest_id;
   }
+  if (payload.provider_id) {
+    postData.provider_id = payload.provider_id;
+  }
 
   console.log("[TyreBooking] POST /customer/booking/request/send JSON body:", postData);
 
@@ -975,6 +979,7 @@ export interface SendTyreBookingPayload {
   selected_slot_id?: string;
   car_registration_number?: string;
   car_model?: string;
+  notes?: string;
   postcode?: string;
   house?: string;
   floor?: string;
@@ -997,7 +1002,7 @@ export interface SendTyreBookingPayload {
 export async function sendTyreBookingRequest(
   payload: SendTyreBookingPayload
 ): Promise<any> {
-  const zoneId =
+  const rawZone =
     payload.zone_id ||
     (typeof window !== "undefined" &&
       (localStorage.getItem("zone_id") ||
@@ -1005,6 +1010,7 @@ export async function sendTyreBookingRequest(
         localStorage.getItem("zoneId") ||
         localStorage.getItem(ZONE_KEY))) ||
     DEFAULT_ZONE_ID;
+  const zoneId = (rawZone === "c5b64f38-90ac-49f3-858c-d8dae5c0a53f") ? DEFAULT_ZONE_ID : rawZone;
 
   const guestId = payload.guest_id || getOrCreateGuestId();
   const effectiveProviderId =

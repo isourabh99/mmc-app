@@ -89,14 +89,41 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
   const loadHeaderData = useCallback(async () => {
     try {
       setLoadingHeader(true);
-      const [infoRes, configRes, bonusRes] = await Promise.all([
+      const [infoRes, configRes, bonusRes, loyaltyRes] = await Promise.all([
         getCustomerWalletInfo(),
         getCustomerConfig(),
         getAddFundBonusList({ limit: 5 }),
+        getLoyaltyPointTransactions({ limit: 1, offset: 1 }).catch(() => null),
       ]);
       if (infoRes) setWalletInfo(infoRes);
-      if (configRes) setConfig(configRes);
+      if (configRes) {
+        setConfig(configRes);
+        const rateFromConfig = Number(
+          configRes.loyalty_point_value_per_currency_unit ||
+          configRes.loyalty_point_exchange_rate ||
+          0
+        );
+        if (rateFromConfig > 0) setLoyaltyRate(rateFromConfig);
+
+        const minFromConfig = Number(
+          configRes.min_loyalty_point_to_transfer ||
+          configRes.min_point_to_transfer ||
+          0
+        );
+        if (minFromConfig > 0) setMinTransferPoints(minFromConfig);
+      }
       if (bonusRes) setBonuses(bonusRes);
+      if (loyaltyRes) {
+        if (loyaltyRes.loyalty_point_value_per_currency_unit) {
+          setLoyaltyRate(loyaltyRes.loyalty_point_value_per_currency_unit);
+        }
+        if (loyaltyRes.min_loyalty_point_to_transfer) {
+          setMinTransferPoints(loyaltyRes.min_loyalty_point_to_transfer);
+        }
+        if (loyaltyRes.loyalty_point !== undefined && loyaltyRes.loyalty_point > 0) {
+          setWalletInfo((prev) => (prev ? { ...prev, loyalty_point: loyaltyRes.loyalty_point } : prev));
+        }
+      }
     } catch (err) {
       console.warn("Error loading wallet header:", err);
     } finally {
@@ -414,7 +441,7 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
             </div>
 
             {/* Points Balance */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">
                 Total Reward Points
               </p>
@@ -427,6 +454,16 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
                   (≈ £{estimatedPointsValue} Wallet Credit)
                 </span>
               </div>
+              <div className="pt-1 flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-300 font-bold">
+                  Admin Rate: 100 PTS = £{((100 / effectiveExchangeRate)).toFixed(2)}
+                </span>
+                {minTransferPoints > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/70 font-semibold">
+                    Min Transfer: {minTransferPoints} PTS
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Quick Actions */}
@@ -434,7 +471,10 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
               <button
                 type="button"
                 onClick={() => {
-                  setConvertPoints(currentLoyaltyPoints > 0 ? currentLoyaltyPoints : 50);
+                  const initialPts = minTransferPoints > 0
+                    ? Math.min(currentLoyaltyPoints, minTransferPoints)
+                    : (currentLoyaltyPoints >= 100 ? 100 : currentLoyaltyPoints);
+                  setConvertPoints(initialPts > 0 ? initialPts : 100);
                   setShowConvertModal(true);
                 }}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-xs transition cursor-pointer"
@@ -536,10 +576,10 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
               { id: "all", label: "All" },
               { id: "wallet_payment", label: "Payments" },
               { id: "add_fund", label: "Top-Up" },
-              { id: "add_fund_bonus", label: "Bonus" },
+          
               { id: "loyalty_point_earning", label: "Loyalty" },
-              { id: "booking_refund", label: "Refund" },
-              { id: "referral_earning", label: "Referral" },
+              
+             
               { id: "fund_by_admin", label: "Admin" },
             ].map((f) => {
               const isSelected = walletTxFilter === f.id;
@@ -1001,14 +1041,61 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
               </div>
             </div>
 
+            {/* Official Admin Conversion Rate & Exchange Rule */}
+            <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-[#2a1d0f] via-[#21160b] to-[#170e06] p-4 space-y-2.5 shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#f2cb87] flex items-center gap-1.5">
+                  <Coins size={14} className="text-[#f2cb87]" />
+                  Admin Official Exchange Policy
+                </span>
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Rate
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-3 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] text-white/50 uppercase font-bold block">100 Loyalty Points</span>
+                  <span className="text-base font-black text-[#f2cb87] block">
+                    = £{((100 / effectiveExchangeRate)).toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-emerald-400/90 font-medium block">
+                    Wallet Credit
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] text-white/50 uppercase font-bold block">Rate Formula</span>
+                  <span className="text-sm font-black text-white block">
+                    {effectiveExchangeRate} PTS = £1.00
+                  </span>
+                  <span className="text-[10px] text-white/40 font-medium block">
+                    (1 PT = £{(1 / effectiveExchangeRate).toFixed(4)})
+                  </span>
+                </div>
+              </div>
+
+              {minTransferPoints > 0 && (
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-white/10 text-white/70">
+                  <span className="flex items-center gap-1">
+                    <span>🛡️</span> Min. Points to Transfer:
+                  </span>
+                  <span className="font-extrabold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                    {minTransferPoints} PTS
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Input Points to Convert */}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <label className="font-bold text-white/70">Points to Transfer</label>
                 <button
                   type="button"
                   onClick={() => setConvertPoints(currentLoyaltyPoints)}
-                  className="text-[11px] font-bold text-[#f2cb87] hover:underline"
+                  className="text-[11px] font-bold text-[#f2cb87] hover:underline cursor-pointer"
                 >
                   Use All ({currentLoyaltyPoints})
                 </button>
@@ -1016,23 +1103,56 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
 
               <input
                 type="number"
-                min="1"
+                min={minTransferPoints > 0 ? minTransferPoints : 1}
                 max={currentLoyaltyPoints}
-                value={convertPoints}
+                value={convertPoints || ""}
                 onChange={(e) => setConvertPoints(Number(e.target.value))}
-                placeholder="Enter points (e.g. 50)"
+                placeholder={minTransferPoints > 0 ? `Min ${minTransferPoints} points` : "Enter points (e.g. 100)"}
                 className="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-3 text-sm font-bold text-white placeholder-white/30 focus:border-[#f2cb87] focus:outline-none transition"
               />
+
+              {/* Quick Select Preset Buttons */}
+              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                {[
+                  ...(minTransferPoints > 0 && minTransferPoints <= currentLoyaltyPoints ? [{ label: `Min (${minTransferPoints})`, val: minTransferPoints }] : []),
+                  ...(currentLoyaltyPoints >= 100 ? [{ label: "100 PTS", val: 100 }] : []),
+                  ...(currentLoyaltyPoints >= 500 ? [{ label: "500 PTS", val: 500 }] : []),
+                  ...(currentLoyaltyPoints >= 1000 ? [{ label: "1,000 PTS", val: 1000 }] : []),
+                ].map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setConvertPoints(p.val)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border cursor-pointer ${
+                      convertPoints === p.val
+                        ? "bg-[#f2cb87] text-zinc-950 border-[#f2cb87]"
+                        : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* Validation Alert */}
+            {minTransferPoints > 0 && Number(convertPoints || 0) > 0 && Number(convertPoints || 0) < minTransferPoints && (
+              <p className="text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-xl p-3 text-center">
+                ⚠️ Minimum required points set by admin is {minTransferPoints} PTS. Please enter at least {minTransferPoints} points.
+              </p>
+            )}
+
             {/* Live Calculation Output */}
-            <div className="p-3 rounded-xl bg-[#f2cb87]/10 border border-[#f2cb87]/25 text-center">
-              <p className="text-xs text-white/70">
+            <div className="p-3.5 rounded-xl bg-[#f2cb87]/10 border border-[#f2cb87]/25 text-center space-y-1">
+              <p className="text-xs text-white/80">
                 You will receive{" "}
-                <span className="font-black text-[#f2cb87] text-sm">
+                <span className="font-black text-[#f2cb87] text-base">
                   £{(Number(convertPoints || 0) / effectiveExchangeRate).toFixed(2)}
                 </span>{" "}
                 instantly into your wallet.
+              </p>
+              <p className="text-[10px] text-white/50">
+                Based on admin exchange rate: 100 PTS = £{((100 / effectiveExchangeRate)).toFixed(2)} ({effectiveExchangeRate} Points = £1.00)
               </p>
             </div>
 
@@ -1041,13 +1161,19 @@ export const WalletTab: React.FC<WalletTabProps> = ({ user: initialUser, onProfi
               <button
                 type="button"
                 onClick={() => setShowConvertModal(false)}
-                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 text-xs font-bold transition"
+                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 text-xs font-bold transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={converting || currentLoyaltyPoints <= 0}
+                disabled={
+                  converting ||
+                  currentLoyaltyPoints <= 0 ||
+                  Number(convertPoints || 0) <= 0 ||
+                  (minTransferPoints > 0 && Number(convertPoints || 0) < minTransferPoints) ||
+                  Number(convertPoints || 0) > currentLoyaltyPoints
+                }
                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#f2cb87] via-[#e8b86d] to-[#d09a50] text-zinc-950 font-black text-xs transition hover:brightness-110 active:scale-[0.98] shadow-md shadow-[#d09a50]/20 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {converting ? (

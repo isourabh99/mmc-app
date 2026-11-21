@@ -35,6 +35,7 @@ import type {
     CustomerQuotationPostItem,
 } from "@/lib/service/alloy.api";
 import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
+import { getCleanDisplayAddress } from "@/lib/service/address.helper";
 
 interface BookingPageViewProps {
     provider: ProviderItem;
@@ -235,13 +236,7 @@ export default function BookingPageView({
                             <div className="flex items-start justify-between gap-4 pt-1 border-t border-zinc-800/60">
                                 <span className="text-zinc-400 shrink-0">Service Location:</span>
                                 <span className="font-bold text-white text-right break-words">
-                                    {[
-                                        house ? `House/Flat: ${house}` : "",
-                                        floor ? `Floor ${floor}` : "",
-                                        locationAddress || serviceAddress || "Indore, 452001, India",
-                                    ]
-                                        .filter(Boolean)
-                                        .join(", ")}
+                                    {getCleanDisplayAddress(locationAddress || serviceAddress, postcode) || "Indore, 452001, India"}
                                 </span>
                             </div>
                         )}
@@ -396,41 +391,44 @@ export default function BookingPageView({
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs text-white font-medium break-words">
-                                {[
-                                    house ? `Flat/House: ${house}` : "",
-                                    floor ? `Floor: ${floor}` : "",
-                                    street ? `Street: ${street}` : "",
-                                    city ? `City: ${city}` : "",
-                                    locationAddress || serviceAddress || (postcode ? `Postcode: ${postcode}` : "Service Location Selected"),
-                                ]
-                                    .filter(Boolean)
-                                    .join(", ")}
-                            </p>
-                            {(house || floor || street || city) && (
-                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                    {house && (
-                                        <span className="px-2 py-0.5 rounded bg-[#E8AF66]/10 border border-[#E8AF66]/20 text-[10px] text-[#E8AF66] font-bold">
-                                            🏠 Flat/House: {house}
-                                        </span>
-                                    )}
-                                    {floor && (
-                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
-                                            🏢 Floor: {floor}
-                                        </span>
-                                    )}
-                                    {street && (
-                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
-                                            🛣️ Street: {street}
-                                        </span>
-                                    )}
-                                    {city && (
-                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-zinc-700 text-[10px] text-zinc-300 font-semibold">
-                                            🏙️ City: {city}
-                                        </span>
-                                    )}
-                                </div>
-                            )}
+                            {(() => {
+                                const cleanAddr = getCleanDisplayAddress(locationAddress || serviceAddress, postcode);
+                                return (
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-white font-medium break-words leading-relaxed">
+                                            {cleanAddr || "Service Location Selected"}
+                                        </p>
+                                        {(house || floor || street || city) && (
+                                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                                {house && (
+                                                    <span className="px-2.5 py-1 rounded-lg bg-[#E8AF66]/10 border border-[#E8AF66]/25 text-[11px] text-[#E8AF66] font-bold inline-flex items-center gap-1">
+                                                        <span>🏠 Flat/House:</span>
+                                                        <span className="text-white">{house}</span>
+                                                    </span>
+                                                )}
+                                                {floor && (
+                                                    <span className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 text-[11px] text-zinc-300 font-semibold inline-flex items-center gap-1">
+                                                        <span>🏢 Floor:</span>
+                                                        <span className="text-white">{floor}</span>
+                                                    </span>
+                                                )}
+                                                {street && !cleanAddr.toLowerCase().includes(street.toLowerCase()) && (
+                                                    <span className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 text-[11px] text-zinc-300 font-semibold inline-flex items-center gap-1">
+                                                        <span>🛣️ Street:</span>
+                                                        <span className="text-white">{street}</span>
+                                                    </span>
+                                                )}
+                                                {city && !cleanAddr.toLowerCase().includes(city.toLowerCase()) && (
+                                                    <span className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 text-[11px] text-zinc-300 font-semibold inline-flex items-center gap-1">
+                                                        <span>🏙️ City:</span>
+                                                        <span className="text-white">{city}</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </div>

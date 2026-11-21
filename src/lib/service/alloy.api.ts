@@ -31,7 +31,7 @@ export interface AlloyServicesResponse {
 
 export const ALLOY_CATEGORY_ID = "e1fb2dae-c233-4b45-852b-8253373e06d7";
 export const BOOKING_QUESTIONS_CATEGORY_ID = ALLOY_CATEGORY_ID;
-export const DEFAULT_ZONE_ID = "c5b64f38-90ac-49f3-858c-d8dae5c0a53f";
+export const DEFAULT_ZONE_ID = "a1614dbe-4732-11ee-9702-dee6e8d77be4";
 
 /**
  * Fetch Alloy Wheel services strictly from the backend API.

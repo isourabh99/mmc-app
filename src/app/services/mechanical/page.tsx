@@ -70,7 +70,7 @@ import {
 } from "@/lib/serviceFormDraft";
 import PaymentSelectionModal from "@/components/common/PaymentSelectionModal";
 import { LocationPickerModal } from "@/components/common/LocationPickerModal";
-import { extractPostcode, type SelectedLocationData } from "@/lib/service/address.helper";
+import { extractPostcode, getCleanDisplayAddress, type SelectedLocationData } from "@/lib/service/address.helper";
 
 type ActiveView = "hero" | "providers" | "booking" | "payment" | "success";
 
@@ -613,15 +613,11 @@ export default function MechanicalPage() {
       const res = await sendMechanicalBookingRequest(payload);
       const bId =
         res?.content?.readable_id ||
-        res?.content?.booking_id ||
+        (Array.isArray(res?.content?.booking_id) ? res.content.booking_id[0] : res?.content?.booking_id) ||
         res?.content?.id ||
         res?.readable_id ||
-        res?.booking_id ||
+        (Array.isArray(res?.booking_id) ? res.booking_id[0] : res?.booking_id) ||
         res?.id;
-
-      if (bId && typeof window !== "undefined") {
-        localStorage.setItem("last_mechanical_booking_id", String(bId));
-      }
 
       const responseContent: unknown = res?.content;
       let redirectUrl =
@@ -637,6 +633,26 @@ export default function MechanicalPage() {
         (typeof responseContent === "string" && responseContent.startsWith("http")
           ? responseContent
           : null);
+
+      const isBookingSuccess =
+        res?.response_code === "booking_place_success_200" ||
+        res?.response_code === "default_200" ||
+        res?.response_code === "booking_success_200" ||
+        res?.content?.flag === "success" ||
+        Boolean(bId) ||
+        Boolean(redirectUrl);
+
+      if (!isBookingSuccess) {
+        console.error("[MechanicalBooking] Server failed to place booking:", res);
+        const errMsg =
+          (Array.isArray(res?.errors) && res.errors[0]?.message) ||
+          res?.message ||
+          "Failed to place booking on the server. Please try again or use another payment method.";
+        setBookingError(errMsg);
+        showToast(errMsg, "error");
+        setSubmittingBooking(false);
+        return;
+      }
 
       const isUuidStr = (str: any): boolean =>
         typeof str === "string" &&
@@ -693,7 +709,11 @@ export default function MechanicalPage() {
         street: street || "",
         city: city || "",
         totalAmount: numericPrice,
-        isPaid: paymentMethod === "wallet_payment",
+        isPaid: !isPartialPayment && paymentMethod === "wallet_payment",
+        isPartiallyPaid: isPartialPayment,
+        is_partial: isPartialPayment ? 1 : 0,
+        paidAmount: isPartialPayment ? Number(depositAmount) : (paymentMethod === "wallet_payment" ? numericPrice : 0),
+        dueAmount: isPartialPayment ? Math.max(0, numericPrice - Number(depositAmount)) : 0,
         paymentStatus:
           paymentMethod === "wallet_payment"
             ? isPartialPayment
@@ -1659,16 +1679,8 @@ export default function MechanicalPage() {
                         Change Location
                       </button>
                     </div>
-                    <p className="text-xs text-white font-medium break-words">
-                      {[
-                        house ? `House/Flat: ${house}` : "",
-                        floor ? `Floor: ${floor}` : "",
-                        street ? `Street: ${street}` : "",
-                        city ? `City: ${city}` : "",
-                        locationAddress || (postcode ? `Postcode: ${postcode}` : "Location Selected"),
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
+                    <p className="text-xs text-white font-medium break-words leading-relaxed">
+                      {getCleanDisplayAddress(locationAddress, postcode) || "Service Location Selected"}
                     </p>
                     {(house || floor || street || city) && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">

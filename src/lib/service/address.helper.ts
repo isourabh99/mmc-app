@@ -50,6 +50,64 @@ export function extractPostcode(text: string): string {
 }
 
 /**
+ * Strips raw JSON formatting or extracts a clean human-readable address string
+ */
+export function getCleanDisplayAddress(raw?: string | null, fallbackPostcode?: string): string {
+  if (!raw || typeof raw !== "string") {
+    return fallbackPostcode ? `Postcode: ${fallbackPostcode}` : "";
+  }
+  let text = raw.trim();
+
+  // If raw string starts with or contains stringified JSON
+  if (text.includes('{"lat"') || text.includes('{"address"') || text.includes('"{')) {
+    const jsonMatch = text.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.address || parsed.formattedAddress) {
+          text = parsed.address || parsed.formattedAddress;
+        } else if (parsed.street) {
+          text = [
+            parsed.house ? `Flat/House: ${parsed.house}` : "",
+            parsed.floor ? `Floor ${parsed.floor}` : "",
+            parsed.street,
+            parsed.city,
+            parsed.zip_code
+          ].filter(Boolean).join(", ");
+        }
+      } catch { }
+    }
+  } else if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.address || parsed.formattedAddress) {
+        text = parsed.address || parsed.formattedAddress;
+      } else if (parsed.street) {
+        text = [
+          parsed.house ? `Flat/House: ${parsed.house}` : "",
+          parsed.floor ? `Floor ${parsed.floor}` : "",
+          parsed.street,
+          parsed.city,
+          parsed.zip_code
+        ].filter(Boolean).join(", ");
+      }
+    } catch { }
+  }
+
+  // Strip any leftover JSON artifacts
+  text = text.replace(/\{[\s\S]*?\}/g, "").trim();
+  text = text.replace(/^,\s*|,\s*$/g, "").trim();
+
+  // Strip repetitive prefixes if already embedded
+  text = text.replace(/(?:Flat\/House:\s*[^,]+,\s*)+(?=Flat\/House:)/gi, "");
+
+  // Clean double commas or messy punctuation
+  text = text.replace(/,\s*,+/g, ", ").replace(/^,\s*|,\s*$/g, "").trim();
+
+  return text || (fallbackPostcode ? `Postcode: ${fallbackPostcode}` : "");
+}
+
+/**
  * Format service_address into the EXACT JSON string Demandium expects:
  * "{\"lat\":\"51.5074\",\"lon\":\"-0.1278\",\"address\":\"221B Baker Street\",\"city\":\"London\",\"street\":\"Baker St\",\"zip_code\":\"\",\"country\":\"United Kingdom\",\"contact_person_name\":\"John Doe\",\"contact_person_number\":\"+447123456789\",\"address_label\":\"Home\"}"
  */
@@ -95,7 +153,7 @@ export function formatServiceAddressJson(data: Partial<CustomerAddressPayload>):
     zip_code: cleanPostcode,
     country: (data.country || "").trim(),
     contact_person_name: (data.contact_person_name || (typeof window !== "undefined" ? localStorage.getItem("user_name") : null) || "Customer").trim(),
-    contact_person_number: (data.contact_person_number || (typeof window !== "undefined" ? localStorage.getItem("user_phone") : null) || "").trim(),
+    contact_person_number: (data.contact_person_number || (typeof window !== "undefined" ? localStorage.getItem("user_phone") : null) || "+447365923579").trim(),
     address_label: (data.address_label || "Home").trim(),
     house: houseVal,
     floor: floorVal,
@@ -208,7 +266,7 @@ export function ensureServiceAddressJson(
     zip_code: extraParams?.zip_code || (typeof window !== "undefined" ? localStorage.getItem("user_postcode") || localStorage.getItem("postcode") : null) || extractPostcode(rawAddress || ""),
     country: extraParams?.country || "",
     contact_person_name: extraParams?.contact_person_name || (typeof window !== "undefined" ? localStorage.getItem("user_name") : null) || "Customer",
-    contact_person_number: extraParams?.contact_person_number || (typeof window !== "undefined" ? localStorage.getItem("user_phone") : null) || "",
+    contact_person_number: extraParams?.contact_person_number || (typeof window !== "undefined" ? localStorage.getItem("user_phone") : null) || "+447365923579",
     address_label: extraParams?.address_label || "Home",
     house: fallbackHouse,
     floor: fallbackFloor,
