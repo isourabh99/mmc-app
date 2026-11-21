@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getMessaging, getToken, onMessage, isSupported, type Messaging } from "firebase/messaging";
 
 const cleanFirebaseProjectId = (
-  rawId: string = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "motor-market-connect-a2eff"
+  rawId: string = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || ""
 ): string => {
   return rawId
     .replace(/\.firebaseapp\.com$/i, "")
@@ -13,20 +13,32 @@ const cleanFirebaseProjectId = (
 const resolvedProjectId = cleanFirebaseProjectId();
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCGoZ-coUFTMUoUcAat5aQUzAu7mj8g26g",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || `${resolvedProjectId}.firebaseapp.com`,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  authDomain:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+    (resolvedProjectId ? `${resolvedProjectId}.firebaseapp.com` : ""),
   projectId: resolvedProjectId,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || `${resolvedProjectId}.firebasestorage.app`,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "361839663402",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:361839663402:web:7ad55d5dac8adcb1e96653",
+  storageBucket:
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    (resolvedProjectId ? `${resolvedProjectId}.firebasestorage.app` : ""),
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
 
 export const FIREBASE_VAPID_KEY =
-  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
-  "BANV68oFFJrXS0remYYXkHfg8q9LHPNleiL_nOROHNnX4bbju-ztFfZHsc_xH07detmCdfcjx13uRaRPPA3CaiM";
+  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "";
+
+export const isFirebaseConfigured = Boolean(
+  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId
+);
 
 // Initialize or reuse existing Firebase App
-export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const app =
+  getApps().length > 0
+    ? getApp()
+    : isFirebaseConfigured
+    ? initializeApp(firebaseConfig)
+    : null;
 
 /**
  * Ensures Service Worker is registered with correct scope and credentials
@@ -36,12 +48,18 @@ export const ensureServiceWorkerRegistration = async (): Promise<ServiceWorkerRe
 
   try {
     const swUrl = `/firebase-messaging-sw.js?apiKey=${encodeURIComponent(
-      firebaseConfig.apiKey
+      firebaseConfig.apiKey || ""
     )}&projectId=${encodeURIComponent(
-      firebaseConfig.projectId
+      firebaseConfig.projectId || ""
     )}&messagingSenderId=${encodeURIComponent(
-      firebaseConfig.messagingSenderId
-    )}&appId=${encodeURIComponent(firebaseConfig.appId)}`;
+      firebaseConfig.messagingSenderId || ""
+    )}&appId=${encodeURIComponent(
+      firebaseConfig.appId || ""
+    )}&authDomain=${encodeURIComponent(
+      firebaseConfig.authDomain || ""
+    )}&storageBucket=${encodeURIComponent(
+      firebaseConfig.storageBucket || ""
+    )}`;
 
     let registration = await navigator.serviceWorker.getRegistration("/");
     if (!registration) {
@@ -91,6 +109,10 @@ export const getFCMToken = async (forceRefresh: boolean = false): Promise<string
     }
 
     // 2. Obtain FCM Token
+    if (!app) {
+      console.warn("[FCM] Firebase App is not configured");
+      return "";
+    }
     const messaging: Messaging = getMessaging(app);
     const token = await getToken(messaging, {
       vapidKey: FIREBASE_VAPID_KEY,
@@ -116,7 +138,7 @@ export const onForegroundMessage = async (callback: (payload: any) => void) => {
 
   try {
     const supported = await isSupported();
-    if (!supported) return () => {};
+    if (!supported || !app) return () => {};
 
     const messaging: Messaging = getMessaging(app);
     return onMessage(messaging, (payload) => {

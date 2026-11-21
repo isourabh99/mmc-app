@@ -12,24 +12,23 @@ self.addEventListener("activate", (event) => {
 
 const urlParams = new URLSearchParams(self.location.search);
 
-const defaultProjectId = "motor-market-connect-a2eff";
-const rawProjectId = urlParams.get("projectId") || defaultProjectId;
+const rawProjectId = urlParams.get("projectId") || "";
 const cleanProjectId = rawProjectId
   .replace(/\.firebaseapp\.com$/i, "")
   .replace(/\.firebasestorage\.app$/i, "")
   .trim();
 
 const firebaseConfig = {
-  apiKey: urlParams.get("apiKey") || "AIzaSyCGoZ-coUFTMUoUcAat5aQUzAu7mj8g26g",
-  authDomain: `${cleanProjectId}.firebaseapp.com`,
+  apiKey: urlParams.get("apiKey") || "",
+  authDomain: urlParams.get("authDomain") || (cleanProjectId ? `${cleanProjectId}.firebaseapp.com` : ""),
   projectId: cleanProjectId,
-  storageBucket: `${cleanProjectId}.firebasestorage.app`,
-  messagingSenderId: urlParams.get("messagingSenderId") || "361839663402",
-  appId: urlParams.get("appId") || "1:361839663402:web:7ad55d5dac8adcb1e96653",
+  storageBucket: urlParams.get("storageBucket") || (cleanProjectId ? `${cleanProjectId}.firebasestorage.app` : ""),
+  messagingSenderId: urlParams.get("messagingSenderId") || "",
+  appId: urlParams.get("appId") || "",
 };
 
-// Initialize Firebase App only once
-if (!firebase.apps.length) {
+// Initialize Firebase App only once when valid configuration exists
+if (!firebase.apps.length && firebaseConfig.apiKey && firebaseConfig.projectId) {
   try {
     firebase.initializeApp(firebaseConfig);
   } catch (err) {
