@@ -8,6 +8,7 @@ import {
   fetchAllCustomerBookings,
   UnifiedBookingItem,
 } from "@/lib/service/bookings.api";
+import { getCustomerEstimates, normalizeEstimateImageUrl } from "@/lib/service/estimate.api";
 
 export interface BookingNotification {
   id: string;
@@ -648,7 +649,7 @@ function normalizeBidNotification(
   readIds: Set<string>
 ): BookingNotification {
   const id = `notif-bid-${bid.id}`;
-  const providerName = bid.provider?.company_name || "Specialist";
+  const providerName = bid.provider?.company_name || bid.provider?.name || "Specialist";
   const price = bid.offered_price ? `£${bid.offered_price}` : "Custom Offer";
   const isAlloy = (
     (post?.service_description || "").toLowerCase().includes("alloy") ||
@@ -656,9 +657,7 @@ function normalizeBidNotification(
     (post?.category?.name || "").toLowerCase().includes("alloy") ||
     (bid?.provider_note || "").toLowerCase().includes("alloy")
   );
-  const targetUrl = isAlloy
-    ? `/services/alloy-wheel?view=quotes`
-    : `/services/bodywork?view=quotes`;
+  const targetUrl = `/account?tab=quotes`;
 
   return {
     id,
@@ -666,12 +665,12 @@ function normalizeBidNotification(
     readableId: `BID-${bid.id ? String(bid.id).slice(0, 6) : "OFFER"}`,
     bookingType: "quote",
     category: isAlloy ? "alloy" : "bodywork",
-    title: `New Offer: ${price} from ${providerName}`,
-    subtitle: `${post?.car_registration_number || post?.car_model || "Vehicle"} • ${providerName}`,
+    title: `New Quotation: ${price} from ${providerName}`,
+    subtitle: `${post?.car_registration_number || post?.car_model || "Vehicle Request"} • ${providerName}`,
     description:
       bid.provider_note ||
       bid.notes ||
-      `${providerName} submitted a fixed quote of ${price}. Tap to view & book.`,
+      `${providerName} submitted a quotation of ${price}. Tap to view bids & accept.`,
     status: "pending",
     statusLabel: `${price} OFFER`,
     totalAmount: Number(bid.offered_price || 0),
@@ -683,6 +682,8 @@ function normalizeBidNotification(
     timeAgo: formatTimeAgo(bid.created_at || post?.created_at || new Date().toISOString()),
     read: readIds.has(id),
     targetUrl,
+    actionType: "quote",
+    actionButtonText: "View Quote Bids",
     raw: { bid, post },
   };
 }
@@ -1080,6 +1081,133 @@ function normalizeBackendCustomerNotification(
   };
 }
 
+/**
+ * Persists an incoming Firebase FCM push notification locally so it is instantly
+ * reflected in the in-app notification center, bell badge count, and notification history.
+ */
+export function saveIncomingFCMNotification(payload: any): BookingNotification | null {
+  if (typeof window === "undefined" || !payload) return null;
+  try {
+    const title =
+      payload?.notification?.title ||
+      payload?.data?.title ||
+      payload?.data?.notification_title ||
+      "Motor Market Club Notification";
+
+    const body =
+      payload?.notification?.body ||
+      payload?.data?.body ||
+      payload?.data?.notification_body ||
+      payload?.data?.message ||
+      "";
+
+    if (!title && !body) return null;
+
+    const fallbackId = `${title}_${body}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+    const notifId =
+      payload?.data?.notification_id ||
+      payload?.data?.id ||
+      payload?.data?.estimate_id ||
+      payload?.data?.post_id ||
+      payload?.data?.booking_id ||
+      fallbackId;
+
+    const id = `notif-fcm-${notifId}`;
+
+    const storageKey = getUserStorageKey("mmc_fcm_notifications");
+    const raw = localStorage.getItem(storageKey);
+    const existing: BookingNotification[] = raw ? JSON.parse(raw) : [];
+
+    // If identical notification already exists, return existing to avoid duplicate entries
+    const alreadyExists = existing.some(
+      (n) => n.id === id || (n.title === title && n.description === body)
+    );
+    if (alreadyExists) {
+      return existing.find((n) => n.id === id) || null;
+    }
+
+    const { actionType, actionButtonText, targetUrl } = resolveNotificationActionType({
+      title,
+      description: body,
+      ...payload,
+      ...payload?.data,
+    });
+
+    const imageUrl =
+      payload?.notification?.image ||
+      payload?.data?.image_full_path ||
+      payload?.data?.cover_image_full_path ||
+      payload?.data?.image ||
+      payload?.data?.cover_image ||
+      payload?.data?.notification_image ||
+      payload?.data?.banner ||
+      resolveNotificationImageUrl(payload);
+
+    let category: BookingNotification["category"] = "service";
+    if (actionType === "estimate") {
+      category = "estimate";
+    } else if (actionType === "quote") {
+      category = "quote";
+    }
+
+    const newNotif: BookingNotification = {
+      id,
+      bookingId: payload?.data?.booking_id || payload?.data?.estimate_id || notifId,
+      readableId: payload?.data?.readable_id || payload?.data?.booking_id || notifId,
+      bookingType: category === "estimate" ? "estimate" : (category === "quote" ? "quote" : "regular"),
+      category,
+      title,
+      subtitle:
+        actionType === "estimate"
+          ? "Provider Quotation / Estimate"
+          : actionType === "question"
+          ? "Provider Question / Inquiry"
+          : actionType === "quote"
+          ? "Specialist Quote Offer"
+          : undefined,
+      description: body,
+      status: "pending",
+      statusLabel:
+        actionType === "estimate"
+          ? "New Quotation"
+          : actionType === "question"
+          ? "New Question"
+          : actionType === "quote"
+          ? "New Quote Offer"
+          : "Update",
+      totalAmount: Number(payload?.data?.amount || payload?.data?.total_amount || payload?.data?.price || 0),
+      isPaid: false,
+      paymentMethod: "Online",
+      scheduleTime: payload?.data?.schedule || "Flexible",
+      createdAt: new Date().toISOString(),
+      timeAgo: "Just now",
+      read: false,
+      targetUrl:
+        targetUrl ||
+        (actionType === "estimate"
+          ? "/account?tab=estimates"
+          : actionType === "question" || actionType === "quote"
+          ? "/account?tab=quotes"
+          : "/account?tab=bookings"),
+      image: imageUrl,
+      actionType,
+      actionButtonText,
+      raw: payload,
+    };
+
+    const filtered = existing.filter(
+      (n) => n.id !== id && `${n.title}:${n.description}` !== `${title}:${body}`
+    );
+    const updated = [newNotif, ...filtered].slice(0, 50);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+
+    return newNotif;
+  } catch (err) {
+    console.warn("Failed to save incoming FCM notification:", err);
+    return null;
+  }
+}
+
 let cachedNotifsResult: {
   notifications: BookingNotification[];
   unreadCount: number;
@@ -1330,7 +1458,7 @@ async function doFetchBookingNotifications(forceRefresh: boolean = false): Promi
     }
 
     // For active quote posts belonging strictly to this user, fetch actual provider bids
-    const postsToCheck = rawQuotePosts.slice(0, 6);
+    const postsToCheck = rawQuotePosts.slice(0, 20);
     const bidsResponses = await Promise.all(
       postsToCheck.map((p: any) =>
         apiClient
@@ -1359,6 +1487,18 @@ async function doFetchBookingNotifications(forceRefresh: boolean = false): Promi
     console.warn("Live customer quotes/bids fetch failed:", err?.message || err);
   }
 
+  // 4. Fetch live provider estimates / quotations: GET /customer/estimate/list
+  let rawEstimates: any[] = [];
+  try {
+    const estimates = await getCustomerEstimates(50, 1);
+    if (estimates && Array.isArray(estimates) && estimates.length > 0) {
+      rawEstimates = estimates;
+      isLive = true;
+    }
+  } catch (err: any) {
+    console.warn("Live customer estimates fetch warning:", err?.message || err);
+  }
+
   const list: BookingNotification[] = [];
 
   // 1. Convert live customer bookings into notifications
@@ -1384,6 +1524,87 @@ async function doFetchBookingNotifications(forceRefresh: boolean = false): Promi
       list.push(notif);
     }
   });
+
+  // 4. Convert live provider estimates / quotations into notifications
+  rawEstimates.forEach((est: any) => {
+    const estId = String(est.id || est.readable_id || `est-${Date.now()}`);
+    const notifId = `notif-estimate-${estId}`;
+    if (dismissedIds.has(notifId) || dismissedIds.has(estId)) return;
+
+    const providerName =
+      est.provider?.company_name ||
+      est.provider?.contact_person_name ||
+      "Verified Specialist";
+    const amountNum = Number(est.total_amount || est.price || est.grand_total || 0);
+    const priceFormatted = amountNum > 0 ? `£${amountNum.toFixed(2)}` : "Custom Price";
+    const statusStr = String(est.status || "pending").toLowerCase();
+    const statusLabel =
+      statusStr === "pending"
+        ? "New Quotation Received"
+        : statusStr === "accepted"
+        ? "Quotation Accepted"
+        : statusStr === "rejected" || statusStr === "declined"
+        ? "Quotation Declined"
+        : statusStr;
+
+    const notif: BookingNotification = {
+      id: notifId,
+      bookingId: est.id || est.readable_id || estId,
+      readableId: est.readable_id || est.estimate_number || `EST-${estId.slice(0, 6)}`,
+      bookingType: "estimate",
+      category: "estimate",
+      title:
+        statusStr === "pending"
+          ? `New Quotation: ${priceFormatted} from ${providerName}`
+          : `Quotation (${priceFormatted}) - ${providerName}`,
+      subtitle: `${est.car_model || est.category?.name || "Vehicle Service"} • ${providerName}`,
+      description:
+        est.notes ||
+        est.damage_description ||
+        `Provider ${providerName} sent you a quotation of ${priceFormatted}. Tap to review details & accept.`,
+      status: statusStr === "accepted" ? "accepted" : statusStr === "rejected" ? "canceled" : "pending",
+      statusLabel,
+      totalAmount: amountNum,
+      isPaid: statusStr === "paid",
+      paymentMethod: "Deposit / Card",
+      scheduleTime: est.service_schedule || "Scheduled",
+      vehicleInfo: est.car_model || "Vehicle",
+      createdAt: est.created_at || new Date().toISOString(),
+      timeAgo: formatTimeAgo(est.created_at || new Date().toISOString()),
+      read: readIds.has(notifId) || readIds.has(estId),
+      targetUrl: `/account?tab=estimates&estimateId=${encodeURIComponent(String(est.id || est.link_token || ""))}`,
+      image: normalizeEstimateImageUrl(
+        est.category?.image_full_path || est.provider?.logo_full_path || est.car_image_full_path
+      ),
+      actionType: "estimate",
+      actionButtonText: "View Estimate",
+      raw: est,
+    };
+
+    list.push(notif);
+  });
+
+  // 5. Convert received incoming Firebase FCM push notifications
+  if (typeof window !== "undefined") {
+    try {
+      const fcmKey = getUserStorageKey("mmc_fcm_notifications");
+      const rawFcm = localStorage.getItem(fcmKey);
+      if (rawFcm) {
+        const fcmItems: BookingNotification[] = JSON.parse(rawFcm);
+        if (Array.isArray(fcmItems)) {
+          fcmItems.forEach((f) => {
+            if (!dismissedIds.has(f.id)) {
+              list.push({
+                ...f,
+                read: readIds.has(f.id) || !!f.read,
+                timeAgo: formatTimeAgo(f.createdAt),
+              });
+            }
+          });
+        }
+      }
+    } catch {}
+  }
 
   // Convert custom notifications (deduplicate and keep user-scoped)
   if (typeof window !== "undefined") {
@@ -1430,34 +1651,43 @@ async function doFetchBookingNotifications(forceRefresh: boolean = false): Promi
     } catch {}
   }
 
-  // Strict Global Deduplication: Each booking/quote appears AT MOST ONCE in the list!
+  // Strict Deduplication: Ensure each distinct quotation, estimate, booking or FCM event is preserved
   const finalNotifications: BookingNotification[] = [];
-  const globalSeenBookingKeys = new Set<string>();
+  const globalSeenKeys = new Set<string>();
 
   for (const item of list) {
-    const candidateKeys = [
-      item.bookingId ? String(item.bookingId).toLowerCase().trim() : "",
-      item.readableId ? String(item.readableId).toLowerCase().trim() : "",
-    ].filter(Boolean);
+    const dedupeKey =
+      item.category === "estimate"
+        ? `estimate_${String(item.bookingId || item.id).toLowerCase().trim()}`
+        : item.category === "quote"
+        ? `quote_${String(item.id).toLowerCase().trim()}`
+        : item.id.startsWith("notif-fcm-")
+        ? `fcm_${String(item.id).toLowerCase().trim()}`
+        : item.bookingId
+        ? `booking_${String(item.bookingId).toLowerCase().trim()}`
+        : String(item.id).toLowerCase().trim();
 
-    // If any candidate key has already been added, skip duplicate notification for the same booking
-    const isDuplicate = candidateKeys.some((k) => globalSeenBookingKeys.has(k));
-    if (isDuplicate) {
+    if (globalSeenKeys.has(dedupeKey)) {
       continue;
     }
-
-    candidateKeys.forEach((k) => globalSeenBookingKeys.add(k));
-    globalSeenBookingKeys.add(String(item.id).toLowerCase().trim());
+    globalSeenKeys.add(dedupeKey);
     finalNotifications.push(item);
   }
 
-  // Fire push notification for newly arrived notifications (strictly at most 1 per booking)
+  // Only fire device push for brand new non-FCM bookings/estimates arriving in real-time (last 60s)
   try {
     const seenPushIds = getSeenPushIds();
     let updatedSeen = false;
-    finalNotifications.slice(0, 1).forEach((n) => {
-      const canonicalBookingKey = String(n.readableId || n.bookingId || n.id).toLowerCase().trim();
-      const pushStorageKey = `booking_push_${canonicalBookingKey}`;
+    const nowMs = Date.now();
+    const brandNewCandidates = finalNotifications.filter((n) => {
+      if (n.read) return false;
+      if (n.id.startsWith("notif-fcm-")) return false; // FCM is already pushed natively by Firebase
+      const createdMs = new Date(n.createdAt).getTime();
+      return !isNaN(createdMs) && nowMs - createdMs < 60000;
+    });
+
+    brandNewCandidates.slice(0, 3).forEach((n) => {
+      const pushStorageKey = `push_notif_${n.id}`;
       if (!seenPushIds.has(pushStorageKey) && !seenPushIds.has(n.id)) {
         seenPushIds.add(pushStorageKey);
         seenPushIds.add(n.id);
@@ -1535,6 +1765,10 @@ export function clearAllNotifications(notifications: BookingNotification[]): voi
   const dismissedIds = getDismissedNotificationIds();
   notifications.forEach((n) => dismissedIds.add(n.id));
   localStorage.setItem(getUserStorageKey(DISMISSED_STORAGE_KEY), JSON.stringify(Array.from(dismissedIds)));
+  try {
+    localStorage.removeItem(getUserStorageKey("mmc_fcm_notifications"));
+    localStorage.removeItem(getUserStorageKey("mmc_custom_notifications"));
+  } catch {}
   window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
 }
 

@@ -84,7 +84,7 @@ export const getFCMToken = async (forceRefresh: boolean = false): Promise<string
 
   // If cached token exists and forceRefresh is false, return cached token but still ensure SW is active
   const cachedToken = localStorage.getItem("fcm_token");
-  if (cachedToken && !forceRefresh) {
+  if (cachedToken && !forceRefresh && Notification.permission === "granted") {
     ensureServiceWorkerRegistration().catch(() => {});
     return cachedToken;
   }
@@ -219,7 +219,29 @@ export const triggerDevicePushNotification = async (
   const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
   const notifTag = (detectedBookingKey || effectiveKey).slice(0, 32);
 
-  // 1. Direct Window Notification API first (Instant on desktop & laptops)
+  // 1. Try Service Worker showNotification first (Reliable across mobile Android Chrome, PWAs, and desktop)
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && "showNotification" in reg) {
+        await reg.showNotification(title, {
+          body,
+          icon: imageUrl || "/mmc-logo.png",
+          badge: "/mmc-logo.png",
+          image: imageUrl || undefined,
+          tag: notifTag,
+          renotify: false,
+          vibrate: [200, 100, 200],
+          data: { url: targetUrl, click_action: targetUrl, image: imageUrl || undefined },
+        } as any);
+        return;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Direct Window Notification API fallback (Desktop browsers)
   if ("Notification" in window && Notification.permission === "granted") {
     try {
       const notif = new Notification(title, {
@@ -235,30 +257,7 @@ export const triggerDevicePushNotification = async (
       };
       return;
     } catch (e) {
-      // Fallback for Android Chrome where new Notification() without SW may throw
-    }
-  }
-
-  // 2. Try Service Worker with 500ms timeout so it NEVER hangs indefinitely
-  if ("serviceWorker" in navigator) {
-    try {
-      const swReadyPromise = navigator.serviceWorker.ready;
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
-      const reg = await Promise.race([swReadyPromise, timeoutPromise]);
-      if (reg && "showNotification" in reg) {
-        await reg.showNotification(title, {
-          body,
-          icon: imageUrl || "/mmc-logo.png",
-          badge: "/mmc-logo.png",
-          image: imageUrl || undefined,
-          tag: notifTag,
-          vibrate: [200, 100, 200],
-          data: { url: targetUrl, click_action: targetUrl, image: imageUrl || undefined },
-        } as any);
-        return;
-      }
-    } catch {
-      // fallback
+      // Fallback
     }
   }
 

@@ -91,6 +91,28 @@ function extractImageUrlFromPayload(payload) {
   return null;
 }
 
+// Track recently shown notifications to prevent any duplicates within 60 seconds
+const seenSwNotificationKeys = new Set();
+function hasRecentlyShown(tag) {
+  if (!tag) return false;
+  if (seenSwNotificationKeys.has(tag)) return true;
+  seenSwNotificationKeys.add(tag);
+  setTimeout(() => seenSwNotificationKeys.delete(tag), 60000);
+  return false;
+}
+
+function getStableTag(data, title, body) {
+  const idPart =
+    data?.notification_id ||
+    data?.id ||
+    data?.estimate_id ||
+    data?.post_id ||
+    data?.booking_id;
+  if (idPart) return `tag_${idPart}`.slice(0, 32);
+  const text = `${title || ""}_${body || ""}`;
+  return `tag_${text.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 28)}`;
+}
+
 // Handle background messages when website tab is closed / in background
 if (messaging) {
   messaging.onBackgroundMessage((payload) => {
@@ -109,12 +131,30 @@ if (messaging) {
       payload?.data?.message ||
       "You have a new update.";
 
-    const targetUrl =
+    const notifTag = getStableTag(payload?.data, notificationTitle, notificationBody);
+    if (hasRecentlyShown(notifTag)) {
+      console.log("[FCM SW] Duplicate suppressed by tag:", notifTag);
+      return;
+    }
+
+    let targetUrl =
       payload?.data?.click_action ||
       payload?.data?.link ||
       payload?.data?.url ||
       payload?.data?.targetUrl ||
-      "/account?tab=bookings";
+      "";
+
+    if (!targetUrl) {
+      const lower = `${notificationTitle} ${notificationBody} ${payload?.data?.type || ""}`.toLowerCase();
+      if (lower.includes("estimate") || lower.includes("quotation")) {
+        const estId = payload?.data?.estimate_id || payload?.data?.id;
+        targetUrl = estId ? `/account?tab=estimates&estimateId=${encodeURIComponent(String(estId))}` : "/account?tab=estimates";
+      } else if (lower.includes("quote") || lower.includes("bid") || lower.includes("question") || lower.includes("inquiry")) {
+        targetUrl = "/account?tab=quotes";
+      } else {
+        targetUrl = "/account?tab=bookings";
+      }
+    }
 
     const imageUrl = extractImageUrlFromPayload(payload);
 
@@ -122,9 +162,9 @@ if (messaging) {
       body: notificationBody,
       icon: imageUrl || "/mmc-logo.png",
       badge: "/mmc-logo.png",
-      image: imageUrl || undefined, // Displays rich full image banner in push notification
-      tag: `fcm_${Date.now()}`,
-      renotify: true,
+      image: imageUrl || undefined,
+      tag: notifTag,
+      renotify: false,
       vibrate: [200, 100, 200],
       data: {
         ...(payload?.data || {}),
@@ -134,58 +174,88 @@ if (messaging) {
       },
     };
 
+    // Broadcast message to active tabs
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: "FCM_BACKGROUND_PUSH",
+          payload: {
+            ...payload,
+            data: {
+              ...(payload?.data || {}),
+              targetUrl,
+            },
+          },
+        });
+      });
+    }).catch(() => {});
+
     return self.registration.showNotification(notificationTitle, notificationOptions);
   });
 }
 
-// Handle standard push events if sent as raw Web Push
+// Handle standard push events if sent as raw Web Push (fallback only)
 self.addEventListener("push", (event) => {
   if (!event.data) return;
+  // If Firebase messaging is active, onBackgroundMessage already processes FCM pushes
+  if (messaging) {
+    return;
+  }
+
   try {
     const data = event.data.json();
     const title =
       data.notification?.title ||
       data.title ||
       data.data?.title ||
-      data.data?.notification_title;
+      data.data?.notification_title ||
+      "Motor Market Club Notification";
     const body =
       data.notification?.body ||
       data.body ||
       data.data?.body ||
-      data.data?.message;
+      data.data?.message ||
+      "";
 
-    if (title || body) {
-      const clickAction =
-        data.data?.click_action ||
-        data.data?.url ||
-        data.data?.link ||
-        data.click_action ||
-        "/account?tab=bookings";
-
-      const imageUrl = extractImageUrlFromPayload(data);
-
-      event.waitUntil(
-        self.registration.showNotification(title || "Motor Market Club", {
-          body: body || "",
-          icon: imageUrl || "/mmc-logo.png",
-          badge: "/mmc-logo.png",
-          image: imageUrl || undefined,
-          tag: `push_${Date.now()}`,
-          renotify: true,
-          vibrate: [200, 100, 200],
-          data: { url: clickAction, click_action: clickAction, image: imageUrl || undefined },
-        })
-      );
+    const notifTag = getStableTag(data.data, title, body);
+    if (hasRecentlyShown(notifTag)) {
+      return;
     }
+
+    let clickAction =
+      data.data?.click_action ||
+      data.data?.url ||
+      data.data?.link ||
+      data.click_action ||
+      "/account?tab=bookings";
+
+    const imageUrl = extractImageUrlFromPayload(data);
+
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body: body || "",
+        icon: imageUrl || "/mmc-logo.png",
+        badge: "/mmc-logo.png",
+        image: imageUrl || undefined,
+        tag: notifTag,
+        renotify: false,
+        vibrate: [200, 100, 200],
+        data: { url: clickAction, click_action: clickAction, image: imageUrl || undefined },
+      })
+    );
   } catch (e) {
     // text fallback
     const text = event.data.text();
     if (text) {
+      const notifTag = `tag_raw_${text.slice(0, 20)}`;
+      if (hasRecentlyShown(notifTag)) return;
       event.waitUntil(
         self.registration.showNotification("Motor Market Club", {
           body: text,
           icon: "/mmc-logo.png",
           badge: "/mmc-logo.png",
+          tag: notifTag,
+          renotify: false,
           data: { url: "/account?tab=bookings" },
         })
       );
