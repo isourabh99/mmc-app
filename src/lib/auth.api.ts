@@ -154,7 +154,13 @@ export const updateFCMTokenToBackend = async (fcmToken: string) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("fcm_token", fcmToken.trim());
     }
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") ||
+          localStorage.getItem("auth_token") ||
+          localStorage.getItem("mmc_token") ||
+          localStorage.getItem("user_token")
+        : null;
     if (!token) return null;
 
     const response = await apiClient.put("/customer/update/fcm-token", {

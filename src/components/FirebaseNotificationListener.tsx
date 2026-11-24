@@ -8,6 +8,7 @@ import {
 } from "@/lib/firebase";
 import { useToast } from "@/components/ToastProvider";
 import { updateFCMTokenToBackend } from "@/lib/auth.api";
+import { saveIncomingFCMNotification } from "@/lib/service/notifications.api";
 
 export default function FirebaseNotificationListener() {
   const { showToast } = useToast();
@@ -18,7 +19,10 @@ export default function FirebaseNotificationListener() {
       if (token) {
         const authToken =
           typeof window !== "undefined"
-            ? localStorage.getItem("token") || localStorage.getItem("auth_token")
+            ? localStorage.getItem("token") ||
+              localStorage.getItem("auth_token") ||
+              localStorage.getItem("mmc_token") ||
+              localStorage.getItem("user_token")
             : null;
         if (authToken) {
           await updateFCMTokenToBackend(token);
@@ -42,7 +46,19 @@ export default function FirebaseNotificationListener() {
     window.addEventListener("storage", handleAuthChange);
     window.addEventListener("focus", handleAuthChange);
 
-    // 3. Listen for foreground push messages while the website is active
+    // 3. Listen for Service Worker background push broadcast messages
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === "FCM_BACKGROUND_PUSH" && event.data?.payload) {
+        saveIncomingFCMNotification(event.data.payload);
+        window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
+        window.dispatchEvent(new CustomEvent("mmc-bookings-updated"));
+      }
+    };
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    }
+
+    // 4. Listen for foreground push messages while the website is active
     let unsubscribe: (() => void) | undefined = undefined;
 
     onForegroundMessage((payload) => {
@@ -60,12 +76,33 @@ export default function FirebaseNotificationListener() {
         payload?.data?.message ||
         "";
 
-      const targetUrl =
+      // Detect smart redirection target for quotations, estimates, questions, or bookings
+      let targetUrl =
         payload?.data?.targetUrl ||
         payload?.data?.url ||
         payload?.data?.click_action ||
         payload?.data?.link ||
-        "/account?tab=bookings";
+        "";
+
+      if (!targetUrl) {
+        const lowerText = `${title} ${body} ${payload?.data?.type || ""}`.toLowerCase();
+        if (lowerText.includes("estimate") || lowerText.includes("quotation")) {
+          const estId = payload?.data?.estimate_id || payload?.data?.id;
+          targetUrl = estId
+            ? `/account?tab=estimates&estimateId=${encodeURIComponent(String(estId))}`
+            : "/account?tab=estimates";
+        } else if (
+          lowerText.includes("quote") ||
+          lowerText.includes("bid") ||
+          lowerText.includes("question") ||
+          lowerText.includes("inquiry") ||
+          lowerText.includes("enquiry")
+        ) {
+          targetUrl = "/account?tab=quotes";
+        } else {
+          targetUrl = "/account?tab=bookings";
+        }
+      }
 
       // Extract image URL from notification or data payload
       const rawImage: string | null =
@@ -106,8 +143,27 @@ export default function FirebaseNotificationListener() {
         }
       }
 
+      // Save notification to local in-app store so it immediately shows in the notification bell and list
+      saveIncomingFCMNotification({
+        ...payload,
+        data: {
+          ...(payload?.data || {}),
+          targetUrl,
+        },
+      });
+
+      // Show in-app toast notification
       showToast(body ? `${title}: ${body}` : title, "info", resolvedImageUrl);
-      triggerDevicePushNotification(title, body, targetUrl, undefined, true, resolvedImageUrl);
+
+      // Only trigger native OS popup notification if the tab is not currently focused/visible,
+      // and strictly enforce deduplication so it can never fire more than once!
+      const notifDedupKey = `fcm_${payload?.data?.id || payload?.data?.notification_id || `${title}:${body}`}`
+        .toLowerCase()
+        .replace(/\s+/g, "_");
+
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        triggerDevicePushNotification(title, body, targetUrl, notifDedupKey, false, resolvedImageUrl);
+      }
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("mmc-notifications-updated"));
@@ -123,6 +179,9 @@ export default function FirebaseNotificationListener() {
       window.removeEventListener("auth-change", handleAuthChange);
       window.removeEventListener("storage", handleAuthChange);
       window.removeEventListener("focus", handleAuthChange);
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+      }
       if (typeof unsubscribe === "function") {
         unsubscribe();
       }

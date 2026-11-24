@@ -233,8 +233,13 @@ export default function NotificationCenter({
       return;
     }
 
-    // If Customer Quote Request / Bid -> redirect to My Quotes tab
-    if (item.actionType === "quote" || item.targetUrl?.includes("tab=quotes")) {
+    // If Customer Quote Request / Bid / Question -> redirect to My Quotes tab
+    if (
+      item.actionType === "quote" ||
+      item.actionType === "question" ||
+      item.category === "quote" ||
+      item.targetUrl?.includes("tab=quotes")
+    ) {
       router.push(item.targetUrl || "/account?tab=quotes");
       return;
     }
